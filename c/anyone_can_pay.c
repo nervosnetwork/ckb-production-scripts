@@ -15,7 +15,10 @@
 #include "blake2b.h"
 #include "ckb_syscalls.h"
 #include "common.h"
+#include "defs.h"
+#include "overflow_add.h"
 #include "protocol.h"
+#include "quick_pow10.h"
 #include "secp256k1_helper.h"
 #include "secp256k1_lock.h"
 
@@ -25,9 +28,6 @@
 #define UDT_LEN 16
 #define MAX_WITNESS_SIZE 32768
 #define MAX_TYPE_HASH 256
-#define MAX_POW_N 19
-#define MAX_UINT64 0xffffffffffffffffUL
-#define MAX_UINT128 (((uint128_t)MAX_UINT64 << 64) + MAX_UINT64)
 
 #define ERROR_ARGUMENTS_LEN -1
 #define ERROR_ENCODING -2
@@ -41,8 +41,6 @@
 #define ERROR_DUPLICATED_INPUT_TYPE_HASH -56
 #define ERROR_DUPLICATED_OUTPUT_TYPE_HASH -57
 
-typedef unsigned __int128 uint128_t;
-
 typedef struct {
   int is_ckb_only;
   unsigned char type_hash[BLAKE2B_BLOCK_SIZE];
@@ -50,42 +48,6 @@ typedef struct {
   uint128_t udt_amount;
   uint32_t output_cnt;
 } InputWallet;
-
-int quick_pow10(int n, uint64_t * result)
-{
-    static uint64_t pow10[MAX_POW_N + 1] = {
-        1, 10, 100, 1000, 10000, 
-        100000, 1000000, 10000000, 100000000, 1000000000,
-        10000000000, 100000000000, 1000000000000, 10000000000000, 100000000000000,
-        1000000000000000, 10000000000000000, 100000000000000000, 1000000000000000000, 10000000000000000000U,
-    };
-
-    if(n > MAX_POW_N) {
-      return 1;
-    }
-
-    *result = pow10[n]; 
-    return 0;
-}
-
-int uint64_overflow_add(uint64_t * result, uint64_t a, uint64_t b){
-  if (MAX_UINT64 - a < b) {
-    /* overflow */
-    return 1;
-  }
-  *result = a + b;
-  return 0;
-}
-
-int uint128_overflow_add(uint128_t * result, uint128_t a, uint128_t b){
-  if (MAX_UINT128 - a < b) {
-    /* overflow */
-    return 1;
-  }
-  *result = a + b;
-  return 0;
-}
-
 
 int check_payment_unlock(uint64_t min_ckb_amount, uint128_t min_udt_amount) {
   unsigned char lock_hash[BLAKE2B_BLOCK_SIZE];
@@ -249,13 +211,15 @@ int check_payment_unlock(uint64_t min_ckb_amount, uint128_t min_udt_amount) {
       uint64_t min_output_ckb_amount;
       uint128_t min_output_udt_amount;
       int overflow;
-      overflow = uint64_overflow_add(&min_output_ckb_amount, input_wallets[j].ckb_amount, min_ckb_amount);
+      overflow = uint64_overflow_add(
+          &min_output_ckb_amount, input_wallets[j].ckb_amount, min_ckb_amount);
       int invalid_output_ckb = overflow || ckb_amount < min_output_ckb_amount;
-      overflow = uint128_overflow_add(&min_output_udt_amount, input_wallets[j].udt_amount, min_udt_amount);
+      overflow = uint128_overflow_add(
+          &min_output_udt_amount, input_wallets[j].udt_amount, min_udt_amount);
       int invalid_output_udt = overflow || udt_amount < min_output_udt_amount;
 
       /* fail the unlock if both conditions can't satisfied */
-      if(invalid_output_ckb && invalid_output_udt) {
+      if (invalid_output_ckb && invalid_output_udt) {
         return ERROR_OUTPUT_AMOUNT_NOT_ENOUGH;
       }
 
@@ -300,7 +264,8 @@ int has_signature(int *has_sig) {
   uint64_t witness_len = MAX_WITNESS_SIZE;
   ret = ckb_load_witness(temp, &witness_len, 0, 0, CKB_SOURCE_GROUP_INPUT);
 
-  if ((ret == CKB_INDEX_OUT_OF_BOUND) || (ret == CKB_SUCCESS && witness_len == 0)) {
+  if ((ret == CKB_INDEX_OUT_OF_BOUND) ||
+      (ret == CKB_SUCCESS && witness_len == 0)) {
     *has_sig = 0;
     return CKB_SUCCESS;
   }
@@ -365,12 +330,9 @@ int read_args(unsigned char *pubkey_hash, uint64_t *min_ckb_amount,
   }
   if (args_bytes_seg.size > BLAKE160_SIZE + 1) {
     int x = args_bytes_seg.ptr[BLAKE160_SIZE + 1];
-    uint64_t amount;
-    int is_overflow = quick_pow10(x, &amount);
-    if(is_overflow) {
-      *min_udt_amount = MAX_UINT64;
-    } else {
-      *min_udt_amount = amount;
+    int is_overflow = uint128_quick_pow10(x, min_udt_amount);
+    if (is_overflow) {
+      *min_udt_amount = MAX_UINT128;
     }
   }
   return CKB_SUCCESS;
