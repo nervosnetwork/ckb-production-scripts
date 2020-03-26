@@ -7,7 +7,8 @@ Defines commonly used high level functions and constants.
 #include "ckb_syscalls.h"
 #include "protocol.h"
 
-/* Common errors */
+/* Errors */
+/* secp256k1 unlock errors */
 #define ERROR_ARGUMENTS_LEN -1
 #define ERROR_ENCODING -2
 #define ERROR_SYSCALL -3
@@ -21,6 +22,13 @@ Defines commonly used high level functions and constants.
 #define ERROR_INCORRECT_SINCE_FLAGS -23
 #define ERROR_INCORRECT_SINCE_VALUE -24
 #define ERROR_PUBKEY_BLAKE160_HASH -31
+/* anyone can pay errors */
+#define ERROR_OVERFLOW -41
+#define ERROR_OUTPUT_AMOUNT_NOT_ENOUGH -42
+#define ERROR_TOO_MUCH_TYPE_HASH_INPUTS -43
+#define ERROR_NO_PAIR -44
+#define ERROR_DUPLICATED_INPUTS -45
+#define ERROR_DUPLICATED_OUTPUTS -46
 
 /* since */
 #define SINCE_VALUE_BITS 56

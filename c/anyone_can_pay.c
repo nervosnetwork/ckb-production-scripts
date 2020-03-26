@@ -29,18 +29,6 @@
 #define MAX_WITNESS_SIZE 32768
 #define MAX_TYPE_HASH 256
 
-#define ERROR_ARGUMENTS_LEN -1
-#define ERROR_ENCODING -2
-#define ERROR_SYSCALL -3
-#define ERROR_SCRIPT_TOO_LONG -21
-#define ERROR_OVERFLOWING -51
-#define ERROR_OUTPUT_AMOUNT_NOT_ENOUGH -52
-#define ERROR_TOO_MUCH_TYPE_HASH_INPUTS -53
-#define ERROR_PARING_INPUT_FAILED -54
-#define ERROR_PARING_OUTPUT_FAILED -55
-#define ERROR_DUPLICATED_INPUT_TYPE_HASH -56
-#define ERROR_DUPLICATED_OUTPUT_TYPE_HASH -57
-
 typedef struct {
   int is_ckb_only;
   unsigned char type_hash[BLAKE2B_BLOCK_SIZE];
@@ -73,19 +61,19 @@ int check_payment_unlock(uint64_t min_ckb_amount, uint128_t min_udt_amount) {
     ret = ckb_checked_load_cell_by_field(input_wallets[i].type_hash, &len, 0, i,
                                          CKB_SOURCE_GROUP_INPUT,
                                          CKB_CELL_FIELD_TYPE_HASH);
-
     if (ret == CKB_INDEX_OUT_OF_BOUND) {
       break;
     }
 
-    if (ret != CKB_ITEM_MISSING && ret != CKB_SUCCESS) {
+    if (ret == CKB_SUCCESS) {
+      if (len != BLAKE2B_BLOCK_SIZE) {
+        return ERROR_ENCODING;
+      }
+    } else if (ret != CKB_ITEM_MISSING) {
       return ERROR_SYSCALL;
     }
 
     input_wallets[i].is_ckb_only = ret == CKB_ITEM_MISSING;
-    if (len != BLAKE2B_BLOCK_SIZE) {
-      return ERROR_ENCODING;
-    }
 
     /* load amount */
     len = CKB_LEN;
@@ -100,7 +88,7 @@ int check_payment_unlock(uint64_t min_ckb_amount, uint128_t min_udt_amount) {
     }
     len = UDT_LEN;
     ret = ckb_load_cell_data((uint8_t *)&input_wallets[i].udt_amount, &len, 0,
-                             0, CKB_SOURCE_GROUP_INPUT);
+                             i, CKB_SOURCE_GROUP_INPUT);
     if (ret != CKB_ITEM_MISSING && ret != CKB_SUCCESS) {
       return ERROR_SYSCALL;
     }
@@ -154,11 +142,12 @@ int check_payment_unlock(uint64_t min_ckb_amount, uint128_t min_udt_amount) {
     if (ret == CKB_INDEX_OUT_OF_BOUND) {
       break;
     }
-    if (ret != CKB_ITEM_MISSING && ret != CKB_SUCCESS) {
-      return ret;
-    }
-    if (len != BLAKE2B_BLOCK_SIZE) {
-      return ERROR_ENCODING;
+    if (ret == CKB_SUCCESS) {
+      if (len != BLAKE2B_BLOCK_SIZE) {
+        return ERROR_ENCODING;
+      }
+    } else if (ret != CKB_ITEM_MISSING) {
+      return ERROR_SYSCALL;
     }
     int is_ckb_only = ret == CKB_ITEM_MISSING;
 
@@ -167,7 +156,7 @@ int check_payment_unlock(uint64_t min_ckb_amount, uint128_t min_udt_amount) {
     uint128_t udt_amount;
     len = CKB_LEN;
     ret = ckb_checked_load_cell_by_field((uint8_t *)&ckb_amount, &len, 0, i,
-                                         CKB_SOURCE_GROUP_INPUT,
+                                         CKB_SOURCE_OUTPUT,
                                          CKB_CELL_FIELD_CAPACITY);
     if (ret != CKB_SUCCESS) {
       return ERROR_SYSCALL;
@@ -176,8 +165,8 @@ int check_payment_unlock(uint64_t min_ckb_amount, uint128_t min_udt_amount) {
       return ERROR_ENCODING;
     }
     len = UDT_LEN;
-    ret = ckb_load_cell_data((uint8_t *)&udt_amount, &len, 0, 0,
-                             CKB_SOURCE_GROUP_INPUT);
+    ret = ckb_load_cell_data((uint8_t *)&udt_amount, &len, 0, i,
+                             CKB_SOURCE_OUTPUT);
     if (ret != CKB_ITEM_MISSING && ret != CKB_SUCCESS) {
       return ERROR_SYSCALL;
     }
@@ -213,13 +202,25 @@ int check_payment_unlock(uint64_t min_ckb_amount, uint128_t min_udt_amount) {
       int overflow;
       overflow = uint64_overflow_add(
           &min_output_ckb_amount, input_wallets[j].ckb_amount, min_ckb_amount);
-      int invalid_output_ckb = overflow || ckb_amount < min_output_ckb_amount;
+      if (overflow) {
+        return ERROR_OVERFLOW;
+      }
+      int meet_ckb_cond = ckb_amount >= min_output_ckb_amount;
       overflow = uint128_overflow_add(
           &min_output_udt_amount, input_wallets[j].udt_amount, min_udt_amount);
-      int invalid_output_udt = overflow || udt_amount < min_output_udt_amount;
+      if (overflow) {
+        return ERROR_OVERFLOW;
+      }
+      int meet_udt_cond = udt_amount >= min_output_udt_amount;
 
-      /* fail the unlock if both conditions can't satisfied */
-      if (invalid_output_ckb && invalid_output_udt) {
+      /* fail if can't meet both conditions */
+      if (!(meet_ckb_cond || meet_udt_cond)) {
+        return ERROR_OUTPUT_AMOUNT_NOT_ENOUGH;
+      }
+      /* output coins must meet condition, or remain the old amount */
+      if ((!meet_ckb_cond && ckb_amount != input_wallets[j].ckb_amount) ||
+          (!meet_udt_cond && udt_amount != input_wallets[j].udt_amount)) {
+
         return ERROR_OUTPUT_AMOUNT_NOT_ENOUGH;
       }
 
@@ -227,18 +228,18 @@ int check_payment_unlock(uint64_t min_ckb_amount, uint128_t min_udt_amount) {
       found_inputs++;
       input_wallets[j].output_cnt += 1;
       if (found_inputs > 1) {
-        return ERROR_DUPLICATED_INPUT_TYPE_HASH;
+        return ERROR_DUPLICATED_INPUTS;
       }
       if (input_wallets[j].output_cnt > 1) {
-        return ERROR_DUPLICATED_OUTPUT_TYPE_HASH;
+        return ERROR_DUPLICATED_OUTPUTS;
       }
     }
 
     /* one output should pair with one input */
     if (found_inputs == 0) {
-      return ERROR_PARING_OUTPUT_FAILED;
+      return ERROR_NO_PAIR;
     } else if (found_inputs > 1) {
-      return ERROR_DUPLICATED_INPUT_TYPE_HASH;
+      return ERROR_DUPLICATED_INPUTS;
     }
 
     i++;
@@ -247,9 +248,9 @@ int check_payment_unlock(uint64_t min_ckb_amount, uint128_t min_udt_amount) {
   /* check inputs wallet, one input should pair with one output */
   for (int j = 0; j < input_wallets_cnt; j++) {
     if (input_wallets[j].output_cnt == 0) {
-      return ERROR_PARING_INPUT_FAILED;
+      return ERROR_NO_PAIR;
     } else if (input_wallets[j].output_cnt > 1) {
-      return ERROR_DUPLICATED_OUTPUT_TYPE_HASH;
+      return ERROR_DUPLICATED_OUTPUTS;
     }
   }
 
