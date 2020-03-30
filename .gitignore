@@ -1,3 +1,4 @@
 target/
-specs/
 build/
+specs/cells/*
+!specs/cells/.gitkeep

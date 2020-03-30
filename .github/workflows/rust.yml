@@ -14,4 +14,4 @@ jobs:
     - name: Build contract
       run: make all-via-docker
     - name: Run tests
-      run: make test
+      run: cargo test
