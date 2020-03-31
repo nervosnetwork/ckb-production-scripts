@@ -15,12 +15,17 @@ PROTOCOL_URL := https://raw.githubusercontent.com/nervosnetwork/ckb/${PROTOCOL_V
 # docker pull nervos/ckb-riscv-gnu-toolchain:bionic-20190702
 BUILDER_DOCKER := nervos/ckb-riscv-gnu-toolchain@sha256:7b168b4b109a0f741078a71b7c4dddaf1d283a5244608f7851f5714fbad273ba
 
-all: specs/cells/anyone_can_pay
+all: specs/cells/anyone_can_pay specs/cells/always_success
 
 all-via-docker: ${PROTOCOL_HEADER}
 	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make"
 
 specs/cells/anyone_can_pay: c/anyone_can_pay.c ${PROTOCOL_HEADER} c/common.h c/secp256k1_lock.h build/secp256k1_data_info.h $(SECP256K1_SRC)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+	$(OBJCOPY) --only-keep-debug $@ $(subst specs/cells,build,$@.debug)
+	$(OBJCOPY) --strip-debug --strip-all $@
+
+specs/cells/always_success: c/always_success.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 	$(OBJCOPY) --only-keep-debug $@ $(subst specs/cells,build,$@.debug)
 	$(OBJCOPY) --strip-debug --strip-all $@

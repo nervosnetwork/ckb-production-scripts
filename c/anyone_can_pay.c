@@ -99,7 +99,7 @@ int check_payment_unlock(uint64_t min_ckb_amount, uint128_t min_udt_amount) {
         return ERROR_ENCODING;
       }
     } else {
-      if (len != UDT_LEN) {
+      if (len < UDT_LEN) {
         return ERROR_ENCODING;
       }
     }
@@ -177,7 +177,7 @@ int check_payment_unlock(uint64_t min_ckb_amount, uint128_t min_udt_amount) {
         return ERROR_ENCODING;
       }
     } else {
-      if (len != UDT_LEN) {
+      if (len < UDT_LEN) {
         return ERROR_ENCODING;
       }
     }
@@ -202,16 +202,10 @@ int check_payment_unlock(uint64_t min_ckb_amount, uint128_t min_udt_amount) {
       int overflow;
       overflow = uint64_overflow_add(
           &min_output_ckb_amount, input_wallets[j].ckb_amount, min_ckb_amount);
-      if (overflow) {
-        return ERROR_OVERFLOW;
-      }
-      int meet_ckb_cond = ckb_amount >= min_output_ckb_amount;
+      int meet_ckb_cond = !overflow && ckb_amount >= min_output_ckb_amount;
       overflow = uint128_overflow_add(
           &min_output_udt_amount, input_wallets[j].udt_amount, min_udt_amount);
-      if (overflow) {
-        return ERROR_OVERFLOW;
-      }
-      int meet_udt_cond = udt_amount >= min_output_udt_amount;
+      int meet_udt_cond = !overflow && udt_amount >= min_output_udt_amount;
 
       /* fail if can't meet both conditions */
       if (!(meet_ckb_cond || meet_udt_cond)) {
