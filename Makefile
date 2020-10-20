@@ -5,8 +5,6 @@ OBJCOPY := $(TARGET)-objcopy
 CFLAGS := -O3 -Ideps/molecule -I deps/secp256k1/src -I deps/secp256k1 -I deps/ckb-c-std-lib -I c -I build -Wall -Werror -Wno-nonnull-compare -Wno-unused-function -g
 LDFLAGS := -Wl,-static -fdata-sections -ffunction-sections -Wl,--gc-sections
 SECP256K1_SRC := deps/secp256k1/src/ecmult_static_pre_context.h
-MOLC := moleculec
-MOLC_VERSION := 0.4.1
 PROTOCOL_HEADER := c/protocol.h
 PROTOCOL_SCHEMA := c/blockchain.mol
 PROTOCOL_VERSION := d75e4c56ffa40e17fd2fe477da3f98c5578edcd1
@@ -43,22 +41,8 @@ $(SECP256K1_SRC):
 		CC=$(CC) LD=$(LD) ./configure --with-bignum=no --enable-ecmult-static-precomputation --enable-endomorphism --enable-module-recovery --host=$(TARGET) && \
 		make src/ecmult_static_pre_context.h src/ecmult_static_context.h
 
-generate-protocol: check-moleculec-version ${PROTOCOL_HEADER}
-
-check-moleculec-version:
-	test "$$(${MOLC} --version | awk '{ print $$2 }' | tr -d ' ')" = ${MOLC_VERSION}
-
-${PROTOCOL_HEADER}: ${PROTOCOL_SCHEMA}
-	${MOLC} --language c --schema-file $< > $@
-
 ${PROTOCOL_SCHEMA}:
 	curl -L -o $@ ${PROTOCOL_URL}
-
-install-tools:
-	if [ ! -x "$$(command -v "${MOLC}")" ] \
-			|| [ "$$(${MOLC} --version | awk '{ print $$2 }' | tr -d ' ')" != "${MOLC_VERSION}" ]; then \
-		cargo install --force --version "${MOLC_VERSION}" "${MOLC}"; \
-	fi
 
 publish:
 	git diff --exit-code Cargo.toml
