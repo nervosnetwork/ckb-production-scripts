@@ -13,11 +13,10 @@
  */
 
 #include "blake2b.h"
+#include "blockchain.h"
 #include "ckb_syscalls.h"
-#include "common.h"
 #include "defs.h"
 #include "overflow_add.h"
-#include "protocol.h"
 #include "quick_pow10.h"
 #include "secp256k1_helper.h"
 #include "secp256k1_lock.h"
@@ -28,6 +27,14 @@
 #define UDT_LEN 16
 #define MAX_WITNESS_SIZE 32768
 #define MAX_TYPE_HASH 256
+
+/* anyone can pay errors */
+#define ERROR_OVERFLOW -41
+#define ERROR_OUTPUT_AMOUNT_NOT_ENOUGH -42
+#define ERROR_TOO_MUCH_TYPE_HASH_INPUTS -43
+#define ERROR_NO_PAIR -44
+#define ERROR_DUPLICATED_INPUTS -45
+#define ERROR_DUPLICATED_OUTPUTS -46
 
 typedef struct {
   int is_ckb_only;

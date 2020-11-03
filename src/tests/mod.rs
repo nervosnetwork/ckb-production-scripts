@@ -35,11 +35,11 @@ pub const ERROR_DUPLICATED_OUTPUTS: i8 = -46;
 
 lazy_static! {
     pub static ref ANYONE_CAN_PAY: Bytes =
-        Bytes::from(&include_bytes!("../../specs/cells/anyone_can_pay")[..]);
+        Bytes::from(&include_bytes!("../../build/anyone_can_pay")[..]);
     pub static ref SECP256K1_DATA_BIN: Bytes =
-        Bytes::from(&include_bytes!("../../specs/cells/secp256k1_data")[..]);
+        Bytes::from(&include_bytes!("../../build/secp256k1_data")[..]);
     pub static ref ALWAYS_SUCCESS: Bytes =
-        Bytes::from(&include_bytes!("../../specs/cells/always_success")[..]);
+        Bytes::from(&include_bytes!("../../build/always_success")[..]);
 }
 
 #[derive(Default)]

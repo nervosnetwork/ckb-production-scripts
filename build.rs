@@ -8,7 +8,7 @@ use std::{
     path::Path,
 };
 
-const PATH_PREFIX: &str = "specs/cells/";
+const PATH_PREFIX: &str = "build/";
 const BUF_SIZE: usize = 8 * 1024;
 const CKB_HASH_PERSONALIZATION: &[u8] = b"ckb-default-hash";
 
@@ -19,7 +19,11 @@ const BINARIES: &[(&str, &str)] = &[
     ),
     (
         "anyone_can_pay",
-        "0fb343953ee78c9986b091defb6252154e0bb51044fd2879fde5b27314506111",
+        "40b51a40062db3e74c7d600ec756f6499970ea2bff55f31e1005f335a8c7cb51",
+    ),
+    (
+        "simple_udt",
+        "46b55e6188911c81e4411626123b303808a68df1bea94af7b5fcf3f8847800d2",
     ),
 ];
 

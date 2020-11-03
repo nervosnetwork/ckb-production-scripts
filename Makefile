@@ -5,7 +5,7 @@ OBJCOPY := $(TARGET)-objcopy
 CFLAGS := -O3 -Ideps/molecule -I deps/secp256k1/src -I deps/secp256k1 -I deps/ckb-c-std-lib -I c -I build -Wall -Werror -Wno-nonnull-compare -Wno-unused-function -g
 LDFLAGS := -Wl,-static -fdata-sections -ffunction-sections -Wl,--gc-sections
 SECP256K1_SRC := deps/secp256k1/src/ecmult_static_pre_context.h
-PROTOCOL_HEADER := c/protocol.h
+PROTOCOL_HEADER := c/blockchain.h
 PROTOCOL_SCHEMA := c/blockchain.mol
 PROTOCOL_VERSION := d75e4c56ffa40e17fd2fe477da3f98c5578edcd1
 PROTOCOL_URL := https://raw.githubusercontent.com/nervosnetwork/ckb/${PROTOCOL_VERSION}/util/types/schemas/blockchain.mol
@@ -13,19 +13,24 @@ PROTOCOL_URL := https://raw.githubusercontent.com/nervosnetwork/ckb/${PROTOCOL_V
 # docker pull nervos/ckb-riscv-gnu-toolchain:bionic-20190702
 BUILDER_DOCKER := nervos/ckb-riscv-gnu-toolchain@sha256:7b168b4b109a0f741078a71b7c4dddaf1d283a5244608f7851f5714fbad273ba
 
-all: specs/cells/anyone_can_pay specs/cells/always_success
+all: build/simple_udt build/anyone_can_pay build/always_success
 
 all-via-docker: ${PROTOCOL_HEADER}
 	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make"
 
-specs/cells/anyone_can_pay: c/anyone_can_pay.c ${PROTOCOL_HEADER} c/common.h c/secp256k1_lock.h build/secp256k1_data_info.h $(SECP256K1_SRC)
+build/simple_udt: c/simple_udt.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
-	$(OBJCOPY) --only-keep-debug $@ $(subst specs/cells,build,$@.debug)
+	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
-specs/cells/always_success: c/always_success.c
+build/anyone_can_pay: c/anyone_can_pay.c ${PROTOCOL_HEADER} c/secp256k1_lock.h build/secp256k1_data_info.h $(SECP256K1_SRC)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
-	$(OBJCOPY) --only-keep-debug $@ $(subst specs/cells,build,$@.debug)
+	$(OBJCOPY) --only-keep-debug $@ $@.debug
+	$(OBJCOPY) --strip-debug --strip-all $@
+
+build/always_success: c/always_success.c
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
 build/secp256k1_data_info.h: build/dump_secp256k1_data
@@ -63,9 +68,10 @@ package-clean:
 	rm -rf Cargo.toml.bak target/package/
 
 clean:
-	rm -rf specs/cells/anyone_can_pay
+	rm -rf build/simple_udt
+	rm -rf build/anyone_can_pay
 	rm -rf build/secp256k1_data_info.h build/dump_secp256k1_data
-	rm -rf specs/cells/secp256k1_data
+	rm -rf build/secp256k1_data
 	rm -rf build/*.debug
 	cd deps/secp256k1 && [ -f "Makefile" ] && make clean
 	cargo clean
