@@ -1,7 +1,6 @@
 use super::{
     blake160, build_resolved_tx, gen_tx, gen_tx_with_grouped_args, sign_tx, sign_tx_by_input_group,
-    sign_tx_hash, DummyDataLoader, ERROR_ENCODING, ERROR_PUBKEY_BLAKE160_HASH, ERROR_WITNESS_SIZE,
-    MAX_CYCLES,
+    sign_tx_hash, DummyDataLoader, ERROR_NO_PAIR, ERROR_PUBKEY_BLAKE160_HASH, MAX_CYCLES,
 };
 use ckb_crypto::secp::Generator;
 use ckb_error::assert_error_eq;
@@ -238,13 +237,13 @@ fn test_super_long_witness() {
         TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
     assert_error_eq!(
         verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(ERROR_WITNESS_SIZE),
+        ScriptError::ValidationFailure(ERROR_NO_PAIR),
     );
 }
 
 #[test]
 fn test_sighash_all_2_in_2_out_cycles() {
-    const CONSUME_CYCLES: u64 = 3355906;
+    const CONSUME_CYCLES: u64 = 3377980;
 
     let mut data_loader = DummyDataLoader::new();
     let mut generator = Generator::non_crypto_safe_prng(42);
@@ -304,7 +303,7 @@ fn test_sighash_all_witness_append_junk_data() {
         TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
     assert_error_eq!(
         verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(ERROR_ENCODING),
+        ScriptError::ValidationFailure(ERROR_NO_PAIR),
     );
 }
 

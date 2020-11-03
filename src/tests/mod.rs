@@ -26,7 +26,6 @@ pub const SIGNATURE_SIZE: usize = 65;
 
 // errors
 pub const ERROR_ENCODING: i8 = -2;
-pub const ERROR_WITNESS_SIZE: i8 = -22;
 pub const ERROR_PUBKEY_BLAKE160_HASH: i8 = -31;
 pub const ERROR_OUTPUT_AMOUNT_NOT_ENOUGH: i8 = -42;
 pub const ERROR_NO_PAIR: i8 = -44;
