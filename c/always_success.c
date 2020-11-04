@@ -1,4 +1,4 @@
 /* for testing purpose */
-int main() {
-    return 0;
-}
+
+#include "ckb_syscalls.h"
+int main() { return 0; }

@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
   size_t pre_size = sizeof(secp256k1_ecmult_static_pre_context);
   size_t pre128_size = sizeof(secp256k1_ecmult_static_pre128_context);
 
-  FILE* fp_data = fopen("specs/cells/secp256k1_data", "wb");
+  FILE* fp_data = fopen("build/secp256k1_data", "wb");
   if (!fp_data) {
     return ERROR_IO;
   }
