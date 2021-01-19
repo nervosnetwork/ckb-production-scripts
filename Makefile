@@ -71,6 +71,9 @@ rsa_sighash_clean:
 	rm -f build/rsa_sighash_all
 	rm -f build/*.o
 
+fmt:
+	clang-format -i -style=Google $(wildcard c/rsa_sighash_all.h c/rsa_sighash_all.c tests/rsa_sighash_all/*.c tests/rsa_sighash_all/*.h)
+	git diff --exit-code $(wildcard c/rsa_sighash_all.h c/rsa_sighash_all.c tests/rsa_sighash_all/*.c tests/rsa_sighash_all/*.h)
 
 ${PROTOCOL_SCHEMA}:
 	curl -L -o $@ ${PROTOCOL_URL}

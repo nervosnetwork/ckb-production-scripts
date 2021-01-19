@@ -4,38 +4,55 @@
 #include <stddef.h>
 
 // used as algorithm_id, see below
-// when algorithm id is CKB_VERIFY_RSA, use RsaInfo structure
+// when algorithm_id is CKB_VERIFY_RSA, use RsaInfo structure
 #define CKB_VERIFY_RSA 1
-// when algorithm id is CKB_VERIFY_SECP256R1, use Secp256r1Info structure
-#define CKB_VERIFY_SECP256R1 2
-// when algorithm id is CKB_VERIFY_ISO9796_2, use RsaInfo structure
-#define CKB_VERIFY_ISO9796_2 3
-// not supported yet
-#define CKB_VERIFY_SECP256R1_RECOVERABLE 0xFF
+// when algorithm_id is CKB_VERIFY_ISO9796_2, use RsaInfo structure
+#define CKB_VERIFY_ISO9796_2 2
+
+// used as key_size value
+#define CKB_KEYSIZE_1024 1
+#define CKB_KEYSIZE_2048 2
+#define CKB_KEYSIZE_4096 3
+
+// used as padding value
+// PKCS# 1.5
+#define CKB_PKCS_15 1
+// PKCS# 2.1
+#define CKB_PKCS_21 2
+
+// used as md_type value (message digest), it has same value as
+// mbedtls_md_type_t
+#define CKB_MD_SHA224 5    /**< The SHA-224 message digest. */
+#define CKB_MD_SHA256 6    /**< The SHA-256 message digest. */
+#define CKB_MD_SHA384 7    /**< The SHA-384 message digest. */
+#define CKB_MD_SHA512 8    /**< The SHA-512 message digest. */
+#define CKB_MD_RIPEMD160 9 /**< The RIPEMD-160 message digest. */
 
 #define PLACEHOLDER_SIZE (128)
 
-/** signature(in witness) memory layout
+/** signature (in witness) memory layout
  * This structure contains the following information:
- * 1) RSA Key Size
+ * 1) Common header, 4 bytes, see RsaInfo
  * 2) RSA Public Key
  * 3) RSA Signature data
  *
----------------------------------------------------------------------------
-| key_size | E |  N (key_size/8 bytes) | RSA Signature (key_size/8 bytes) |
----------------------------------------------------------------------------
-The key_size, E both occupy 4 bytes, in little endian (uint32_t).
+-----------------------------------------------------------------------------
+|common header| E |  N (key_size/8 bytes) | RSA Signature (key_size/8 bytes)|
+-----------------------------------------------------------------------------
+The common header, E both occupy 4 bytes. E is in little endian(uint32_t).
 So the total length in byte is: 4 + 4 + key_size/8 + key_size/8.
 
-The public key hash is calculated by: blake160(key_size + E + N), Note: RSA
+The public key hash is calculated by: blake160(common header + E + N), Note: RSA
 signature part is dropped. Here function blake160 returns the first 20 bytes of
 blake2b result.
 */
 typedef struct RsaInfo {
-  uint32_t algorithm_id;  // common header part
+  // common header part, 4 bytes
+  uint8_t algorithm_id;
+  uint8_t key_size;
+  uint8_t padding;
+  uint8_t md_type;
 
-  // RSA Key Size, in bits. For example, 1024, 2048, 4096
-  uint32_t key_size;
   // RSA public key, part E. It's normally very small, OK to use uint32_to hold
   // it. https://eprint.iacr.org/2008/510.pdf The choice e = 65537 = 2^16 + 1 is
   // especially widespread. Of the certificates observed in the UCSD TLS Corpus
@@ -57,20 +74,6 @@ typedef struct RsaInfo {
   uint8_t sig[PLACEHOLDER_SIZE];
 } RsaInfo;
 
-#define SECP256R1_PUBLIC_KEY_SIZE 64
-#define SECP256R1_SIG_SIZE 64
-
-typedef struct Secp256r1Info {
-  uint32_t algorithm_id;  // common header part
-  // X: 32 bytes
-  // Y: 32 bytes
-  // X, Y are in Jacobian coordinates, see: mbedtls_ecp_point
-  uint8_t public_key[SECP256R1_PUBLIC_KEY_SIZE];
-  // r: 32 bytes
-  // s: 32 bytes
-  uint8_t sig[SECP256R1_SIG_SIZE];
-} Secp256r1Info;
-
 /**
  * get offset of signature based on key size.
  */
@@ -79,4 +82,10 @@ uint8_t* get_rsa_signature(RsaInfo* info);
  * get total length of RsaInfo based on key size.
  */
 uint32_t calculate_rsa_info_length(int key_size);
+
+/*
+ * get real key size in bits according to the CKB_KEYSIZE_1024, CKB_KEYSIZE_2048
+ * and CKB_KEYSIZE_4096
+ */
+uint32_t get_key_size(uint8_t key_size_enum);
 #endif  // CKB_MISCELLANEOUS_SCRIPTS_RSA_SIGHASH_ALL_H
