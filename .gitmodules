@@ -4,3 +4,6 @@
 [submodule "deps/ckb-c-std-lib"]
 	path = deps/ckb-c-std-lib
 	url = https://github.com/nervosnetwork/ckb-c-stdlib.git
+[submodule "deps/mbedtls"]
+	path = deps/mbedtls
+	url = git@github.com:nervosnetwork/mbedtls.git
