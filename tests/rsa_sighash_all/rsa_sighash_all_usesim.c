@@ -1,12 +1,15 @@
 #include <assert.h>
 #define ASSERT assert
 
-#include "../c/rsa_sighash_all.c"
+#include "../../c/rsa_sighash_all.c"
 #include "mbedtls/ctr_drbg.h"
+#include "mbedtls/ecdsa.h"
 #include "mbedtls/entropy.h"
 #include "mbedtls/md.h"
 
 #define EXPONENT 65537
+
+#define count_of(arr) (sizeof(arr) / sizeof(arr[0]))
 
 void dump_as_carray(uint8_t* ptr, size_t size) {
   for (size_t i = 0; i < size; i++) {
@@ -146,7 +149,7 @@ int fake_random_entropy_poll(void* data, unsigned char* output, size_t len,
   return 0;
 }
 
-int gen_rsa_key(uint32_t key_size, mbedtls_rsa_context* rsa) {
+int gen_rsa_key(uint32_t key_size, mbedtls_rsa_context* rsa, RsaInfo* info) {
   int err = 0;
   mbedtls_entropy_context entropy;
   mbedtls_ctr_drbg_context ctr_drbg;
@@ -154,7 +157,12 @@ int gen_rsa_key(uint32_t key_size, mbedtls_rsa_context* rsa) {
 
   mbedtls_ctr_drbg_init(&ctr_drbg);
   mbedtls_entropy_init(&entropy);
-  mbedtls_rsa_init(rsa, MBEDTLS_RSA_PKCS_V15, 0);
+  int padding = convert_padding(info->padding);
+  // The hash_id in the RSA context is the one used for the verification.
+  // md_alg in the function call is the type of hash that is verified.
+  // According to RFC-3447: Public-Key Cryptography Standards (PKCS) #1 v2.1:
+  // RSA Cryptography Specifications it is advised to keep both hashes the same.
+  mbedtls_rsa_init(rsa, padding, info->md_type);
 
   err = mbedtls_entropy_add_source(&entropy, fake_random_entropy_poll, NULL, 32,
                                    MBEDTLS_ENTROPY_SOURCE_STRONG);
@@ -177,24 +185,24 @@ exit:
 }
 
 int rsa_sign(mbedtls_rsa_context* rsa, const uint8_t* msg_buf,
-             uint32_t msg_size, uint8_t* sig) {
+             uint32_t msg_size, uint8_t* sig, RsaInfo* info) {
   int err = 0;
+  mbedtls_md_type_t md_type = convert_md_type(info->md_type);
+  const mbedtls_md_info_t* md_info = mbedtls_md_info_from_type(md_type);
 
-  uint8_t hash_buf[32] = {0};
-  uint32_t hash_size = 32;
-  unsigned char hash_result[MBEDTLS_MD_MAX_SIZE];
-  mbedtls_mpi N, P, Q, E;
+  uint32_t hash_size = md_info->size;
+  uint8_t hash_buf[hash_size];
+
   mbedtls_test_rnd_pseudo_info rnd_info;
 
   memset(&rnd_info, 0, sizeof(mbedtls_test_rnd_pseudo_info));
   ASSERT(mbedtls_rsa_check_privkey(rsa) == 0);
-  err = md_string(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), msg_buf,
-                  msg_size, hash_buf);
+  err = md_string(md_info, msg_buf, msg_size, hash_buf);
   CHECK(err);
 
   err = mbedtls_rsa_pkcs1_sign(rsa, &mbedtls_test_rnd_pseudo_rand, &rnd_info,
-                               MBEDTLS_RSA_PRIVATE, MBEDTLS_MD_SHA256,
-                               hash_size, hash_buf, sig);
+                               MBEDTLS_RSA_PRIVATE, md_type, hash_size,
+                               hash_buf, sig);
   CHECK(err);
   err = CKB_SUCCESS;
 exit:
@@ -233,10 +241,16 @@ int rsa_random(void) {
   uint8_t msg[32] = {1, 2, 3, 4};
   uint8_t sig[byte_size];
   mbedtls_rsa_context rsa;
-  err = gen_rsa_key(key_size, &rsa);
+  RsaInfo info = {0};
+  info.algorithm_id = CKB_VERIFY_RSA;
+  info.key_size = CKB_KEYSIZE_1024;
+  info.padding = CKB_PKCS_15;
+  info.md_type = CKB_MD_SHA256;
+
+  err = gen_rsa_key(key_size, &rsa, &info);
   CHECK(err);
 
-  err = rsa_sign(&rsa, msg, sizeof(msg), sig);
+  err = rsa_sign(&rsa, msg, sizeof(msg), sig, &info);
   CHECK(err);
 
   err = rsa_verify(&rsa, msg, sizeof(msg), sig);
@@ -263,46 +277,81 @@ void export_public_key(const mbedtls_rsa_context* rsa, RsaInfo* info) {
   mbedtls_mpi_write_binary_le(&E, (unsigned char*)&info->E, sizeof(info->E));
 }
 
-int rsa_sighash_random(void) {
+int rsa_sighash_random(uint8_t key_size_enum, uint8_t md_type,
+                       uint8_t padding) {
   int err = 0;
 
   int alloc_buff_size = 1024 * 1024;
   unsigned char alloc_buff[alloc_buff_size];
   mbedtls_memory_buffer_alloc_init(alloc_buff, alloc_buff_size);
 
-  uint8_t key_size_enum = CKB_KEYSIZE_1024;
   uint32_t key_size = get_key_size(key_size_enum);
-  uint32_t byte_size = key_size / 8;
-
   uint8_t msg[32] = {1, 2, 3, 4};
-  uint8_t sig[byte_size];
+  uint32_t sig_buff_size = calculate_rsa_info_length(key_size);
+  uint8_t sig_buff[sig_buff_size];
+  RsaInfo* info = (RsaInfo*)sig_buff;
+
   mbedtls_rsa_context rsa;
-  err = gen_rsa_key(key_size, &rsa);
+
+  info->algorithm_id = CKB_VERIFY_RSA;
+  info->key_size = key_size_enum;
+  info->padding = padding;
+  info->md_type = md_type;
+
+  err = gen_rsa_key(key_size, &rsa, info);
   CHECK(err);
 
-  err = rsa_sign(&rsa, msg, sizeof(msg), sig);
+  uint8_t* ptr = get_rsa_signature(info);
+  err = rsa_sign(&rsa, msg, sizeof(msg), ptr, info);
   CHECK(err);
 
-  RsaInfo info;
-  info.algorithm_id = CKB_VERIFY_RSA;
-  info.key_size = key_size_enum;
-  export_public_key(&rsa, &info);
-
-  uint8_t* ptr = get_rsa_signature(&info);
-  memcpy(ptr, sig, sizeof(sig));
+  export_public_key(&rsa, info);
 
   uint8_t output[20];
   size_t output_len = 20;
-  err = validate_signature(NULL, (uint8_t*)&info, sizeof(info), msg,
-                           sizeof(msg), output, &output_len);
+  err = validate_signature(NULL, sig_buff, sig_buff_size, msg, sizeof(msg),
+                           output, &output_len);
   CHECK(err);
 
   err = 0;
 exit:
   if (err == CKB_SUCCESS) {
-    mbedtls_printf("rsa_sighash_random() passed.\n");
+    mbedtls_printf(
+        "rsa_sighash_random() passed: key size = %d, md_type = %d, padding = "
+        "%d\n",
+        key_size, md_type, padding);
   } else {
-    mbedtls_printf("rsa_sighash_random() failed.\n");
+    mbedtls_printf(
+        "rsa_sighash_random() failed: key size = %d, md_type = %d, padding = "
+        "%d\n",
+        key_size, md_type, padding);
+  }
+  return err;
+}
+
+// cover all test cases
+int rsa_sighash_all_test(void) {
+  int err = 0;
+  uint8_t md_type_set[] = {CKB_MD_SHA1,   CKB_MD_SHA224, CKB_MD_SHA256,
+                           CKB_MD_SHA384, CKB_MD_SHA512, CKB_MD_RIPEMD160};
+  uint8_t key_size_set[] = {CKB_KEYSIZE_1024, CKB_KEYSIZE_2048,
+                            CKB_KEYSIZE_4096};
+  uint8_t padding_set[] = {CKB_PKCS_15, CKB_PKCS_21};
+  for (int i = 0; i < count_of(key_size_set); i++) {
+    for (int j = 0; j < count_of(md_type_set); j++) {
+      for (int k = 0; k < count_of(padding_set); k++) {
+        err =
+            rsa_sighash_random(key_size_set[i], md_type_set[j], padding_set[k]);
+        CHECK(err);
+      }
+    }
+  }
+  err = 0;
+exit:
+  if (err == 0) {
+    mbedtls_printf("rsa_sighash_all_test() passed.\n");
+  } else {
+    mbedtls_printf("rsa_sighash_all_test() failed.\n");
   }
   return err;
 }
@@ -467,6 +516,7 @@ int iso97962_test3(uint8_t key_size_enum, const char* N_str, const char* E_str,
   RsaInfo info;
   info.key_size = key_size_enum;  // in bit
   info.algorithm_id = CKB_VERIFY_ISO9796_2;
+  info.md_type = CKB_MD_SHA1;
   mbedtls_mpi_write_binary_le(&N, (uint8_t*)info.N, key_size_byte);
   mbedtls_mpi_write_binary_le(&E, (uint8_t*)&info.E, sizeof(info.E));
 
@@ -490,7 +540,7 @@ int main(int argc, const char* argv[]) {
   err = rsa_random();
   CHECK(err);
 
-  err = rsa_sighash_random();
+  err = rsa_sighash_all_test();
   CHECK(err);
 
   err = rsa_sighash_all();

@@ -45,6 +45,8 @@ int ckb_load_witness(void* addr, uint64_t* len, size_t offset, size_t index,
   RsaInfo info;
   info.algorithm_id = CKB_VERIFY_RSA;
   info.key_size = CKB_KEYSIZE_1024;
+  info.md_type = CKB_MD_SHA256;
+  info.padding = CKB_PKCS_15;
   uint8_t* ptr = (uint8_t*)&info;
 
   if (index > 1) {

@@ -1,5 +1,5 @@
-// # rsa_sighash_all
-// same as secp256k1_blake2b_sighash_all_dual but with RSA (mbedtls)
+
+// uncomment to enable printf in CKB-VM
 //#define CKB_C_STDLIB_PRINTF
 //#include <stdio.h>
 #ifndef ASSERT
@@ -12,7 +12,6 @@
 
 #include "blake2b.h"
 #include "blockchain.h"
-#include "mbedtls/ecdsa.h"
 #include "mbedtls/md.h"
 #include "mbedtls/md_internal.h"
 #include "mbedtls/memory_buffer_alloc.h"
@@ -55,6 +54,10 @@
 #define ERROR_RSA_INVALID_BLADE2B_SIZE (-46)
 #define ERROR_RSA_INVALID_ID (-47)
 #define ERROR_RSA_NOT_IMPLEMENTED (-48)
+#define ERROR_BAD_MEMORY_LAYOUT (-49)
+#define ERROR_INVALID_MD_TYPE (-50)
+#define ERROR_INVALID_PADDING (-51)
+#define ERROR_MD_FAILED (-52)
 
 #define ERROR_ISO97962_INVALID_ARG1 (-51)
 #define ERROR_ISO97962_INVALID_ARG2 (-52)
@@ -104,6 +107,20 @@ int validate_signature_iso9796_2(void *, const uint8_t *sig_buf,
                                  size_t msg_size, uint8_t *out,
                                  size_t *out_len);
 
+bool is_valid_md_type(uint8_t md) {
+  return md == CKB_MD_SHA1 || md == CKB_MD_SHA224 || md == CKB_MD_SHA256 ||
+         md == CKB_MD_SHA384 || md == CKB_MD_SHA512 || md == CKB_MD_RIPEMD160;
+}
+
+bool is_valid_key_size(uint8_t size) {
+  return size == CKB_KEYSIZE_1024 || size == CKB_KEYSIZE_2048 ||
+         size == CKB_KEYSIZE_4096;
+}
+
+bool is_valid_padding(uint8_t padding) {
+  return padding == CKB_PKCS_15 || padding == CKB_PKCS_21;
+}
+
 uint32_t get_key_size(uint8_t key_size_enum) {
   if (key_size_enum == CKB_KEYSIZE_1024) {
     return 1024;
@@ -117,17 +134,50 @@ uint32_t get_key_size(uint8_t key_size_enum) {
   }
 }
 
+mbedtls_md_type_t convert_md_type(uint8_t type) {
+  mbedtls_md_type_t result = MBEDTLS_MD_NONE;
+  switch (type) {
+    case CKB_MD_SHA224:
+      result = MBEDTLS_MD_SHA224;
+      break;
+    case CKB_MD_SHA256:
+      result = MBEDTLS_MD_SHA256;
+      break;
+    case CKB_MD_SHA384:
+      result = MBEDTLS_MD_SHA384;
+      break;
+    case CKB_MD_SHA512:
+      result = MBEDTLS_MD_SHA512;
+      break;
+    case CKB_MD_RIPEMD160:
+      result = MBEDTLS_MD_RIPEMD160;
+      break;
+    case CKB_MD_SHA1:
+      result = MBEDTLS_MD_SHA1;
+      break;
+    default:
+      ASSERT(0);
+      result = MBEDTLS_MD_NONE;
+  }
+  return result;
+}
+
+int convert_padding(uint8_t padding) {
+  if (padding == CKB_PKCS_15) {
+    return MBEDTLS_RSA_PKCS_V15;
+  } else if (padding == CKB_PKCS_21) {
+    return MBEDTLS_RSA_PKCS_V21;
+  } else {
+    ASSERT(0);
+  }
+  return -1;
+}
+
 int mbedtls_hardware_poll(void *data, unsigned char *output, size_t len,
                           size_t *olen) {
   return 0;
 }
-/**
- * Note: there is no prefilled data for RSA, it's only be used in secp256k1.
- * Always succeed.
- * @param data
- * @param len
- * @return
- */
+
 __attribute__((visibility("default"))) int load_prefilled_data(void *data,
                                                                size_t *len) {
   (void)data;
@@ -142,28 +192,16 @@ uint8_t *get_rsa_signature(RsaInfo *info) {
 
 uint32_t calculate_rsa_info_length(int key_size) { return 8 + key_size / 4; }
 
-/**
- *
- * @param prefilled_data ignore. Not used.
- * @param signature_buffer pointer to signature buffer. It is casted to type
- * "RsaInfo*"
- * @param signature_size size of signature_buffer. it should be exactly the same
- * as size of "RsaInfo".
- * @param message_buffer pointer to message buffer.
- * @param message_size size of message_buffer.
- * @param output ignore. Not used
- * @param output_len ignore. Not used.
- * @return
- */
 int validate_signature_rsa(void *prefilled_data,
                            const uint8_t *signature_buffer,
                            size_t signature_size, const uint8_t *msg_buf,
                            size_t msg_size, uint8_t *output,
                            size_t *output_len) {
   (void)prefilled_data;
-  int ret;
+  (void)output;
+  (void)output_len;
   int err = ERROR_RSA_ONLY_INIT;
-  uint8_t hash_buf[32] = {0};
+  uint8_t hash_buf[MBEDTLS_MD_MAX_SIZE] = {0};
   uint32_t hash_size = 0;
   uint32_t key_size = 0;
 
@@ -177,11 +215,9 @@ int validate_signature_rsa(void *prefilled_data,
   unsigned char alloc_buff[alloc_buff_size];
   mbedtls_memory_buffer_alloc_init(alloc_buff, alloc_buff_size);
 
-  mbedtls_rsa_init(&rsa, MBEDTLS_RSA_PKCS_V15, 0);
-  CHECK2(input_info->key_size == CKB_KEYSIZE_1024 ||
-             input_info->key_size == CKB_KEYSIZE_2048 ||
-             input_info->key_size == CKB_KEYSIZE_4096,
-         ERROR_RSA_INVALID_KEY_SIZE);
+  CHECK2(is_valid_md_type(input_info->md_type), ERROR_INVALID_MD_TYPE);
+  CHECK2(is_valid_padding(input_info->padding), ERROR_INVALID_PADDING);
+  CHECK2(is_valid_key_size(input_info->key_size), ERROR_RSA_INVALID_KEY_SIZE);
   key_size = get_key_size(input_info->key_size);
   CHECK2(key_size > 0, ERROR_RSA_INVALID_KEY_SIZE);
   CHECK2(signature_buffer != NULL, ERROR_RSA_INVALID_PARAM1);
@@ -189,36 +225,28 @@ int validate_signature_rsa(void *prefilled_data,
   CHECK2(signature_size == (size_t)calculate_rsa_info_length(key_size),
          ERROR_RSA_INVALID_PARAM2);
   CHECK2(*output_len >= BLAKE160_SIZE, ERROR_RSA_INVALID_BLADE2B_SIZE);
+  mbedtls_md_type_t md_type = convert_md_type(input_info->md_type);
+  const mbedtls_md_info_t *md_info = mbedtls_md_info_from_type(md_type);
+  hash_size = md_info->size;
+
+  int padding = convert_padding(input_info->padding);
+  mbedtls_rsa_init(&rsa, padding, 0);
 
   mbedtls_mpi_read_binary_le(&rsa.E, (const unsigned char *)&input_info->E,
                              sizeof(uint32_t));
   mbedtls_mpi_read_binary_le(&rsa.N, input_info->N, key_size / 8);
   rsa.len = (mbedtls_mpi_bitlen(&rsa.N) + 7) >> 3;
 
-  ret = md_string(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), msg_buf,
-                  msg_size, hash_buf);
-  CHECK(ret);
+  err = md_string(md_info, msg_buf, msg_size, hash_buf);
+  CHECK2(err == 0, ERROR_MD_FAILED);
 
-  ret = mbedtls_rsa_pkcs1_verify(&rsa, NULL, NULL, MBEDTLS_RSA_PUBLIC,
-                                 MBEDTLS_MD_SHA256, hash_size, hash_buf,
+  err = mbedtls_rsa_pkcs1_verify(&rsa, NULL, NULL, MBEDTLS_RSA_PUBLIC, md_type,
+                                 hash_size, hash_buf,
                                  get_rsa_signature(input_info));
-  if (ret != 0) {
-    mbedtls_printf("mbedtls_rsa_pkcs1_verify returned -0x%0x\n",
-                   (unsigned int)-ret);
+  if (err != 0) {
     err = ERROR_RSA_VERIFY_FAILED;
     goto exit;
   }
-
-  blake2b_state blake2b_ctx;
-  blake2b_init(&blake2b_ctx, BLAKE2B_BLOCK_SIZE);
-  // pub key hash = blake2b(key size + E + N)
-  // here pub key = E+N
-  blake2b_update(&blake2b_ctx, input_info, 8 + key_size / 8);
-  unsigned char blake2b_hash[BLAKE2B_BLOCK_SIZE] = {0};
-  blake2b_final(&blake2b_ctx, blake2b_hash, BLAKE2B_BLOCK_SIZE);
-
-  *output_len = BLAKE160_SIZE;
-  memcpy(output, blake2b_hash, BLAKE160_SIZE);
 
   err = CKB_SUCCESS;
 
@@ -232,18 +260,23 @@ exit:
 
 /**
  * entry for different algorithms
- * The fist byte of signature_buffer is the id of algorithm, it can be:
+ * The fist byte of signature_buffer is the algorithm_id, it can be:
  * #define CKB_VERIFY_RSA 1
- * #define CKB_VERIFY_SECP256R1 2
- */
+ * #define CKB_VERIFY_ISO9796_2 2
+s */
 __attribute__((visibility("default"))) int validate_signature(
     void *prefilled_data, const uint8_t *sig_buf, size_t sig_len,
     const uint8_t *msg_buf, size_t msg_len, uint8_t *output,
     size_t *output_len) {
+  if (sizeof(RsaInfo) != (PLACEHOLDER_SIZE * 2 + 8)) {
+    ASSERT(0);
+    return ERROR_BAD_MEMORY_LAYOUT;
+  }
   if (sig_buf == NULL) {
     ASSERT(0);
     return ERROR_RSA_INVALID_PARAM1;
   }
+
   uint8_t id = ((RsaInfo *)sig_buf)->algorithm_id;
 
   if (id == CKB_VERIFY_RSA) {
@@ -340,25 +373,23 @@ int load_public_key_hash(unsigned char *public_key) {
 
 int md_string(const mbedtls_md_info_t *md_info, const uint8_t *buf, size_t n,
               unsigned char *output) {
-  int ret = -1;
+  int err = 0;
   mbedtls_md_context_t ctx;
-
-  if (md_info == NULL) return (MBEDTLS_ERR_MD_BAD_INPUT_DATA);
-
   mbedtls_md_init(&ctx);
 
-  if ((ret = mbedtls_md_setup(&ctx, md_info, 0)) != 0) goto cleanup;
-
-  if ((ret = mbedtls_md_starts(&ctx)) != 0) goto cleanup;
-
-  if ((ret = mbedtls_md_update(&ctx, (const unsigned char *)buf, n)) != 0)
-    goto cleanup;
-
-  ret = mbedtls_md_finish(&ctx, output);
-
-cleanup:
+  CHECK2(md_info != NULL, MBEDTLS_ERR_MD_BAD_INPUT_DATA);
+  err = mbedtls_md_setup(&ctx, md_info, 0);
+  CHECK(err);
+  err = mbedtls_md_starts(&ctx);
+  CHECK(err);
+  err = mbedtls_md_update(&ctx, (const unsigned char *)buf, n);
+  CHECK(err);
+  err = mbedtls_md_finish(&ctx, output);
+  CHECK(err);
+  err = 0;
+exit:
   mbedtls_md_free(&ctx);
-  return ret;
+  return err;
 }
 
 // this method performs RSA signature verification: it supports variable key
@@ -476,6 +507,16 @@ __attribute__((visibility("default"))) int validate_rsa_sighash_all(
     mbedtls_printf("validate signature failed: %d\n", result);
     return ERROR_RSA_VERIFY_FAILED;
   }
+
+  blake2b_init(&blake2b_ctx, BLAKE2B_BLOCK_SIZE);
+  // pub key hash = blake2b(key size + E + N)
+  // here pub key = E+N
+  blake2b_update(&blake2b_ctx, rsa_info, 8 + key_size / 8);
+  unsigned char blake2b_hash[BLAKE2B_BLOCK_SIZE] = {0};
+  blake2b_final(&blake2b_ctx, blake2b_hash, BLAKE2B_BLOCK_SIZE);
+
+  memcpy(output_public_key_hash, blake2b_hash, BLAKE160_SIZE);
+
   return CKB_SUCCESS;
 }
 
@@ -610,7 +651,7 @@ int iso97962_verify(ISO97962Encoding *enc, const uint8_t *block,
   const mbedtls_md_info_t *digest = mbedtls_md_info_from_type(enc->md);
   int hash_len = digest->size;
   uint8_t hash[hash_len];
-  int alloc_buff_size = 1024 * 1024;
+  int alloc_buff_size = 20 * 1024;
   uint8_t alloc_buff[alloc_buff_size];
   mbedtls_memory_buffer_alloc_init(alloc_buff, alloc_buff_size);
 
@@ -724,6 +765,7 @@ int validate_signature_iso9796_2(void *_p, const uint8_t *sig_buf,
   CHECK2(out != NULL, ERROR_ISO97962_INVALID_ARG8);
   CHECK2(out_len != NULL, ERROR_ISO97962_INVALID_ARG8);
   CHECK2(key_size_byte > 0, ERROR_ISO97962_INVALID_ARG8);
+  CHECK2(is_valid_md_type(info->md_type), ERROR_INVALID_MD_TYPE);
 
   mbedtls_mpi_init(&N);
   mbedtls_mpi_init(&E);
@@ -738,7 +780,9 @@ int validate_signature_iso9796_2(void *_p, const uint8_t *sig_buf,
   CHECK(err);
 
   ISO97962Encoding enc = {0};
-  iso97962_init(&enc, key_size_byte, MBEDTLS_MD_SHA1, false);
+  mbedtls_md_type_t md_type = convert_md_type(info->md_type);
+
+  iso97962_init(&enc, key_size_byte, md_type, false);
   err = iso97962_verify(&enc, block, key_size_byte, msg_buf, msg_len, m1,
                         &m1_len);
   CHECK2(err == 0 || err == ERROR_ISO97962_MISMATCH_HASH,
