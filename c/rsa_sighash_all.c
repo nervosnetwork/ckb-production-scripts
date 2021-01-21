@@ -187,6 +187,9 @@ __attribute__((visibility("default"))) int load_prefilled_data(void *data,
 
 uint8_t *get_rsa_signature(RsaInfo *info) {
   int length = get_key_size(info->key_size) / 8;
+  // note: sanitizer reports error:
+  // Index 256 out of bounds for type 'uint8_t [128]'
+  // It's intended. RsaInfo is actually an variable length buffer.
   return (uint8_t *)&info->N[length];
 }
 
@@ -204,8 +207,9 @@ int validate_signature_rsa(void *prefilled_data,
   uint8_t hash_buf[MBEDTLS_MD_MAX_SIZE] = {0};
   uint32_t hash_size = 0;
   uint32_t key_size = 0;
-
+  bool is_rsa_inited = false;
   mbedtls_rsa_context rsa;
+
   RsaInfo *input_info = (RsaInfo *)signature_buffer;
 
   // for key size with 1024 and 2048 bits, it uses up to 7K bytes.
@@ -224,12 +228,13 @@ int validate_signature_rsa(void *prefilled_data,
   CHECK2(msg_buf != NULL, ERROR_RSA_INVALID_PARAM1);
   CHECK2(signature_size == (size_t)calculate_rsa_info_length(key_size),
          ERROR_RSA_INVALID_PARAM2);
-  CHECK2(*output_len >= BLAKE160_SIZE, ERROR_RSA_INVALID_BLADE2B_SIZE);
+
   mbedtls_md_type_t md_type = convert_md_type(input_info->md_type);
   const mbedtls_md_info_t *md_info = mbedtls_md_info_from_type(md_type);
   hash_size = md_info->size;
-
   int padding = convert_padding(input_info->padding);
+
+  is_rsa_inited = true;
   mbedtls_rsa_init(&rsa, padding, 0);
 
   mbedtls_mpi_read_binary_le(&rsa.E, (const unsigned char *)&input_info->E,
@@ -251,10 +256,8 @@ int validate_signature_rsa(void *prefilled_data,
   err = CKB_SUCCESS;
 
 exit:
-  if (err != CKB_SUCCESS) {
-    mbedtls_printf("validate_signature_rsa() failed.\n");
-  }
-  mbedtls_rsa_free(&rsa);
+  if (is_rsa_inited)
+    mbedtls_rsa_free(&rsa);
   return err;
 }
 
@@ -338,38 +341,6 @@ int extract_witness_lock(uint8_t *witness, uint64_t len,
   return CKB_SUCCESS;
 }
 
-int load_public_key_hash(unsigned char *public_key) {
-  int ret;
-  uint64_t len = 0;
-
-  /* Load args */
-  unsigned char script[SCRIPT_SIZE];
-  len = SCRIPT_SIZE;
-  ret = ckb_load_script(script, &len, 0);
-  if (ret != CKB_SUCCESS) {
-    return ERROR_SYSCALL;
-  }
-  if (len > SCRIPT_SIZE) {
-    return ERROR_SCRIPT_TOO_LONG;
-  }
-  mol_seg_t script_seg;
-  script_seg.ptr = (uint8_t *)script;
-  script_seg.size = len;
-
-  if (MolReader_Script_verify(&script_seg, false) != MOL_OK) {
-    return ERROR_ENCODING;
-  }
-
-  mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
-  mol_seg_t args_bytes_seg = MolReader_Bytes_raw_bytes(&args_seg);
-  if (args_bytes_seg.size != PUBLIC_KEY_SIZE1 &&
-      args_bytes_seg.size != PUBLIC_KEY_SIZE2 &&
-      args_bytes_seg.size != PUBLIC_KEY_SIZE3) {
-    return ERROR_WRONG_SCRIPT_ARGS_LEN;
-  }
-  memcpy(public_key, args_bytes_seg.ptr, args_bytes_seg.size);
-  return CKB_SUCCESS;
-}
 
 int md_string(const mbedtls_md_info_t *md_info, const uint8_t *buf, size_t n,
               unsigned char *output) {
@@ -509,9 +480,8 @@ __attribute__((visibility("default"))) int validate_rsa_sighash_all(
   }
 
   blake2b_init(&blake2b_ctx, BLAKE2B_BLOCK_SIZE);
-  // pub key hash = blake2b(key size + E + N)
-  // here pub key = E+N
-  blake2b_update(&blake2b_ctx, rsa_info, 8 + key_size / 8);
+  // pub key hash = blake2b(E + N), common header is not included.
+  blake2b_update(&blake2b_ctx, rsa_info + 4, 4 + key_size / 8);
   unsigned char blake2b_hash[BLAKE2B_BLOCK_SIZE] = {0};
   blake2b_final(&blake2b_ctx, blake2b_hash, BLAKE2B_BLOCK_SIZE);
 
@@ -534,27 +504,6 @@ enum Trailer {
   TRAILER_SHA512_224 = 0x39CC,
   TRAILER_SHA512_256 = 0x3aCC
 };
-
-mbedtls_md_type_t get_md_by_trailer(uint16_t trailer) {
-  if (trailer == TRAILER_IMPLICIT) {
-    return MBEDTLS_MD_NONE;
-  } else if (trailer == TRAILER_SHA1) {
-    return MBEDTLS_MD_SHA1;
-  } else if (trailer == TRAILER_SHA224) {
-    return MBEDTLS_MD_SHA224;
-  } else if (trailer == TRAILER_SHA256) {
-    return MBEDTLS_MD_SHA256;
-  } else if (trailer == TRAILER_SHA384) {
-    return MBEDTLS_MD_SHA384;
-  } else if (trailer == TRAILER_SHA512) {
-    return MBEDTLS_MD_SHA512;
-  } else if (trailer == TRAILER_RIPEMD160) {
-    return MBEDTLS_MD_RIPEMD160;
-  } else {
-    ASSERT(false);
-    return MBEDTLS_MD_NONE;
-  }
-}
 
 uint16_t get_trailer_by_md(mbedtls_md_type_t md) {
   if (md == MBEDTLS_MD_NONE) {
@@ -594,61 +543,14 @@ void iso97962_init(ISO97962Encoding *enc, uint32_t key_size_byte,
   enc->trailer = get_trailer_by_md(md);
 }
 
-int iso97962_sign(ISO97962Encoding *enc, uint8_t *msg, int msg_len,
-                  uint8_t *block, int block_len) {
-  int err = 0;
-  const mbedtls_md_info_t *digest = mbedtls_md_info_from_type(enc->md);
-  int dig_size = digest->size;
-  int t = 0;
-  int delta = 0;
-
-  if (enc->trailer == TRAILER_IMPLICIT) {
-    t = 8;
-    delta = block_len - dig_size - 1;
-    mbedtls_md(digest, msg, msg_len, block + delta);
-    block[block_len - 1] = (uint8_t)TRAILER_IMPLICIT;
-  } else {
-    t = 16;
-    delta = block_len - dig_size - 2;
-    mbedtls_md(digest, msg, msg_len, block + delta);
-    block[block_len - 2] = (uint8_t)(enc->trailer >> 8);
-    block[block_len - 1] = (uint8_t)enc->trailer;
-  }
-
-  uint8_t header = 0;
-  int x = (dig_size + msg_len) * 8 + t + 4 - enc->key_size;
-
-  if (x > 0) {
-    int msg_rem = msg_len - ((x + 7) / 8);
-    header = 0x60;
-    delta -= msg_rem;
-    memcpy(block + delta, msg, msg_rem);
-  } else {
-    header = 0x40;
-    delta -= msg_len;
-    memcpy(block + delta, msg, msg_len);
-  }
-
-  if ((delta - 1) > 0) {
-    for (int i = delta - 1; i != 0; i--) {
-      block[i] = (uint8_t)0xbb;
-    }
-    block[delta - 1] ^= (uint8_t)0x01;
-    block[0] = (uint8_t)0x0b;
-    block[0] |= header;
-  } else {
-    block[0] = (uint8_t)0x0a;
-    block[0] |= header;
-  }
-  err = 0;
-  return err;
-}
-
 int iso97962_verify(ISO97962Encoding *enc, const uint8_t *block,
                     uint32_t block_len, const uint8_t *origin,
                     uint32_t origin_len, uint8_t *msg, uint32_t *msg_len) {
   int err = 0;
   const mbedtls_md_info_t *digest = mbedtls_md_info_from_type(enc->md);
+  if (digest == NULL) {
+    return ERROR_ISO97962_INVALID_ARG6;
+  }
   int hash_len = digest->size;
   uint8_t hash[hash_len];
   int alloc_buff_size = 20 * 1024;
@@ -683,6 +585,8 @@ int iso97962_verify(ISO97962Encoding *enc, const uint8_t *block,
         }
       }
     } else {
+      // this branch can't be reached due to "if (digest == NULL)" above.
+      // but still keep it here for defensive purpose
       return ERROR_ISO97962_INVALID_ARG4;
     }
 

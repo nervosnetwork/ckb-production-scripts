@@ -1,5 +1,11 @@
+
+#ifdef CKB_COVERAGE
+#define ASSERT(s) (void)0
+#else
 #include <assert.h>
 #define ASSERT assert
+#endif
+
 
 #include "../../c/rsa_sighash_all.c"
 #include "mbedtls/ctr_drbg.h"
@@ -10,6 +16,57 @@
 #define EXPONENT 65537
 
 #define count_of(arr) (sizeof(arr) / sizeof(arr[0]))
+
+int iso97962_sign(ISO97962Encoding *enc, uint8_t *msg, int msg_len,
+                  uint8_t *block, int block_len) {
+  int err = 0;
+  const mbedtls_md_info_t *digest = mbedtls_md_info_from_type(enc->md);
+  int dig_size = digest->size;
+  int t = 0;
+  int delta = 0;
+
+  if (enc->trailer == TRAILER_IMPLICIT) {
+    t = 8;
+    delta = block_len - dig_size - 1;
+    mbedtls_md(digest, msg, msg_len, block + delta);
+    block[block_len - 1] = (uint8_t)TRAILER_IMPLICIT;
+  } else {
+    t = 16;
+    delta = block_len - dig_size - 2;
+    mbedtls_md(digest, msg, msg_len, block + delta);
+    block[block_len - 2] = (uint8_t)(enc->trailer >> 8);
+    block[block_len - 1] = (uint8_t)enc->trailer;
+  }
+
+  uint8_t header = 0;
+  int x = (dig_size + msg_len) * 8 + t + 4 - enc->key_size;
+
+  if (x > 0) {
+    int msg_rem = msg_len - ((x + 7) / 8);
+    header = 0x60;
+    delta -= msg_rem;
+    memcpy(block + delta, msg, msg_rem);
+  } else {
+    header = 0x40;
+    delta -= msg_len;
+    memcpy(block + delta, msg, msg_len);
+  }
+
+  if ((delta - 1) > 0) {
+    for (int i = delta - 1; i != 0; i--) {
+      block[i] = (uint8_t)0xbb;
+    }
+    block[delta - 1] ^= (uint8_t)0x01;
+    block[0] = (uint8_t)0x0b;
+    block[0] |= header;
+  } else {
+    block[0] = (uint8_t)0x0a;
+    block[0] |= header;
+  }
+  err = 0;
+  return err;
+}
+
 
 void dump_as_carray(uint8_t* ptr, size_t size) {
   for (size_t i = 0; i < size; i++) {
@@ -78,8 +135,6 @@ void dup_buffer(const unsigned char* src, int src_len, unsigned char* dest,
   }
 }
 
-int ecdsa_sighash_random(void);
-
 typedef struct mbedtls_test_rnd_pseudo_info {
   uint32_t key[16];
   uint32_t v0, v1;
@@ -96,51 +151,6 @@ int mbedtls_test_rnd_pseudo_rand(void* rng_state, unsigned char* output,
 void srand(unsigned seed);
 long time(long*);
 
-int ecdsa_sighash_random(void) {
-  int err = 0;
-  int id = MBEDTLS_ECP_DP_SECP256R1;
-  mbedtls_ecp_group grp;
-  mbedtls_ecp_point Q;
-  mbedtls_mpi d, r, s;
-  mbedtls_test_rnd_pseudo_info rnd_info;
-  unsigned char buf[32];
-
-  int alloc_buff_size = 1024 * 1024;
-  unsigned char alloc_buff[alloc_buff_size];
-  mbedtls_memory_buffer_alloc_init(alloc_buff, alloc_buff_size);
-
-  srand(time(NULL));
-
-  mbedtls_ecp_group_init(&grp);
-  mbedtls_ecp_point_init(&Q);
-  mbedtls_mpi_init(&d);
-  mbedtls_mpi_init(&r);
-  mbedtls_mpi_init(&s);
-  memset(&rnd_info, 0x00, sizeof(mbedtls_test_rnd_pseudo_info));
-  memset(buf, 0, sizeof(buf));
-
-  ASSERT(mbedtls_test_rnd_pseudo_rand(&rnd_info, buf, sizeof(buf)) == 0);
-  ASSERT(mbedtls_ecp_group_load(&grp, id) == 0);
-  ASSERT(mbedtls_ecp_gen_keypair(&grp, &d, &Q, &mbedtls_test_rnd_pseudo_rand,
-                                 &rnd_info) == 0);
-
-  ASSERT(mbedtls_ecdsa_sign(&grp, &r, &s, &d, buf, sizeof(buf),
-                            &mbedtls_test_rnd_pseudo_rand, &rnd_info) == 0);
-
-  mbedtls_ecp_group_free(&grp);
-  mbedtls_ecp_point_free(&Q);
-  mbedtls_mpi_free(&d);
-  mbedtls_mpi_free(&r);
-  mbedtls_mpi_free(&s);
-  err = CKB_SUCCESS;
-exit:
-  if (err == CKB_SUCCESS) {
-    mbedtls_printf("ecdsa_sighash_random() passed.\n");
-  } else {
-    mbedtls_printf("ecdsa_sighash_random() failed.\n");
-  }
-  return err;
-}
 
 int fake_random_entropy_poll(void* data, unsigned char* output, size_t len,
                              size_t* olen) {
@@ -277,7 +287,7 @@ void export_public_key(const mbedtls_rsa_context* rsa, RsaInfo* info) {
   mbedtls_mpi_write_binary_le(&E, (unsigned char*)&info->E, sizeof(info->E));
 }
 
-int rsa_sighash_random(uint8_t key_size_enum, uint8_t md_type,
+int test_validate_signature(uint8_t key_size_enum, uint8_t md_type,
                        uint8_t padding) {
   int err = 0;
 
@@ -317,31 +327,110 @@ int rsa_sighash_random(uint8_t key_size_enum, uint8_t md_type,
 exit:
   if (err == CKB_SUCCESS) {
     mbedtls_printf(
-        "rsa_sighash_random() passed: key size = %d, md_type = %d, padding = "
+        "validate_signature_random() passed: key size = %d, md_type = %d, padding = "
         "%d\n",
         key_size, md_type, padding);
   } else {
     mbedtls_printf(
-        "rsa_sighash_random() failed: key size = %d, md_type = %d, padding = "
+        "validate_signature_random() failed: key size = %d, md_type = %d, padding = "
         "%d\n",
         key_size, md_type, padding);
   }
   return err;
 }
 
+void reset_rsa_info(RsaInfo* info) {
+  info->algorithm_id = CKB_VERIFY_RSA;
+  info->key_size = CKB_KEYSIZE_1024;
+  info->padding = CKB_PKCS_15;
+  info->md_type = CKB_MD_SHA256;
+}
+
+int validate_signature_error_cases_test(void) {
+  int err = 0;
+
+  uint8_t padding = CKB_PKCS_15;
+  uint8_t key_size_enum = CKB_KEYSIZE_1024;
+  uint8_t md_type = CKB_MD_SHA256;
+  uint32_t key_size = get_key_size(key_size_enum);
+  uint8_t msg[32] = {1, 2, 3, 4};
+  uint32_t sig_buff_size = calculate_rsa_info_length(key_size);
+  uint8_t sig_buff[sig_buff_size];
+  RsaInfo* info = (RsaInfo*)sig_buff;
+  info->algorithm_id = CKB_VERIFY_RSA;
+  info->key_size = key_size_enum;
+  info->padding = padding;
+  info->md_type = md_type;
+
+  size_t len = 0;
+  load_prefilled_data(NULL, &len);
+  mbedtls_hardware_poll(0, 0, 0, 0);
+
+  reset_rsa_info(info);
+  err = validate_signature(NULL, sig_buff, sig_buff_size, msg, sizeof(msg),NULL, NULL);
+  CHECK2(err == ERROR_RSA_VERIFY_FAILED, -1);
+
+  reset_rsa_info(info);
+  info->algorithm_id = 100;
+  err = validate_signature(NULL, sig_buff, sig_buff_size, msg, sizeof(msg),NULL, NULL);
+  CHECK2(err == ERROR_RSA_INVALID_ID, -1);
+
+  reset_rsa_info(info);
+  err = validate_signature(NULL, NULL, sig_buff_size, msg, sizeof(msg),NULL, NULL);
+  CHECK2(err == ERROR_RSA_INVALID_PARAM1, -1);
+
+  reset_rsa_info(info);
+  info->md_type = 100;
+  err = validate_signature(NULL, sig_buff, sig_buff_size, msg, sizeof(msg),NULL, NULL);
+  CHECK2(err == ERROR_INVALID_MD_TYPE, -1);
+
+  reset_rsa_info(info);
+  info->padding = 100;
+  err = validate_signature(NULL, sig_buff, sig_buff_size, msg, sizeof(msg),NULL, NULL);
+  CHECK2(err == ERROR_INVALID_PADDING, -1);
+
+  reset_rsa_info(info);
+  info->key_size = 100;
+  err = validate_signature(NULL, sig_buff, sig_buff_size, msg, sizeof(msg),NULL, NULL);
+  CHECK2(err == ERROR_RSA_INVALID_KEY_SIZE, -1);
+
+  reset_rsa_info(info);
+  err = validate_signature(NULL, NULL, sig_buff_size, msg, sizeof(msg),NULL, NULL);
+  CHECK2(err == ERROR_RSA_INVALID_PARAM1, -1);
+
+  reset_rsa_info(info);
+  err = validate_signature(NULL, sig_buff, sig_buff_size, NULL, sizeof(msg),NULL, NULL);
+  CHECK2(err == ERROR_RSA_INVALID_PARAM1, -1);
+
+  reset_rsa_info(info);
+  err = validate_signature(NULL, sig_buff, 0, msg, sizeof(msg),NULL, NULL);
+  CHECK2(err == ERROR_RSA_INVALID_PARAM2, -1);
+
+  err = 0;
+exit:
+  if (err == 0) {
+    mbedtls_printf("validate_signature_error_cases_test() passed.\n");
+  } else {
+    mbedtls_printf("validate_signature_error_cases_test() failed.\n");
+  }
+  return err;
+}
+
+
 // cover all test cases
-int rsa_sighash_all_test(void) {
+int validate_signature_all_test(void) {
   int err = 0;
   uint8_t md_type_set[] = {CKB_MD_SHA1,   CKB_MD_SHA224, CKB_MD_SHA256,
                            CKB_MD_SHA384, CKB_MD_SHA512, CKB_MD_RIPEMD160};
-  uint8_t key_size_set[] = {CKB_KEYSIZE_1024, CKB_KEYSIZE_2048,
-                            CKB_KEYSIZE_4096};
+//  uint8_t key_size_set[] = {CKB_KEYSIZE_1024, CKB_KEYSIZE_2048,
+//                            CKB_KEYSIZE_4096};
+  uint8_t key_size_set[] = {CKB_KEYSIZE_1024};
   uint8_t padding_set[] = {CKB_PKCS_15, CKB_PKCS_21};
   for (int i = 0; i < count_of(key_size_set); i++) {
     for (int j = 0; j < count_of(md_type_set); j++) {
       for (int k = 0; k < count_of(padding_set); k++) {
         err =
-            rsa_sighash_random(key_size_set[i], md_type_set[j], padding_set[k]);
+            test_validate_signature(key_size_set[i], md_type_set[j], padding_set[k]);
         CHECK(err);
       }
     }
@@ -355,6 +444,22 @@ exit:
   }
   return err;
 }
+
+// given a TX hash, create a witness buffer:
+// 1. Based on RSA key size, generate an empty RsaInfo buffer
+// 2. generate an witness buffer with RsaInfo buffer
+// 3. clear data part of witness buff to zero
+// 4. blake2b hash on TX hash
+// 5. blake2b hash on witness length and witness buffer
+// 6. RSA sign on this hash result
+// 7. Fill witness buffer according to the RsaInfo: common header, E, N, sig
+int rsa_sign_tx(uint8_t* tx_hash, uint32_t tx_hash_len, const mbedtls_rsa_context* rsa,
+                uint8_t* witness, uint32_t* witness_len) {
+  size_t key_size_byte = mbedtls_rsa_get_len(rsa);
+
+  return 0;
+}
+
 
 int rsa_sighash_all(void) {
   int err = 0;
@@ -452,10 +557,10 @@ exit:
   return err;
 }
 
-int iso97962_test(void) {
+int iso97962_test(bool implicity) {
   int err = 0;
   ISO97962Encoding enc = {0};
-  iso97962_init(&enc, 128, MBEDTLS_MD_SHA1, false);
+  iso97962_init(&enc, 128, MBEDTLS_MD_SHA1, implicity);
   uint8_t msg[] = {1, 2, 3, 4, 5, 6, 7, 8};
   uint32_t msg_len = sizeof(msg);
 
@@ -480,8 +585,78 @@ exit:
   return err;
 }
 
-int iso97962_test3(uint8_t key_size_enum, const char* N_str, const char* E_str,
-                   const char* msg_str, const char* sig_str) {
+int iso97962_error_cases_test() {
+  int err = 0;
+  ISO97962Encoding enc = {0};
+  ISO97962Encoding wrong_enc = {0};
+  iso97962_init(&enc, 128, MBEDTLS_MD_SHA1, false);
+
+  uint8_t msg[] = {1, 2, 3, 4, 5, 6, 7, 8};
+  uint32_t msg_len = sizeof(msg);
+
+  uint8_t block[128] = {0};
+  uint8_t wrong_block[128] = {0};
+  err = iso97962_sign(&enc, msg, sizeof(msg), block, sizeof(block));
+  CHECK(err);
+  uint8_t new_msg[128];
+  uint32_t new_msg_len = 128;
+
+  memcpy(wrong_block, block, sizeof(block));
+  wrong_block[107] -= 1;
+  err = iso97962_verify(&enc, wrong_block, sizeof(wrong_block), NULL, 0, new_msg,
+                        &new_msg_len);
+  CHECK2(err == ERROR_ISO97962_MISMATCH_HASH, -1);
+
+  memcpy(wrong_block, block, sizeof(block));
+  new_msg_len = 128;
+  wrong_block[sizeof(wrong_block)-2] -= 1;
+  err = iso97962_verify(&enc, wrong_block, sizeof(wrong_block), NULL, 0, new_msg,
+                        &new_msg_len);
+  CHECK2(err == ERROR_ISO97962_INVALID_ARG4, -1);
+
+  memcpy(wrong_block, block, sizeof(block));
+  new_msg_len = 128;
+  for (int i = 97; i < 108; i++) {
+    wrong_block[i] = (wrong_block[i] & 0xF0) | 0x0B;
+  }
+  err = iso97962_verify(&enc, wrong_block, sizeof(wrong_block), NULL, 0, new_msg,
+                        &new_msg_len);
+  CHECK2(err == ERROR_ISO97962_INVALID_ARG5, -1);
+
+
+  memcpy(wrong_block, block, sizeof(block));
+  new_msg_len = 128;
+  wrong_block[0] = 0xC0;
+  err = iso97962_verify(&enc, wrong_block, sizeof(wrong_block), NULL, 0, new_msg,
+                        &new_msg_len);
+  CHECK2(err == ERROR_ISO97962_INVALID_ARG2, -1);
+
+  memcpy(wrong_block, block, sizeof(block));
+  wrong_block[sizeof(wrong_block)-1] = 0xFF;
+  err = iso97962_verify(&enc, wrong_block, sizeof(wrong_block), NULL, 0, new_msg,
+                        &new_msg_len);
+  CHECK2(err == ERROR_ISO97962_INVALID_ARG3, -1);
+
+  memcpy(&wrong_enc, &enc, sizeof(enc));
+  wrong_enc.md = 100;
+  err = iso97962_verify(&wrong_enc, block, sizeof(block), NULL, 0, new_msg,
+                        &new_msg_len);
+
+  CHECK2(err == ERROR_ISO97962_INVALID_ARG6, -1);
+
+  err = 0;
+exit:
+  if (err == 0) {
+    mbedtls_printf("iso97962_error_cases_test() passed.\n");
+  } else {
+    mbedtls_printf("iso97962_error_cases_test() failed.\n");
+  }
+  return err;
+}
+
+
+int iso97962_sample_test(uint8_t key_size_enum, const char* N_str, const char* E_str,
+                         const char* msg_str, const char* sig_str) {
   int err = 0;
 
   mbedtls_mpi N;
@@ -514,7 +689,7 @@ int iso97962_test3(uint8_t key_size_enum, const char* N_str, const char* E_str,
   ASSERT(msg_len > 0 && msg_len < key_size_byte);
 
   RsaInfo info;
-  info.key_size = key_size_enum;  // in bit
+  info.key_size = key_size_enum;
   info.algorithm_id = CKB_VERIFY_ISO9796_2;
   info.md_type = CKB_MD_SHA1;
   mbedtls_mpi_write_binary_le(&N, (uint8_t*)info.N, key_size_byte);
@@ -532,25 +707,8 @@ exit:
   return err;
 }
 
-int main(int argc, const char* argv[]) {
+int iso97962_test3(void) {
   int err = 0;
-  err = ecdsa_sighash_random();
-  CHECK(err);
-
-  err = rsa_random();
-  CHECK(err);
-
-  err = rsa_sighash_all_test();
-  CHECK(err);
-
-  err = rsa_sighash_all();
-  CHECK(err);
-
-  err = iso97962_test();
-  CHECK(err);
-
-  err = iso97962_test2();
-  CHECK(err);
 
   // RSA public key, N
   const char* N_str =
@@ -568,7 +726,42 @@ int main(int argc, const char* argv[]) {
       "F5DA6A9B8C1A41893A569873CAD2E90EECEC84DEE85DCDE76041390D1E1328751F2832C8"
       "3699986744AF68087EFFB21CD9526317424C136911144AE31B00F1764F1C5CCD974D52F6"
       "278B029197C5746E62F67C544FA5C9B66E2A8AFB";
-  err = iso97962_test3(CKB_KEYSIZE_1024, N_str, E_str, msg_str, sig_str);
+  err = iso97962_sample_test(CKB_KEYSIZE_1024, N_str, E_str, msg_str, sig_str);
+  CHECK(err);
+
+exit:
+  return err;
+}
+
+
+int main(int argc, const char* argv[]) {
+  int err = 0;
+
+  err = rsa_random();
+  CHECK(err);
+
+  err = validate_signature_all_test();
+  CHECK(err);
+
+  err = validate_signature_error_cases_test();
+  CHECK(err);
+
+  err = rsa_sighash_all();
+  CHECK(err);
+
+  err = iso97962_test(false);
+  CHECK(err);
+
+  err = iso97962_test(true);
+  CHECK(err);
+
+  err = iso97962_error_cases_test();
+  CHECK(err);
+
+  err = iso97962_test2();
+  CHECK(err);
+
+  err = iso97962_test3();
   CHECK(err);
 
   err = 0;

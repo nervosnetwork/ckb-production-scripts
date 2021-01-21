@@ -38,7 +38,7 @@
 
 #define PLACEHOLDER_SIZE (128)
 
-/** signature (in witness) memory layout
+/** signature (in witness, or passed as arguments) memory layout
  * This structure contains the following information:
  * 1) Common header, 4 bytes, see RsaInfo
  * 2) RSA Public Key
