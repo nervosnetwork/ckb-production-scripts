@@ -57,7 +57,7 @@ blake2b result.
 typedef struct RsaInfo {
   // common header part, 4 bytes
   // if it doesn't take 4 bytes in memory, ERROR_BAD_MEMORY_LAYOUT returned
-  // from validate_signature_rsa
+  // from validate_signature
   uint8_t algorithm_id;
   uint8_t key_size;
   uint8_t padding;
@@ -111,11 +111,9 @@ uint32_t get_key_size(uint8_t key_size_enum);
  * @param output_len ignore. Not used.
  * @return 0 succeed; otherwise fail.
  */
-int validate_signature_rsa(void *prefilled_data,
-                           const uint8_t *signature_buffer,
-                           size_t signature_size, const uint8_t *msg_buf,
-                           size_t msg_size, uint8_t *output,
-                           size_t *output_len);
+int validate_signature(void *prefilled_data, const uint8_t *signature_buffer,
+                       size_t signature_size, const uint8_t *msg_buf,
+                       size_t msg_size, uint8_t *output, size_t *output_len);
 
 /**
  * Note: there is no prefilled data for RSA.

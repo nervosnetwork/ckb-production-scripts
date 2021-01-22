@@ -1,4 +1,4 @@
-#set -e
+set -e
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 ASM64=~/projects/ckb-vm-test-suite/binary/target/release/asm64
