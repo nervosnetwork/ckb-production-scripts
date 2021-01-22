@@ -18,7 +18,7 @@ PASSED_MBEDTLS_CFLAGS := -O3 -fPIC -nostdinc -nostdlib -DCKB_DECLARATION_ONLY -I
 # docker pull nervos/ckb-riscv-gnu-toolchain:gnu-bionic-20191012
 BUILDER_DOCKER := nervos/ckb-riscv-gnu-toolchain@sha256:aae8a3f79705f67d505d1f1d5ddc694a4fd537ed1c7e9622420a470d59ba2ec3
 
-all: build/simple_udt build/anyone_can_pay build/always_success build/rsa_sighash_all
+all: build/simple_udt build/anyone_can_pay build/always_success build/validate_signature_rsa
 
 all-via-docker: ${PROTOCOL_HEADER}
 	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make"
@@ -58,22 +58,22 @@ deps/mbedtls/library/libmbedcrypto.a:
 build/impl.o: deps/ckb-c-std-lib/libc/src/impl.c
 	$(CC) -c $(filter-out -DCKB_DECLARATION_ONLY, $(CFLAGS_MBEDTLS)) $(LDFLAGS_MBEDTLS) -o $@ $^
 
-rsa_sighash_all-via-docker:
-	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make build/rsa_sighash_all"
+validate_signature_rsa-via-docker:
+	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make build/validate_signature_rsa"
 
-build/rsa_sighash_all: c/rsa_sighash_all.c deps/mbedtls/library/libmbedcrypto.a
+build/validate_signature_rsa: c/validate_signature_rsa.c deps/mbedtls/library/libmbedcrypto.a
 	$(CC) $(CFLAGS_MBEDTLS) $(LDFLAGS_MBEDTLS) -D__SHARED_LIBRARY__ -fPIC -fPIE -pie -Wl,--dynamic-list c/rsa.syms -o $@ $^
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
-rsa_sighash_clean:
+validate_signature_rsa_clean:
 	make -C deps/mbedtls/library clean
-	rm -f build/rsa_sighash_all
+	rm -f build/validate_signature_rsa
 	rm -f build/*.o
 
 fmt:
-	clang-format -i -style=Google $(wildcard c/rsa_sighash_all.h c/rsa_sighash_all.c tests/rsa_sighash_all/*.c tests/rsa_sighash_all/*.h)
-	git diff --exit-code $(wildcard c/rsa_sighash_all.h c/rsa_sighash_all.c tests/rsa_sighash_all/*.c tests/rsa_sighash_all/*.h)
+	clang-format -i -style=Google $(wildcard c/validate_signature_rsa.h c/validate_signature_rsa.c tests/validate_signature_rsa/*.c tests/validate_signature_rsa/*.h)
+	git diff --exit-code $(wildcard c/validate_signature_rsa.h c/validate_signature_rsa.c tests/validate_signature_rsa/*.c tests/validate_signature_rsa/*.h)
 
 ${PROTOCOL_SCHEMA}:
 	curl -L -o $@ ${PROTOCOL_URL}
@@ -104,7 +104,7 @@ clean:
 	rm -rf build/*.debug
 	cd deps/secp256k1 && [ -f "Makefile" ] && make clean
 	make -C deps/mbedtls/library clean
-	rm -f build/rsa_sighash_all
+	rm -f build/validate_signature_rsa
 	cargo clean
 
 dist: clean all

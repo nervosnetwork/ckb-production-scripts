@@ -2,4 +2,4 @@ target/
 build/
 !build/.gitkeep
 cmake-build-debug
-tests/rsa_sighash_all/build.simulator
+tests/validate_signature_rsa/build.simulator

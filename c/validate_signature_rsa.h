@@ -1,5 +1,5 @@
-#ifndef CKB_MISCELLANEOUS_SCRIPTS_RSA_SIGHASH_ALL_H
-#define CKB_MISCELLANEOUS_SCRIPTS_RSA_SIGHASH_ALL_H
+#ifndef CKB_MISCELLANEOUS_SCRIPTS_RSA_ALL_H
+#define CKB_MISCELLANEOUS_SCRIPTS_RSA_ALL_H
 
 #include <stddef.h>
 
@@ -126,4 +126,4 @@ int validate_signature_rsa(void *prefilled_data,
  */
 int load_prefilled_data(void *data, size_t *len);
 
-#endif  // CKB_MISCELLANEOUS_SCRIPTS_RSA_SIGHASH_ALL_H
+#endif  // CKB_MISCELLANEOUS_SCRIPTS_RSA_ALL_H

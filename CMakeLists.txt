@@ -15,7 +15,7 @@ add_definitions(-D__SHARED_LIBRARY__)
 add_definitions(-DCKB_DECLARATION_ONLY)
 add_definitions(-DCKB_USE_SIM)
 
-include_directories(tests/rsa_sighash_all)
+include_directories(tests/validate_signature_rsa)
 include_directories(deps/ckb-c-stdlib-latest/simulator)
 include_directories(deps/ckb-c-stdlib-latest)
 # include_directories(deps/ckb-c-stdlib/libc)
@@ -96,7 +96,7 @@ add_library(mbedtls
     deps/mbedtls/library/version_features.c
     deps/mbedtls/library/xtea.c)
 
-add_executable(rsa_sighash_all tests/rsa_sighash_all/rsa_sighash_all_usesim.c c/rsa_sighash_all.h)
-target_compile_definitions(rsa_sighash_all PUBLIC -D_FILE_OFFSET_BITS=64 -DCKB_DECLARATION_ONLY)
-target_include_directories(rsa_sighash_all PUBLIC deps/ckb-c-stdlib-latest/libc)
-target_link_libraries(rsa_sighash_all mbedtls)
+add_executable(validate_signature_rsa tests/validate_signature_rsa/validate_signature_rsa_sim.c c/validate_signature_rsa.h)
+target_compile_definitions(validate_signature_rsa PUBLIC -D_FILE_OFFSET_BITS=64 -DCKB_DECLARATION_ONLY)
+target_include_directories(validate_signature_rsa PUBLIC deps/ckb-c-stdlib-latest/libc)
+target_link_libraries(validate_signature_rsa mbedtls)
