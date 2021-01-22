@@ -6,8 +6,8 @@ set(CMAKE_C_STANDARD 11)
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fsanitize=undefined")
 
 # uncomment it for coverage test
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage")
-add_definitions(-DCKB_COVERAGE)
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage")
+#add_definitions(-DCKB_COVERAGE)
 
 
 add_definitions(-DCKB_SIMULATOR)

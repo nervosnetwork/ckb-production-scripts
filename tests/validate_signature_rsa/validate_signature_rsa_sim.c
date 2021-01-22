@@ -1,5 +1,9 @@
 
-#ifdef CKB_COVERAGE
+// uncomment to enable printf in CKB-VM
+//#define CKB_C_STDLIB_PRINTF
+//#include <stdio.h>
+
+#if defined(CKB_COVERAGE) || defined(CKB_RUN_IN_VM)
 #define ASSERT(s) (void)0
 #else
 #include <assert.h>
@@ -9,7 +13,6 @@
 #include <stdlib.h>
 
 #include "mbedtls/ctr_drbg.h"
-#include "mbedtls/ecdsa.h"
 #include "mbedtls/entropy.h"
 #include "mbedtls/md.h"
 #include "validate_signature_rsa.c"
@@ -17,6 +20,10 @@
 #define EXPONENT 65537
 
 #define count_of(arr) (sizeof(arr) / sizeof(arr[0]))
+
+#if defined(CKB_RUN_IN_VM)
+int rand(void) { return __LINE__; }
+#endif
 
 int mbedtls_hardware_poll(void* data, unsigned char* output, size_t len,
                           size_t* olen) {
@@ -79,6 +86,16 @@ void dump_as_carray(uint8_t* ptr, size_t size) {
       mbedtls_printf("0x%02X\n", ptr[i]);
     } else {
       mbedtls_printf("0x%02X,", ptr[i]);
+    }
+  }
+}
+
+void print_string(uint8_t* ptr, size_t size) {
+  for (size_t i = 0; i < size; i++) {
+    if (i == (size - 1)) {
+      mbedtls_printf("%02X\n", ptr[i]);
+    } else {
+      mbedtls_printf("%02X", ptr[i]);
     }
   }
 }
@@ -323,21 +340,28 @@ int test_validate_signature(uint8_t key_size_enum, uint8_t md_type,
 
   uint8_t output[20];
   size_t output_len = 20;
+
+#if 0
+  printf("sig = ");
+  print_string(sig_buff, sig_buff_size);
+  printf("msg = ");
+  print_string(msg, sizeof(msg));
+#endif
   err = validate_signature(NULL, sig_buff, sig_buff_size, msg, sizeof(msg),
                            output, &output_len);
   CHECK(err);
 
   err = 0;
 exit:
-  if (err == CKB_SUCCESS) {
+  if (err == 0) {
     mbedtls_printf(
-        "validate_signature_random() passed: key size = %d, md_type = %d, "
+        "test_validate_signature() passed: key size = %d, md_type = %d, "
         "padding = "
         "%d\n",
         key_size, md_type, padding);
   } else {
     mbedtls_printf(
-        "validate_signature_random() failed: key size = %d, md_type = %d, "
+        "test_validate_signature() failed: key size = %d, md_type = %d, "
         "padding = "
         "%d\n",
         key_size, md_type, padding);
@@ -435,9 +459,9 @@ int validate_signature_all_test(void) {
   int err = 0;
   uint8_t md_type_set[] = {CKB_MD_SHA1,   CKB_MD_SHA224, CKB_MD_SHA256,
                            CKB_MD_SHA384, CKB_MD_SHA512, CKB_MD_RIPEMD160};
-  //  uint8_t key_size_set[] = {CKB_KEYSIZE_1024, CKB_KEYSIZE_2048,
-  //                            CKB_KEYSIZE_4096};
-  uint8_t key_size_set[] = {CKB_KEYSIZE_1024};
+  uint8_t key_size_set[] = {CKB_KEYSIZE_1024, CKB_KEYSIZE_2048,
+                            CKB_KEYSIZE_4096};
+  //  uint8_t key_size_set[] = {CKB_KEYSIZE_1024};
   uint8_t padding_set[] = {CKB_PKCS_15, CKB_PKCS_21};
   for (int i = 0; i < count_of(key_size_set); i++) {
     for (int j = 0; j < count_of(md_type_set); j++) {
@@ -451,9 +475,9 @@ int validate_signature_all_test(void) {
   err = 0;
 exit:
   if (err == 0) {
-    mbedtls_printf("rsa_sighash_all_test() passed.\n");
+    mbedtls_printf("validate_signature_all_test() passed.\n");
   } else {
-    mbedtls_printf("rsa_sighash_all_test() failed.\n");
+    mbedtls_printf("validate_signature_all_test() failed.\n");
   }
   return err;
 }
@@ -711,7 +735,51 @@ exit:
   return err;
 }
 
+// validate_signature_rsa ckbvm <command> <arg1> <arg2> <arg3>
+// validate_signature_rsa ckbvm -iso97962_test2
+// validate_signature_rsa ckbvm -iso97962_test3
+// validate_signature_rsa ckbvm -rsa sig_buf_in_hex msg_buf_in_hex
+// validate_signature_rsa ckbvm -rsa sig_buf_in_hex msg_buf_in_hex
+// ...
+int ckbvm_main(int argc, const char* argv[]) {
+  int err = 0;
+  if (argc <= 2) {
+    return -1;
+  }
+
+  if (strcmp(argv[2], "-iso97962_test2") == 0) {
+    err = iso97962_test2();
+    CHECK(err);
+  }
+  if (strcmp(argv[2], "-iso97962_test3") == 0) {
+    err = iso97962_test2();
+    CHECK(err);
+  }
+  if (strcmp(argv[2], "-rsa") == 0) {
+    if (argc != 5) return -1;
+    uint32_t sig_len = 0;
+    uint8_t sig_buf[1024 * 2];
+    uint32_t msg_len = 0;
+    uint8_t msg_buf[1024 * 2];
+    sig_len = read_string(argv[3], sig_buf, sizeof(sig_buf));
+    msg_len = read_string(argv[4], msg_buf, sizeof(msg_buf));
+    err = validate_signature(NULL, sig_buf, sig_len, msg_buf, msg_len, NULL,
+                             NULL);
+    CHECK(err);
+  }
+
+  err = 0;
+exit:
+  return err;
+}
+
 int main(int argc, const char* argv[]) {
+  if (argc >= 2) {
+    if (strcmp(argv[1], "ckbvm") == 0) {
+      return ckbvm_main(argc, argv);
+    }
+  }
+
   int err = 0;
 
   err = rsa_random();

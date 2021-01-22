@@ -66,6 +66,19 @@ build/validate_signature_rsa: c/validate_signature_rsa.c deps/mbedtls/library/li
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
+validate_signature_rsa_sim-via-docker:
+	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make build/validate_signature_rsa_sim"
+
+# for test only
+CFLAGS_MBEDTLS2:=$(filter-out -Werror,$(CFLAGS_MBEDTLS))
+CFLAGS_MBEDTLS2:=$(filter-out -Wno-nonnull,$(CFLAGS_MBEDTLS2))
+CFLAGS_MBEDTLS2:=$(filter-out -Wno-nonnull-compare,$(CFLAGS_MBEDTLS2))
+CFLAGS_MBEDTLS2:=$(filter-out -Wno-unused-function,$(CFLAGS_MBEDTLS2))
+CFLAGS_MBEDTLS2:=$(filter-out -Wall,$(CFLAGS_MBEDTLS2))
+build/validate_signature_rsa_sim: tests/validate_signature_rsa/validate_signature_rsa_sim.c deps/mbedtls/library/libmbedcrypto.a
+	$(CC) $(CFLAGS_MBEDTLS2) $(LDFLAGS_MBEDTLS) -DCKB_RUN_IN_VM -o $@ $^
+
+
 validate_signature_rsa_clean:
 	make -C deps/mbedtls/library clean
 	rm -f build/validate_signature_rsa
@@ -105,6 +118,7 @@ clean:
 	cd deps/secp256k1 && [ -f "Makefile" ] && make clean
 	make -C deps/mbedtls/library clean
 	rm -f build/validate_signature_rsa
+	rm -f build/validate_signature_rsa_sim
 	cargo clean
 
 dist: clean all

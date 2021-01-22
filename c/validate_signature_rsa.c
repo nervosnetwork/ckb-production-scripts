@@ -1,7 +1,4 @@
 
-// uncomment to enable printf in CKB-VM
-//#define CKB_C_STDLIB_PRINTF
-//#include <stdio.h>
 #ifndef ASSERT
 #define ASSERT(s) (void)0
 #endif
