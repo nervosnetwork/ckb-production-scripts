@@ -16,12 +16,12 @@ add_definitions(-DCKB_DECLARATION_ONLY)
 add_definitions(-DCKB_USE_SIM)
 
 include_directories(tests/validate_signature_rsa)
-include_directories(deps/ckb-c-stdlib-latest/simulator)
-include_directories(deps/ckb-c-stdlib-latest)
+include_directories(deps/ckb-c-stdlib-simulator-only/simulator)
+include_directories(deps/ckb-c-stdlib-simulator-only)
 # include_directories(deps/ckb-c-stdlib/libc)
 # on simulator, we don't use own "libc"
 include_directories(deps)
-include_directories(deps/ckb-c-stdlib-latest/molecule)
+include_directories(deps/ckb-c-stdlib-simulator-only/molecule)
 include_directories(c)
 include_directories(build)
 include_directories(deps/secp256k1/src)
@@ -98,5 +98,5 @@ add_library(mbedtls
 
 add_executable(validate_signature_rsa tests/validate_signature_rsa/validate_signature_rsa_sim.c c/validate_signature_rsa.h)
 target_compile_definitions(validate_signature_rsa PUBLIC -D_FILE_OFFSET_BITS=64 -DCKB_DECLARATION_ONLY)
-target_include_directories(validate_signature_rsa PUBLIC deps/ckb-c-stdlib-latest/libc)
+target_include_directories(validate_signature_rsa PUBLIC deps/ckb-c-stdlib-simulator-only/libc)
 target_link_libraries(validate_signature_rsa mbedtls)
