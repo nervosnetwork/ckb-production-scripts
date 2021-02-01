@@ -1,0 +1,10 @@
+[workspace]
+members = ["tests"]
+exclude = ["contracts/validate-signature-rsa"]
+
+[profile.release]
+overflow-checks = true
+opt-level = 's'
+lto = true
+codegen-units = 1
+panic = 'abort'
