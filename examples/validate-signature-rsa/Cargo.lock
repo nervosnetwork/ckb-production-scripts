@@ -117,6 +117,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 
 [[package]]
+name = "blake2b-ref"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9f6b7b71e3097ed6ee470bab30e1025dd1327eee94ab1e3040b5b5c3f992117"
+
+[[package]]
 name = "blake2b-rs"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -151,6 +157,12 @@ name = "bs58"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "476e9cd489f9e121e02ffa6014a8ef220ecb15c05ed23fc34cca13925dc283fb"
+
+[[package]]
+name = "buddy-alloc"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ff9f338986406db85e2b5deb40a9255b796ca03a194c7457403d215173f3fd5"
 
 [[package]]
 name = "bumpalo"
@@ -594,6 +606,27 @@ dependencies = [
  "faster-hex 0.4.1",
  "goblin",
  "serde",
+]
+
+[[package]]
+name = "ckb-standalone-types"
+version = "0.0.1-pre.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af2cdbdf65ee5b1da71504f5a03d6984bce77d0b4b46daff63f4ba4a3b0eef08"
+dependencies = [
+ "cfg-if 0.1.10",
+ "molecule",
+]
+
+[[package]]
+name = "ckb-std"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35e14bf64c694f078d6d33bad7e2b9a87d129d8b4e4c9a6cfc4364e2c6eddbd9"
+dependencies = [
+ "buddy-alloc",
+ "cc",
+ "ckb-standalone-types",
 ]
 
 [[package]]
@@ -3473,6 +3506,15 @@ checksum = "90dbc611eb48397705a6b0f6e917da23ae517e4d127123d2cf7674206627d32a"
 dependencies = [
  "rand 0.6.5",
  "serde",
+]
+
+[[package]]
+name = "validate-signature-rsa"
+version = "0.1.0"
+dependencies = [
+ "blake2b-ref",
+ "blake2b-rs",
+ "ckb-std",
 ]
 
 [[package]]

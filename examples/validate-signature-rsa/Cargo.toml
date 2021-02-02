@@ -1,6 +1,5 @@
 [workspace]
-members = ["tests"]
-exclude = ["contracts/validate-signature-rsa"]
+members = ["tests", "contracts/validate-signature-rsa"]
 
 [profile.release]
 overflow-checks = true

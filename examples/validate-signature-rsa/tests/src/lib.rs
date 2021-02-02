@@ -47,7 +47,8 @@ impl Loader {
         let dir = env::current_dir().unwrap();
         let mut base_path = PathBuf::new();
         base_path.push(dir);
-        base_path.push("target/riscv64imac-unknown-none-elf/");
+        base_path.push("..");
+        base_path.push("build");
         base_path.push(load_prefix);
         Loader(base_path)
     }

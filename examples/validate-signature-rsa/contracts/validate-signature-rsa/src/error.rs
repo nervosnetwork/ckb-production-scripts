@@ -3,7 +3,7 @@ use ckb_std::error::SysError;
 /// Error
 #[repr(i8)]
 pub enum Error {
-    IndexOutOfBound,
+    IndexOutOfBound = 1,
     ItemMissing,
     LengthNotEnough,
     Encoding,

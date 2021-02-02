@@ -139,8 +139,8 @@ fn test_rsa(private_key: PKey<Private> , public_key: PKey<Public> ) {
     let contract_bin: Bytes = Loader::default().load_binary("validate-signature-rsa");
     let out_point = context.deploy_cell(contract_bin);
 
-    let rsa_bin: Bytes = fs::read("./dynamic-libray/validate_signature_rsa")
-        .expect("load ./dynamic-libray/validate_signature_rsa")
+    let rsa_bin: Bytes = fs::read("../dynamic-libray/validate_signature_rsa")
+        .expect("load ../dynamic-libray/validate_signature_rsa")
         .into();
     let rsa_out_point = context.deploy_cell(rsa_bin);
     let rsa_dep = CellDep::new_builder().out_point(rsa_out_point).build();
