@@ -49,6 +49,11 @@ $(SECP256K1_SRC):
 ${PROTOCOL_SCHEMA}:
 	curl -L -o $@ ${PROTOCOL_URL}
 
+xudt_fmt:
+	clang-format -i -style=Google $(wildcard c/xudt.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
+	git diff --exit-code $(wildcard c/xudt.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
+
+
 publish:
 	git diff --exit-code Cargo.toml
 	sed -i.bak 's/.*git =/# &/' Cargo.toml
