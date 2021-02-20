@@ -10,15 +10,11 @@
 
 #if defined(CKB_USE_SIM)
 #include "ckb_syscall_xudt_sim.h"
-#else
-#include "ckb_syscalls.h"
-#include "ckb_dlfcn.h"
-#endif
-
-#if defined(CKB_USE_SIM)
 #include <stdio.h>
 #define xudt_printf printf
 #else
+#include "ckb_syscalls.h"
+#include "ckb_dlfcn.h"
 #define xudt_printf(x, ...) (void)0
 #endif
 
@@ -72,6 +68,10 @@ enum ErrorCode {
 #define FLAGS_SIZE 4
 
 // global variables, type definitions, etc
+
+// We will leverage gcc's 128-bit integer extension here for number crunching.
+typedef unsigned __int128 uint128_t;
+
 uint8_t g_script[SCRIPT_SIZE] = {0};
 uint8_t g_witness[WITNESS_SIZE] = {0};
 
@@ -128,17 +128,23 @@ int load_raw_extension_data(uint8_t** var_data, uint32_t* var_len) {
   int err = 0;
   // Load witness of first input
   uint64_t witness_len = WITNESS_SIZE;
-  uint32_t real_size = 0;
   err = ckb_load_witness(g_witness, &witness_len, 0, 0,
                          CKB_SOURCE_GROUP_INPUT);
   CHECK(err);
+  mol_seg_t seg;
+  seg.ptr = g_witness;
+  seg.size = witness_len;
+  err = MolReader_WitnessArgs_verify(&seg, true);
+  CHECK2(err == MOL_OK, ERROR_INVALID_MOL_FORMAT);
+  mol_seg_t input_seg = MolReader_WitnessArgs_get_input_type(&seg);
+  CHECK2(input_seg.size > 0, ERROR_INVALID_MOL_FORMAT);
+  mol_seg_t extension_seg = MolReader_Bytes_raw_bytes(&input_seg);
+  CHECK2(extension_seg.size > 0, ERROR_INVALID_MOL_FORMAT);
 
-  *var_len = witness_len;
-  if (*var_len > WITNESS_SIZE) {
-    *var_len = WITNESS_SIZE;
-  }
-  *var_data = g_witness;
+  *var_len = extension_seg.size;
+  *var_data = extension_seg.ptr;
 
+  err = 0;
 exit:
   return err;
 }
@@ -186,7 +192,7 @@ int parse_args(int* owner_mode, XUDTFlags* flag, uint8_t** var_data, uint32_t* v
       break;
     }
     CHECK(ret);
-    CHECK2(len2 != BLAKE2B_BLOCK_SIZE, ERROR_ENCODING);
+    CHECK2(len2 == BLAKE2B_BLOCK_SIZE, ERROR_ENCODING);
 
     if (memcmp(buffer, args_bytes_seg.ptr, BLAKE2B_BLOCK_SIZE) == 0) {
       *owner_mode = 1;
@@ -196,9 +202,10 @@ int parse_args(int* owner_mode, XUDTFlags* flag, uint8_t** var_data, uint32_t* v
   }
 
   // parse xUDT args
-  if ((args_bytes_seg.size - BLAKE2B_BLOCK_SIZE) < FLAGS_SIZE) {
+  if (args_bytes_seg.size < (FLAGS_SIZE+BLAKE2B_BLOCK_SIZE)) {
     *var_data = NULL;
     *var_len = 0;
+    *flag = XUDTFlags_Plain;
   } else {
     uint32_t* flag_ptr = (uint32_t*)(args_bytes_seg.ptr + BLAKE2B_BLOCK_SIZE);
     if (*flag_ptr == 0) {
@@ -244,6 +251,105 @@ exit:
   return err;
 }
 
+// copied from simple_udt.c
+int simple_udt(int owner_mode) {
+  if (owner_mode)
+    return CKB_SUCCESS;
+
+  int ret = 0;
+  // When the owner mode is not enabled, however, we will then need to ensure
+  // the sum of all input tokens is not smaller than the sum of all output
+  // tokens. First, let's loop through all input cells containing current UDTs,
+  // and gather the sum of all input tokens.
+  uint128_t input_amount = 0;
+  size_t i = 0;
+  uint64_t len = 0;
+  while (1) {
+    uint128_t current_amount = 0;
+    len = 16;
+    // The implementation here does not require that the transaction only
+    // contains UDT cells for the current UDT type. It's perfectly fine to mix
+    // the cells for multiple different types of UDT together in one
+    // transaction. But that also means we need a way to tell one UDT type from
+    // another UDT type. The trick is in the `CKB_SOURCE_GROUP_INPUT` value used
+    // here. When using it as the source part of the syscall, the syscall would
+    // only iterate through cells with the same script as the current running
+    // script. Since different UDT types will naturally have different
+    // script(the args part will be different), we can be sure here that this
+    // loop would only iterate through UDTs that are of the same type as the one
+    // identified by the current running script.
+    //
+    // In the case that multiple UDT types are included in the same transaction,
+    // this simple UDT script will be run multiple times to validate the
+    // transaction, each time with a different script containing different
+    // script args, representing different UDT types.
+    //
+    // A different trick used here, is that our current implementation assumes
+    // that the amount of UDT is stored as unsigned 128-bit little endian
+    // integer in the first 16 bytes of cell data. Since RISC-V also uses little
+    // endian format, we can just read the first 16 bytes of cell data into
+    // `current_amount`, which is just an unsigned 128-bit integer in C. The
+    // memory layout of a C program will ensure that the value is set correctly.
+    ret = ckb_load_cell_data((uint8_t *)&current_amount, &len, 0, i,
+                             CKB_SOURCE_GROUP_INPUT);
+    // When `CKB_INDEX_OUT_OF_BOUND` is reached, we know we have iterated
+    // through all cells of current type.
+    if (ret == CKB_INDEX_OUT_OF_BOUND) {
+      break;
+    }
+    if (ret != CKB_SUCCESS) {
+      return ret;
+    }
+    if (len < 16) {
+      return ERROR_ENCODING;
+    }
+    input_amount += current_amount;
+    // Like any serious smart contract out there, we will need to check for
+    // overflows.
+    if (input_amount < current_amount) {
+      return ERROR_OVERFLOWING;
+    }
+    i += 1;
+  }
+
+  // With the sum of all input UDT tokens gathered, let's now iterate through
+  // output cells to grab the sum of all output UDT tokens.
+  uint128_t output_amount = 0;
+  i = 0;
+  while (1) {
+    uint128_t current_amount = 0;
+    len = 16;
+    // Similar to the above code piece, we are also looping through output cells
+    // with the same script as current running script here by using
+    // `CKB_SOURCE_GROUP_OUTPUT`.
+    ret = ckb_load_cell_data((uint8_t *)&current_amount, &len, 0, i,
+                             CKB_SOURCE_GROUP_OUTPUT);
+    if (ret == CKB_INDEX_OUT_OF_BOUND) {
+      break;
+    }
+    if (ret != CKB_SUCCESS) {
+      return ret;
+    }
+    if (len < 16) {
+      return ERROR_ENCODING;
+    }
+    output_amount += current_amount;
+    // Like any serious smart contract out there, we will need to check for
+    // overflows.
+    if (output_amount < current_amount) {
+      return ERROR_OVERFLOWING;
+    }
+    i += 1;
+  }
+
+  // When both value are gathered, we can perform the final check here to
+  // prevent non-authorized token issurance.
+  if (input_amount < output_amount) {
+    return ERROR_AMOUNT;
+  }
+  return CKB_SUCCESS;
+}
+
 #ifdef CKB_USE_SIM
 int simulator_main() {
 #else
@@ -258,17 +364,21 @@ int main() {
   err = parse_args(&owner_mode, &flags, &raw_extension_data, &raw_extension_len);
   CHECK(err);
   CHECK2(owner_mode == 1 || owner_mode == 0, ERROR_INVALID_ARGS_FORMAT);
-  CHECK2(raw_extension_data != NULL, ERROR_INVALID_ARGS_FORMAT);
-  CHECK2(raw_extension_len > 0, ERROR_INVALID_ARGS_FORMAT);
+  if (flags != XUDTFlags_Plain) {
+    CHECK2(raw_extension_data != NULL, ERROR_INVALID_ARGS_FORMAT);
+    CHECK2(raw_extension_len > 0, ERROR_INVALID_ARGS_FORMAT);
+  }
+  err = simple_udt(owner_mode);
+  CHECK(err);
 
   if (flags == XUDTFlags_Plain) {
-    // TODO: copy simple UDT routine?
+    return CKB_SUCCESS;
   }
 
   mol_seg_t raw_extension_seg = {0};
   raw_extension_seg.ptr = raw_extension_data;
   raw_extension_seg.size = raw_extension_len;
-  CHECK2(MolReader_Byte32Vec_verify(&raw_extension_seg, true), ERROR_INVALID_ARGS_FORMAT);
+  CHECK2(MolReader_Byte32Vec_verify(&raw_extension_seg, true) == MOL_OK, ERROR_INVALID_ARGS_FORMAT);
   uint32_t size = MolReader_Byte32Vec_length(&raw_extension_seg);
   for (uint32_t i = 0; i < size; i++) {
     ValidateFuncType func;
@@ -281,10 +391,11 @@ int main() {
     if (result != 0) {
       xudt_printf("A non-zero returned from xUDT extension scripts.\n");
     }
-    CHECK(result == 0);
+    CHECK(result);
   }
-  err = 0;
 
+
+  err = 0;
 exit:
   return err;
 }

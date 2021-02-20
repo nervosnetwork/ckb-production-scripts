@@ -1,3 +1,0 @@
-/* Basic Types */
-vector Bytes <byte>;
-vector BytesVec <Bytes>;

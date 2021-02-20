@@ -53,6 +53,16 @@ xudt_fmt:
 	clang-format -i -style=Google $(wildcard c/xudt.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
 	git diff --exit-code $(wildcard c/xudt.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
 
+xudt_rce-via-docker:
+	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make build/xudt_rce"
+
+xudt_rce_clean:
+	rm -f build/xudt_rce
+
+build/xudt_rce: c/xudt_rce.c
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+	$(OBJCOPY) --only-keep-debug $@ $@.debug
+	$(OBJCOPY) --strip-debug --strip-all $@
 
 publish:
 	git diff --exit-code Cargo.toml
@@ -78,6 +88,7 @@ clean:
 	rm -rf build/secp256k1_data_info.h build/dump_secp256k1_data
 	rm -rf build/secp256k1_data
 	rm -rf build/*.debug
+	rm -f build/xudt_rce
 	cd deps/secp256k1 && [ -f "Makefile" ] && make clean
 	cargo clean
 

@@ -6,26 +6,71 @@
 #include <stddef.h>
 #include <stdint.h>
 
-static inline long __internal_syscall(long n, long _a0, long _a1, long _a2,
-                                      long _a3, long _a4, long _a5) {
-  return 0;
+// forward declarations
+void ckbsim_map_lib(const uint8_t* dep_cell_hash, const char* path);
+mol_seg_t build_bytes(uint8_t* data, uint32_t len);
+extern int g_lib_size;
+
+uint32_t g_flags = 0;
+void xudt_set_flags(uint32_t flags) { g_flags = flags; }
+
+mol_builder_t g_extension_script_hash_builder = {0};
+mol_seg_t g_extension_script_hash = {0};
+void xudt_add_extension_script_hash(const uint8_t* hash, const char* path) {
+  MolBuilder_Byte32Vec_push(&g_extension_script_hash_builder, hash);
+  ckbsim_map_lib(hash, path);
 }
 
-#define syscall(n, a, b, c, d, e, f)                                           \
-  __internal_syscall(n, (long)(a), (long)(b), (long)(c), (long)(d), (long)(e), \
-                     (long)(f))
+void xudt_add_structure_item(const uint8_t* item, uint32_t len) {}
+void xudt_add_data(const uint8_t* data, uint32_t len) {}
+
+uint8_t g_hash_in_args[32] = {0};
+uint8_t g_lock_script_hash[32] = {0};
+// set them to same to enable owner mode
+void xudt_set_owner_mode(uint8_t* hash_in_args, uint8_t* lock_script_hash) {
+  memcpy(g_hash_in_args, hash_in_args, 32);
+  memcpy(g_lock_script_hash, lock_script_hash, 32);
+}
+
+__int128 g_input_amount[32] = {0};
+uint32_t g_input_count = 0;
+__int128 g_output_amount[32] = {0};
+uint32_t g_output_count = 0;
+
+void xudt_add_input_amount(__int128 val) {
+  g_input_amount[g_input_count] = val;
+  g_input_count++;
+}
+
+void xudt_add_output_amount(__int128 val) {
+  g_output_amount[g_output_count] = val;
+  g_output_count++;
+}
+
+void xudt_begin_data(void) {
+  g_flags = 0;
+  MolBuilder_Byte32Vec_init(&g_extension_script_hash_builder);
+  if (g_extension_script_hash.ptr) free(g_extension_script_hash.ptr);
+  g_extension_script_hash.ptr = 0;
+  g_extension_script_hash.size = 0;
+  g_input_count = 0;
+  g_output_count = 0;
+  memset(g_lock_script_hash, 0, sizeof(g_lock_script_hash));
+  memset(g_hash_in_args, 0, sizeof(g_hash_in_args));
+
+  g_lib_size = 0;
+}
+
+void xudt_end_data(void) {
+  mol_seg_res_t res =
+      MolBuilder_Byte32Vec_build(g_extension_script_hash_builder);
+  ASSERT(res.errno == 0);
+  g_extension_script_hash = res.seg;
+}
 
 int ckb_exit(int8_t code);
 
-int ckb_load_tx_hash(void* addr, uint64_t* len, size_t offset) {
-  assert(offset == 0);
-  uint8_t* p = (uint8_t*)addr;
-  for (int i = 0; i < 32; i++) {
-    p[i] = 0;
-  }
-  *len = 32;
-  return 0;
-}
+int ckb_load_tx_hash(void* addr, uint64_t* len, size_t offset) { return 0; }
 
 int ckb_load_script_hash(void* addr, uint64_t* len, size_t offset);
 
@@ -40,66 +85,79 @@ int ckb_load_header(void* addr, uint64_t* len, size_t offset, size_t index,
 
 int ckb_load_witness(void* addr, uint64_t* len, size_t offset, size_t index,
                      size_t source) {
-  mol_builder_t b;
-  mol_seg_res_t res;
-  char info[256] = {0};
-  char* ptr = info;
-
   if (index > 1) {
     return 1;  // CKB_INDEX_OUT_OF_BOUND;
   }
+  if (g_flags == 2) {
+    mol_builder_t w;
+    MolBuilder_WitnessArgs_init(&w);
 
-  MolBuilder_Bytes_init(&b);
-  for (int i = 0; i < sizeof(info); i++) {
-    MolBuilder_Bytes_push(&b, ptr[i]);
+    // TODO: append <BytesVec structure> here
+    mol_seg_t seg =
+        build_bytes(g_extension_script_hash.ptr, g_extension_script_hash.size);
+    MolBuilder_WitnessArgs_set_input_type(&w, seg.ptr, seg.size);
+    free(seg.ptr);
+
+    mol_seg_res_t res = MolBuilder_WitnessArgs_build(w);
+    assert(res.errno == 0);
+
+    memcpy(addr, res.seg.ptr, res.seg.size);
+    *len = res.seg.size;
+    free(res.seg.ptr);
+  } else {
+    // TODO: append <BytesVec structure> here
   }
-
-  res = MolBuilder_Bytes_build(b);
-  assert(res.errno == 0);
-  assert(MolReader_Bytes_verify(&res.seg, false) == 0);
-  assert(*len > res.seg.size);
-
-  mol_builder_t w;
-  MolBuilder_WitnessArgs_init(&w);
-  MolBuilder_WitnessArgs_set_lock(&w, res.seg.ptr, res.seg.size);
-  mol_seg_res_t res2 = MolBuilder_WitnessArgs_build(w);
-  assert(res2.errno == 0);
-
-  memcpy(addr, res2.seg.ptr, res2.seg.size);
-  *len = res2.seg.size;
   return 0;
 }
 
-mol_seg_t build_args_bytes() {
-  // public key, size: 4+128 = 132 bytes
-  const int PUBLIC_KEY_SIZE = 132;
-  uint8_t public_key[132] = {1, 0, 1, 0, 0x56, 0x78};
-
+mol_seg_t build_bytes(uint8_t* data, uint32_t len) {
   mol_builder_t b;
   mol_seg_res_t res;
   MolBuilder_Bytes_init(&b);
-  for (int i = 0; i < PUBLIC_KEY_SIZE; i++) {
-    MolBuilder_Bytes_push(&b, public_key[i]);
+  for (uint32_t i = 0; i < len; i++) {
+    MolBuilder_Bytes_push(&b, data[i]);
   }
   res = MolBuilder_Bytes_build(b);
   return res.seg;
 }
 
 int ckb_load_script(void* addr, uint64_t* len, size_t offset) {
-  mol_builder_t b;
-  mol_seg_res_t res;
-
+  mol_builder_t b = {0};
+  mol_seg_res_t res = {0};
   assert(offset == 0);
 
   MolBuilder_Script_init(&b);
-  uint8_t code_hash[32] = {0};
   uint8_t hash_type = 0;
-
-  MolBuilder_Script_set_code_hash(&b, code_hash, 32);
+  MolBuilder_Script_set_code_hash(&b, g_hash_in_args, 32);
   MolBuilder_Script_set_hash_type(&b, hash_type);
-  mol_seg_t bytes = build_args_bytes();
-  MolBuilder_Script_set_args(&b, bytes.ptr, bytes.size);
+  {
+    uint32_t args_len = 32 + 4 + g_extension_script_hash.size;
+    uint8_t args[args_len];
 
+    memcpy(args, g_hash_in_args, 32);
+    memcpy(args + 32, &g_flags, 4);
+
+    mol_seg_t seg = {0};
+    if (g_flags == 1) {
+      memcpy(args + 32 + 4, g_extension_script_hash.ptr,
+             g_extension_script_hash.size);
+      seg = build_bytes(args, args_len);
+    } else if (g_flags == 2) {
+      uint8_t hash[32] = {0};
+      int err = blake2b(hash, 32, g_extension_script_hash.ptr,
+                        g_extension_script_hash.size, NULL, 0);
+      ASSERT(err == 0);
+      memcpy(args + 32 + 4, hash, 20);
+      // blake160 hash
+      seg = build_bytes(args, 32 + 4 + 20);
+    } else if (g_flags == 0) {
+      seg = build_bytes(args, 32);
+    } else {
+      ASSERT(false);
+    }
+    MolBuilder_Script_set_args(&b, seg.ptr, seg.size);
+    free(seg.ptr);
+  }
   res = MolBuilder_Script_build(b);
   assert(res.errno == 0);
 
@@ -108,6 +166,8 @@ int ckb_load_script(void* addr, uint64_t* len, size_t offset) {
   }
   memcpy(addr, res.seg.ptr, res.seg.size);
   *len = res.seg.size;
+
+  free(res.seg.ptr);
   return 0;
 }
 
@@ -124,7 +184,28 @@ int ckb_load_cell_code(void* addr, size_t memory_size, size_t content_offset,
                        size_t content_size, size_t index, size_t source);
 
 int ckb_load_cell_data(void* addr, uint64_t* len, size_t offset, size_t index,
-                       size_t source);
+                       size_t source) {
+  ASSERT(offset == 0);
+
+  if (source == CKB_SOURCE_GROUP_INPUT) {
+    if (index >= g_input_count) {
+      return CKB_INDEX_OUT_OF_BOUND;
+    } else {
+      memcpy(addr, &g_input_amount[index], sizeof(__int128));
+      *len = sizeof(__int128);
+    }
+  } else if (source == CKB_SOURCE_GROUP_OUTPUT) {
+    if (index >= g_output_count) {
+      return CKB_INDEX_OUT_OF_BOUND;
+    } else {
+      memcpy(addr, &g_output_amount[index], sizeof(__int128));
+      *len = sizeof(__int128);
+    }
+  } else {
+    ASSERT(false);
+  }
+  return 0;
+}
 
 int ckb_debug(const char* s);
 
@@ -141,9 +222,11 @@ int ckb_calculate_inputs_len() { return 0; }
 
 int ckb_load_cell_by_field(void* addr, uint64_t* len, size_t offset,
                            size_t index, size_t source, size_t field) {
-  if (source == CKB_SOURCE_CELL_DEP) {
-  } else if (source == CKB_SOURCE_INPUT) {
-  } else {
+  if (index > 0) return CKB_INDEX_OUT_OF_BOUND;
+
+  if (field == CKB_CELL_FIELD_LOCK_HASH) {
+    memcpy(addr, g_lock_script_hash, 32);
+    *len = 32;
   }
   return 0;
 }
