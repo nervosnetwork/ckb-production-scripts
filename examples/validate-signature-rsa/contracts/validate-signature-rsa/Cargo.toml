@@ -6,7 +6,9 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ckb-std = "0.7.1"
+# the changes is under review, when it's ready, it will point to
+# https://github.com/nervosnetwork/ckb-std.git
+ckb-std = {git = "https://github.com/XuJiandong/ckb-std.git", branch="fix-build-rs"}
 blake2b-ref = { version = "0.1", default-features = false }
 
 

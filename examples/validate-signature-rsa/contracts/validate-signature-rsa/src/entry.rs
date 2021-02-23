@@ -9,7 +9,7 @@ use ckb_std::ckb_types::bytes::Bytes;
 // https://nervosnetwork.github.io/ckb-std/riscv64imac-unknown-none-elf/doc/ckb_std/index.html
 use ckb_std::ckb_types::prelude::*;
 use ckb_std::debug;
-use ckb_std::dynamic_loading;
+use ckb_std::dynamic_loading_c_impl;
 use ckb_std::error::SysError;
 use ckb_std::high_level::*;
 
@@ -55,7 +55,7 @@ fn calculate_rsa_info_length(key_size_enum: u8) -> usize {
     8 + get_key_size(key_size_enum) / 4
 }
 
-type DlContextType = dynamic_loading::CKBDLContext<[u8; 64 * 1024]>;
+type DlContextType = dynamic_loading_c_impl::CKBDLContext<[u8; 128 * 1024]>;
 /*
 int validate_signature(void *prefilled_data, const uint8_t *signature_buffer,
                        size_t signature_size, const uint8_t *msg_buf,
@@ -66,7 +66,7 @@ type DlFnType = unsafe extern "C" fn(fill: *const u8, signature: *const u8,
                                      output: *const u8, output_len: *const usize) -> isize;
 
 pub fn main() -> Result<(), Error> {
-    let validate_signature_fn: dynamic_loading::Symbol<DlFnType>;
+    let validate_signature_fn: dynamic_loading_c_impl::Symbol<DlFnType>;
     unsafe {
         let mut ctx = DlContextType::new();
         let lib = ctx
