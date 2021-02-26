@@ -9,6 +9,8 @@ PROTOCOL_HEADER := c/blockchain.h
 PROTOCOL_SCHEMA := c/blockchain.mol
 PROTOCOL_VERSION := d75e4c56ffa40e17fd2fe477da3f98c5578edcd1
 PROTOCOL_URL := https://raw.githubusercontent.com/nervosnetwork/ckb/${PROTOCOL_VERSION}/util/types/schemas/blockchain.mol
+MOLC := moleculec
+MOLC_VERSION := 0.7.0
 
 # docker pull nervos/ckb-riscv-gnu-toolchain:gnu-bionic-20191012
 BUILDER_DOCKER := nervos/ckb-riscv-gnu-toolchain@sha256:aae8a3f79705f67d505d1f1d5ddc694a4fd537ed1c7e9622420a470d59ba2ec3
@@ -55,6 +57,9 @@ xudt_fmt:
 
 xudt_rce-via-docker:
 	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make build/xudt_rce"
+
+c/xudt_rce_mol.h: c/xudt_rce.mol
+	${MOLC} --language c --schema-file $< > $@
 
 xudt_rce_clean:
 	rm -f build/xudt_rce

@@ -24,7 +24,7 @@ int main() {
   // not owner mode
   xudt_set_owner_mode(hash0, hash1);
   xudt_add_extension_script_hash(
-      extension_hash,
+      extension_hash, 1,
       "tests/xudt_rce/cmake-build-debug/libextension_script_0.dylib");
   xudt_add_input_amount(999);
   xudt_add_output_amount(999);

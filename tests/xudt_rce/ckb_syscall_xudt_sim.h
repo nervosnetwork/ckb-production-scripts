@@ -2,13 +2,14 @@
 #ifndef CKB_C_STDLIB_CKB_SYSCALLS_H_
 #define CKB_C_STDLIB_CKB_SYSCALLS_H_
 #include <assert.h>
-#include <blockchain.h>
 #include <stddef.h>
 #include <stdint.h>
 
 // forward declarations
 void ckbsim_map_lib(const uint8_t* dep_cell_hash, const char* path);
-mol_seg_t build_bytes(uint8_t* data, uint32_t len);
+mol_seg_t build_bytes(const uint8_t* data, uint32_t len);
+mol_seg_t build_script(const uint8_t* code_hash, uint8_t hash_type,
+                       const uint8_t* args, uint32_t args_len);
 extern int g_lib_size;
 
 uint32_t g_flags = 0;
@@ -16,9 +17,16 @@ void xudt_set_flags(uint32_t flags) { g_flags = flags; }
 
 mol_builder_t g_extension_script_hash_builder = {0};
 mol_seg_t g_extension_script_hash = {0};
-void xudt_add_extension_script_hash(const uint8_t* hash, const char* path) {
-  MolBuilder_Byte32Vec_push(&g_extension_script_hash_builder, hash);
+void xudt_add_extension_script_hash(const uint8_t* hash, uint8_t hash_type,
+                                    const char* path) {
+  uint8_t args[32] = {0};
+  mol_seg_t script = build_script(hash, hash_type, args, 32);
+
+  MolBuilder_ScriptVec_push(&g_extension_script_hash_builder, script.ptr,
+                            script.size);
   ckbsim_map_lib(hash, path);
+
+  free(script.ptr);
 }
 
 void xudt_add_structure_item(const uint8_t* item, uint32_t len) {}
@@ -49,7 +57,7 @@ void xudt_add_output_amount(__int128 val) {
 
 void xudt_begin_data(void) {
   g_flags = 0;
-  MolBuilder_Byte32Vec_init(&g_extension_script_hash_builder);
+  MolBuilder_ScriptVec_init(&g_extension_script_hash_builder);
   if (g_extension_script_hash.ptr) free(g_extension_script_hash.ptr);
   g_extension_script_hash.ptr = 0;
   g_extension_script_hash.size = 0;
@@ -63,7 +71,7 @@ void xudt_begin_data(void) {
 
 void xudt_end_data(void) {
   mol_seg_res_t res =
-      MolBuilder_Byte32Vec_build(g_extension_script_hash_builder);
+      MolBuilder_ScriptVec_build(g_extension_script_hash_builder);
   ASSERT(res.errno == 0);
   g_extension_script_hash = res.seg;
 }
@@ -72,7 +80,7 @@ int ckb_exit(int8_t code);
 
 int ckb_load_tx_hash(void* addr, uint64_t* len, size_t offset) { return 0; }
 
-int ckb_load_script_hash(void* addr, uint64_t* len, size_t offset);
+int ckb_checked_load_script(void* addr, uint64_t* len, size_t offset);
 
 int ckb_load_cell(void* addr, uint64_t* len, size_t offset, size_t index,
                   size_t source);
@@ -83,8 +91,8 @@ int ckb_load_input(void* addr, uint64_t* len, size_t offset, size_t index,
 int ckb_load_header(void* addr, uint64_t* len, size_t offset, size_t index,
                     size_t source);
 
-int ckb_load_witness(void* addr, uint64_t* len, size_t offset, size_t index,
-                     size_t source) {
+int ckb_checked_load_witness(void* addr, uint64_t* len, size_t offset,
+                             size_t index, size_t source) {
   if (index > 1) {
     return 1;  // CKB_INDEX_OUT_OF_BOUND;
   }
@@ -110,7 +118,7 @@ int ckb_load_witness(void* addr, uint64_t* len, size_t offset, size_t index,
   return 0;
 }
 
-mol_seg_t build_bytes(uint8_t* data, uint32_t len) {
+mol_seg_t build_bytes(const uint8_t* data, uint32_t len) {
   mol_builder_t b;
   mol_seg_res_t res;
   MolBuilder_Bytes_init(&b);
@@ -121,7 +129,25 @@ mol_seg_t build_bytes(uint8_t* data, uint32_t len) {
   return res.seg;
 }
 
-int ckb_load_script(void* addr, uint64_t* len, size_t offset) {
+mol_seg_t build_script(const uint8_t* code_hash, uint8_t hash_type,
+                       const uint8_t* args, uint32_t args_len) {
+  mol_builder_t b;
+  mol_seg_res_t res;
+  MolBuilder_Script_init(&b);
+
+  MolBuilder_Script_set_code_hash(&b, code_hash, 32);
+  MolBuilder_Script_set_hash_type(&b, hash_type);
+  mol_seg_t bytes = build_bytes(args, args_len);
+  MolBuilder_Script_set_args(&b, bytes.ptr, bytes.size);
+
+  res = MolBuilder_Script_build(b);
+  assert(res.errno == 0);
+  assert(MolReader_Script_verify(&res.seg, false) == 0);
+  free(bytes.ptr);
+  return res.seg;
+}
+
+int ckb_checked_load_script(void* addr, uint64_t* len, size_t offset) {
   mol_builder_t b = {0};
   mol_seg_res_t res = {0};
   assert(offset == 0);
@@ -183,8 +209,8 @@ int ckb_load_input_by_field(void* addr, uint64_t* len, size_t offset,
 int ckb_load_cell_code(void* addr, size_t memory_size, size_t content_offset,
                        size_t content_size, size_t index, size_t source);
 
-int ckb_load_cell_data(void* addr, uint64_t* len, size_t offset, size_t index,
-                       size_t source) {
+int ckb_checked_load_cell_data(void* addr, uint64_t* len, size_t offset,
+                               size_t index, size_t source) {
   ASSERT(offset == 0);
 
   if (source == CKB_SOURCE_GROUP_INPUT) {

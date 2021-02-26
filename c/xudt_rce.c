@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "ckb_consts.h"
-#include "blockchain.h"
+#include "xudt_rce_mol.h"
 #include "blake2b.h"
 
 #if defined(CKB_USE_SIM)
@@ -86,13 +86,13 @@ typedef enum XUDTFlags {
 } XUDTFlags;
 
 // functions
-int load_validate_func(const uint8_t* hash, ValidateFuncType* func) {
+int load_validate_func(const uint8_t* hash, uint8_t hash_type, ValidateFuncType* func) {
   int err = 0;
   void* handle = NULL;
   size_t consumed_size = 0;
 
   CHECK2(MAX_CODE_SIZE > g_code_used, ERROR_NOT_ENOUGH_BUFF);
-  err = ckb_dlopen2(hash, 0, &g_code_buffer[g_code_used],
+  err = ckb_dlopen2(hash, hash_type, &g_code_buffer[g_code_used],
               MAX_CODE_SIZE - g_code_used, &handle, &consumed_size);
   CHECK(err);
   CHECK2(handle != NULL, ERROR_CANT_LOAD_LIB);
@@ -107,17 +107,13 @@ exit:
   return err;
 }
 
-int verify_byte32vec(uint8_t* ptr, uint32_t size, uint32_t* real_size) {
+int verify_script_vec(uint8_t* ptr, uint32_t size, uint32_t* real_size) {
   int err = 0;
 
   CHECK2(size >= MOL_NUM_T_SIZE, ERROR_INVALID_MOL_FORMAT);
-  mol_num_t item_count = mol_unpack_number(ptr);
-  if (item_count == 0) {
-    CHECK2(size == MOL_NUM_T_SIZE, ERROR_INVALID_MOL_FORMAT);
-  } else {
-    *real_size = MOL_NUM_T_SIZE + 32 * item_count;
-    CHECK2(*real_size <= size, ERROR_INVALID_MOL_FORMAT);
-  }
+  mol_num_t full_size = mol_unpack_number(ptr);
+  *real_size = full_size;
+  CHECK2(*real_size <= size, ERROR_INVALID_MOL_FORMAT);
   err = 0;
 exit:
   return err;
@@ -128,7 +124,7 @@ int load_raw_extension_data(uint8_t** var_data, uint32_t* var_len) {
   int err = 0;
   // Load witness of first input
   uint64_t witness_len = WITNESS_SIZE;
-  err = ckb_load_witness(g_witness, &witness_len, 0, 0,
+  err = ckb_checked_load_witness(g_witness, &witness_len, 0, 0,
                          CKB_SOURCE_GROUP_INPUT);
   CHECK(err);
   mol_seg_t seg;
@@ -155,7 +151,7 @@ int parse_args(int* owner_mode, XUDTFlags* flag, uint8_t** var_data, uint32_t* v
   int err = 0;
 
   uint64_t len = SCRIPT_SIZE;
-  int ret = ckb_load_script(g_script, &len, 0);
+  int ret = ckb_checked_load_script(g_script, &len, 0);
   CHECK(ret);
   CHECK2(len <= SCRIPT_SIZE, ERROR_SCRIPT_TOO_LONG);
 
@@ -216,7 +212,7 @@ int parse_args(int* owner_mode, XUDTFlags* flag, uint8_t** var_data, uint32_t* v
       *var_len = args_bytes_seg.size - BLAKE2B_BLOCK_SIZE - FLAGS_SIZE;
       *var_data = args_bytes_seg.ptr + BLAKE2B_BLOCK_SIZE + FLAGS_SIZE;
 
-      err = verify_byte32vec(*var_data, *var_len, &real_size);
+      err = verify_script_vec(*var_data, *var_len, &real_size);
       CHECK(err);
       // note, it's different than "flag = 2"
       CHECK2(real_size == *var_len, ERROR_INVALID_ARGS_FORMAT);
@@ -230,7 +226,7 @@ int parse_args(int* owner_mode, XUDTFlags* flag, uint8_t** var_data, uint32_t* v
       err = load_raw_extension_data(var_data, var_len);
       CHECK(err);
 
-      err = verify_byte32vec(*var_data, *var_len, &real_size);
+      err = verify_script_vec(*var_data, *var_len, &real_size);
       CHECK(err);
       // note, it's different than "flag = 1"
       CHECK2(real_size <= *var_len, ERROR_INVALID_WITNESS_FORMAT);
@@ -290,7 +286,7 @@ int simple_udt(int owner_mode) {
     // endian format, we can just read the first 16 bytes of cell data into
     // `current_amount`, which is just an unsigned 128-bit integer in C. The
     // memory layout of a C program will ensure that the value is set correctly.
-    ret = ckb_load_cell_data((uint8_t *)&current_amount, &len, 0, i,
+    ret = ckb_checked_load_cell_data((uint8_t *)&current_amount, &len, 0, i,
                              CKB_SOURCE_GROUP_INPUT);
     // When `CKB_INDEX_OUT_OF_BOUND` is reached, we know we have iterated
     // through all cells of current type.
@@ -322,7 +318,7 @@ int simple_udt(int owner_mode) {
     // Similar to the above code piece, we are also looping through output cells
     // with the same script as current running script here by using
     // `CKB_SOURCE_GROUP_OUTPUT`.
-    ret = ckb_load_cell_data((uint8_t *)&current_amount, &len, 0, i,
+    ret = ckb_checked_load_cell_data((uint8_t *)&current_amount, &len, 0, i,
                              CKB_SOURCE_GROUP_OUTPUT);
     if (ret == CKB_INDEX_OUT_OF_BOUND) {
       break;
@@ -378,14 +374,20 @@ int main() {
   mol_seg_t raw_extension_seg = {0};
   raw_extension_seg.ptr = raw_extension_data;
   raw_extension_seg.size = raw_extension_len;
-  CHECK2(MolReader_Byte32Vec_verify(&raw_extension_seg, true) == MOL_OK, ERROR_INVALID_ARGS_FORMAT);
-  uint32_t size = MolReader_Byte32Vec_length(&raw_extension_seg);
+  CHECK2(MolReader_ScriptVec_verify(&raw_extension_seg, true) == MOL_OK, ERROR_INVALID_ARGS_FORMAT);
+  uint32_t size = MolReader_ScriptVec_length(&raw_extension_seg);
   for (uint32_t i = 0; i < size; i++) {
     ValidateFuncType func;
-    mol_seg_res_t res = MolReader_Byte32Vec_get(&raw_extension_seg, i);
+    mol_seg_res_t res = MolReader_ScriptVec_get(&raw_extension_seg, i);
     CHECK2(res.errno == 0, ERROR_INVALID_MOL_FORMAT);
-    CHECK2(res.seg.size == 32, ERROR_INVALID_MOL_FORMAT);
-    err = load_validate_func(res.seg.ptr, &func);
+    CHECK2(MolReader_Script_verify(&res.seg, false) == MOL_OK, ERROR_INVALID_MOL_FORMAT);
+
+    mol_seg_t code_hash = MolReader_Script_get_code_hash(&res.seg);
+    mol_seg_t hash_type = MolReader_Script_get_hash_type(&res.seg);
+    uint8_t hash_type2 = *((uint8_t*)hash_type.ptr);
+
+    err = load_validate_func(code_hash.ptr, hash_type2, &func);
+
     CHECK(err);
     int result = func(owner_mode);
     if (result != 0) {
