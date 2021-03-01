@@ -8,6 +8,7 @@
 #include "xudt_rce_mol.h"
 #include "blake2b.h"
 
+
 #if defined(CKB_USE_SIM)
 #include "ckb_syscall_xudt_sim.h"
 #include <stdio.h>
@@ -66,6 +67,8 @@ enum ErrorCode {
 #define EXPORTED_FUNC_NAME "validate"
 #define MAX_CODE_SIZE (1024*1024)
 #define FLAGS_SIZE 4
+
+#include "rce.h"
 
 // global variables, type definitions, etc
 
