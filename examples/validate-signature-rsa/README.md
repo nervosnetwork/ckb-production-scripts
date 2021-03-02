@@ -34,3 +34,4 @@ capsule test
 ## Build without capsule
 Capsule use docker to build the contracts and run tests. Feel free to do it without it. 
 Please read this script: ```examples/validate-signature-rsa/build-without-capsule.sh```
+You need to install [GNU toolchain for RISC-V](https://github.com/nervosnetwork/ckb-riscv-gnu-toolchain) first. 
