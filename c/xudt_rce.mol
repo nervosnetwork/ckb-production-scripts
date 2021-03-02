@@ -1,4 +1,43 @@
 import blockchain;
 
-
 vector ScriptVec <Script>;
+option ScriptVecOpt (ScriptVec);
+
+table XudtWitnessInput {
+    raw_extension_data: ScriptVecOpt,
+    structure: BytesVec,
+}
+
+struct RCRule {
+  smt_root: Byte32,
+  flags: byte,
+}
+
+vector RCCellVec <Byte32>;
+
+union RCData {
+  RCRule,
+  RCCellVec,
+}
+
+/* To support multiple RCRules, need to store multiple proofs in every item
+in "Bytes structure" in witness.
+
+Which means, one item in "structure" XudtWitnessInput might be SmtProofVec
+*/
+vector SmtProof <byte>;
+vector SmtProofVec <SmtProof>;
+
+struct SmtUpdateItem {
+    key:       Byte32,
+    value:     Byte32,
+    old_value: Byte32,
+}
+
+vector SmtUpdateVec <SmtUpdateItem>;
+
+/* Update white/black list SMT */
+table SmtUpdate {
+    update: SmtUpdateVec,
+    proof:  SmtProof,
+}

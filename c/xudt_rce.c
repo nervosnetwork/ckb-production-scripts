@@ -33,6 +33,7 @@ enum ErrorCode {
   // error code is starting from 40, to avoid conflict with
   // common error code in other scripts.
   ERROR_CANT_LOAD_LIB = 40,
+  ERROR_INVALID_ARGS,
   ERROR_NOT_ENOUGH_BUFF,
   ERROR_INVALID_FLAG,
   ERROR_INVALID_ARGS_FORMAT,
@@ -40,6 +41,10 @@ enum ErrorCode {
   ERROR_INVALID_MOL_FORMAT,
   ERROR_BLAKE2B_ERROR,
   ERROR_HASH_MISMATCHED,
+  ERROR_RCRULES_TOO_DEEP,
+  ERROR_TOO_MANY_RCRULES,
+  ERROR_RCRULES_PROOFS_MISMATCHED,
+  ERROR_SMT_VERIFY_FAILED,
 };
 
 #define CHECK2(cond, code) \
@@ -77,10 +82,13 @@ typedef unsigned __int128 uint128_t;
 
 uint8_t g_script[SCRIPT_SIZE] = {0};
 uint8_t g_witness[WITNESS_SIZE] = {0};
+uint32_t g_witness_len = 0;
+bool g_witness_inited = false;
 
 uint8_t g_code_buffer[MAX_CODE_SIZE] __attribute__((aligned(RISCV_PGSIZE)));
 uint32_t g_code_used = 0;
-typedef int (*ValidateFuncType)(int);
+
+typedef int (*ValidateFuncType)(int is_owner_mode, size_t extension_index, const uint8_t* args, size_t args_len);
 
 typedef enum XUDTFlags {
   XUDTFlags_Plain = 0,
@@ -88,11 +96,24 @@ typedef enum XUDTFlags {
   XUDTFlags_InWitness = 2,
 } XUDTFlags;
 
+typedef enum XUDTValidateFuncCategory {
+  XVFC_Normal  = 0, // normal extension script
+  XVFC_RCE = 1, // Regulation Compliance Extension
+} XUDTValidateFuncCategory;
+
+uint8_t RCE_HASH[32] = {1};
+
 // functions
-int load_validate_func(const uint8_t* hash, uint8_t hash_type, ValidateFuncType* func) {
+int load_validate_func(const uint8_t* hash, uint8_t hash_type, ValidateFuncType* func, XUDTValidateFuncCategory* cat) {
   int err = 0;
   void* handle = NULL;
   size_t consumed_size = 0;
+
+  if (memcmp(RCE_HASH, hash, 32) == 0) {
+    *cat = XVFC_RCE;
+    *func = rce_validate;
+    return 0;
+  }
 
   CHECK2(MAX_CODE_SIZE > g_code_used, ERROR_NOT_ENOUGH_BUFF);
   err = ckb_dlopen2(hash, hash_type, &g_code_buffer[g_code_used],
@@ -105,6 +126,7 @@ int load_validate_func(const uint8_t* hash, uint8_t hash_type, ValidateFuncType*
   *func = (ValidateFuncType)ckb_dlsym(handle, EXPORTED_FUNC_NAME);
   CHECK2(*func != NULL, ERROR_CANT_LOAD_LIB);
 
+  *cat = XVFC_Normal;
   err = 0;
 exit:
   return err;
@@ -122,6 +144,32 @@ exit:
   return err;
 }
 
+int get_structure(uint32_t index, mol_seg_t* item) {
+  int err = 0;
+  if (!g_witness_inited) {
+    uint64_t witness_len = WITNESS_SIZE;
+    err = ckb_checked_load_witness(g_witness, &witness_len, 0, 0,
+                                   CKB_SOURCE_GROUP_INPUT);
+    CHECK(err);
+    g_witness_len = witness_len;
+    g_witness_inited = true;
+  }
+
+  mol_seg_t seg = {.ptr = g_witness, .size = g_witness_len};
+
+  mol_seg_t structures = MolReader_XudtWitnessInput_get_structure(&seg);
+  MolReader_BytesVec_verify(&structures, false);
+
+  mol_seg_res_t structure = MolReader_BytesVec_get(&structures, index);
+  CHECK(structure.errno);
+
+  *item = structure.seg;
+
+  err = 0;
+exit:
+  return err;
+}
+
 // the *var_len may be bigger than real length of raw extension data
 int load_raw_extension_data(uint8_t** var_data, uint32_t* var_len) {
   int err = 0;
@@ -130,18 +178,26 @@ int load_raw_extension_data(uint8_t** var_data, uint32_t* var_len) {
   err = ckb_checked_load_witness(g_witness, &witness_len, 0, 0,
                          CKB_SOURCE_GROUP_INPUT);
   CHECK(err);
-  mol_seg_t seg;
-  seg.ptr = g_witness;
-  seg.size = witness_len;
+  mol_seg_t seg = {.ptr = g_witness, .size = witness_len};
+  g_witness_len = witness_len;
+  g_witness_inited = true;
+
   err = MolReader_WitnessArgs_verify(&seg, true);
   CHECK2(err == MOL_OK, ERROR_INVALID_MOL_FORMAT);
   mol_seg_t input_seg = MolReader_WitnessArgs_get_input_type(&seg);
   CHECK2(input_seg.size > 0, ERROR_INVALID_MOL_FORMAT);
-  mol_seg_t extension_seg = MolReader_Bytes_raw_bytes(&input_seg);
-  CHECK2(extension_seg.size > 0, ERROR_INVALID_MOL_FORMAT);
 
-  *var_len = extension_seg.size;
-  *var_data = extension_seg.ptr;
+  mol_seg_t input_content_seg = MolReader_Bytes_raw_bytes(&input_seg);
+  CHECK2(input_content_seg.size > 0, ERROR_INVALID_MOL_FORMAT);
+
+  mol_seg_t xudt_witness_input_seg;
+  xudt_witness_input_seg.size = input_content_seg.size;
+  xudt_witness_input_seg.ptr = input_content_seg.ptr;
+
+  CHECK2(MolReader_XudtWitnessInput_verify(&input_content_seg, false) == MOL_OK, ERROR_INVALID_MOL_FORMAT);
+  mol_seg_t data = MolReader_XudtWitnessInput_get_raw_extension_data(&input_content_seg);
+  *var_data = data.ptr;
+  *var_len = data.size;
 
   err = 0;
 exit:
@@ -150,7 +206,7 @@ exit:
 
 // *var_data will point to "Raw Extension Data", which can be in args or witness
 // *var_data will refer to a memory location of g_script or g_witness
-int parse_args(int* owner_mode, XUDTFlags* flag, uint8_t** var_data, uint32_t* var_len) {
+int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data, uint32_t* var_len) {
   int err = 0;
 
   uint64_t len = SCRIPT_SIZE;
@@ -204,14 +260,14 @@ int parse_args(int* owner_mode, XUDTFlags* flag, uint8_t** var_data, uint32_t* v
   if (args_bytes_seg.size < (FLAGS_SIZE+BLAKE2B_BLOCK_SIZE)) {
     *var_data = NULL;
     *var_len = 0;
-    *flag = XUDTFlags_Plain;
+    *flags = XUDTFlags_Plain;
   } else {
     uint32_t* flag_ptr = (uint32_t*)(args_bytes_seg.ptr + BLAKE2B_BLOCK_SIZE);
-    if (*flag_ptr == 0) {
-      *flag = XUDTFlags_Plain;
-    } else if (*flag_ptr == 1) {
+    if (*flag_ptr == XUDTFlags_Plain) {
+      *flags = XUDTFlags_Plain;
+    } else if (*flag_ptr == XUDTFlags_InArgs) {
       uint32_t real_size = 0;
-      *flag = XUDTFlags_InArgs;
+      *flags = XUDTFlags_InArgs;
       *var_len = args_bytes_seg.size - BLAKE2B_BLOCK_SIZE - FLAGS_SIZE;
       *var_data = args_bytes_seg.ptr + BLAKE2B_BLOCK_SIZE + FLAGS_SIZE;
 
@@ -219,22 +275,15 @@ int parse_args(int* owner_mode, XUDTFlags* flag, uint8_t** var_data, uint32_t* v
       CHECK(err);
       // note, it's different than "flag = 2"
       CHECK2(real_size == *var_len, ERROR_INVALID_ARGS_FORMAT);
-    } else if (*flag_ptr == 2) {
-      uint32_t real_size = 0;
+    } else if (*flag_ptr == XUDTFlags_InWitness) {
 
-      *flag = XUDTFlags_InWitness;
+      *flags = XUDTFlags_InWitness;
       uint32_t hash_size = args_bytes_seg.size - BLAKE2B_BLOCK_SIZE - FLAGS_SIZE;
       CHECK2(hash_size == BLAKE160_SIZE, ERROR_INVALID_FLAG);
 
       err = load_raw_extension_data(var_data, var_len);
       CHECK(err);
-
-      err = verify_script_vec(*var_data, *var_len, &real_size);
-      CHECK(err);
-      // note, it's different than "flag = 1"
-      CHECK2(real_size <= *var_len, ERROR_INVALID_WITNESS_FORMAT);
-      *var_len = real_size;
-
+      CHECK2(var_len > 0, ERROR_INVALID_MOL_FORMAT);
       // verify the hash
       uint8_t hash[BLAKE2B_BLOCK_SIZE] = {0};
       uint8_t* blake160_hash = args_bytes_seg.ptr + BLAKE2B_BLOCK_SIZE + FLAGS_SIZE;
@@ -387,12 +436,16 @@ int main() {
 
     mol_seg_t code_hash = MolReader_Script_get_code_hash(&res.seg);
     mol_seg_t hash_type = MolReader_Script_get_hash_type(&res.seg);
+    mol_seg_t args = MolReader_Script_get_args(&res.seg);
+
     uint8_t hash_type2 = *((uint8_t*)hash_type.ptr);
-
-    err = load_validate_func(code_hash.ptr, hash_type2, &func);
-
+    XUDTValidateFuncCategory cat = XVFC_Normal;
+    err = load_validate_func(code_hash.ptr, hash_type2, &func, &cat);
     CHECK(err);
-    int result = func(owner_mode);
+    mol_seg_t args_raw_bytes = MolReader_Bytes_raw_bytes(&args);
+
+    int result = 0;
+    result = func(owner_mode, i, args_raw_bytes.ptr, args_raw_bytes.size);
     if (result != 0) {
       xudt_printf("A non-zero returned from xUDT extension scripts.\n");
     }

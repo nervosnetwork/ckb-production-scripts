@@ -91,6 +91,25 @@ int ckb_load_input(void* addr, uint64_t* len, size_t offset, size_t index,
 int ckb_load_header(void* addr, uint64_t* len, size_t offset, size_t index,
                     size_t source);
 
+int ckb_load_script_hash(void* addr, uint64_t* len, size_t offset) { return 0; }
+
+int ckb_checked_load_script_hash(void* addr, uint64_t* len, size_t offset) {
+  uint64_t old_len = *len;
+  int ret = ckb_load_script_hash(addr, len, offset);
+  if (ret == CKB_SUCCESS && (*len) > old_len) {
+    ret = CKB_LENGTH_NOT_ENOUGH;
+  }
+  return ret;
+}
+
+mol_seg_t build_structure(void) {
+  mol_builder_t b;
+  MolBuilder_BytesVec_init(&b);
+  mol_seg_res_t res = MolBuilder_BytesVec_build(b);
+  ASSERT(res.errno == MOL_OK);
+  return res.seg;
+}
+
 int ckb_checked_load_witness(void* addr, uint64_t* len, size_t offset,
                              size_t index, size_t source) {
   if (index > 1) {
@@ -101,8 +120,20 @@ int ckb_checked_load_witness(void* addr, uint64_t* len, size_t offset,
     MolBuilder_WitnessArgs_init(&w);
 
     // TODO: append <BytesVec structure> here
-    mol_seg_t seg =
-        build_bytes(g_extension_script_hash.ptr, g_extension_script_hash.size);
+    mol_seg_t structure_seg = build_structure();
+
+    mol_builder_t xwi_builder;
+    MolBuilder_XudtWitnessInput_init(&xwi_builder);
+    MolBuilder_XudtWitnessInput_set_raw_extension_data(
+        &xwi_builder, g_extension_script_hash.ptr,
+        g_extension_script_hash.size);
+    MolBuilder_XudtWitnessInput_set_structure(&xwi_builder, structure_seg.ptr,
+                                              structure_seg.size);
+
+    mol_seg_res_t xwi_res = MolBuilder_XudtWitnessInput_build(xwi_builder);
+    ASSERT(xwi_res.errno == MOL_OK);
+
+    mol_seg_t seg = build_bytes(xwi_res.seg.ptr, xwi_res.seg.size);
     MolBuilder_WitnessArgs_set_input_type(&w, seg.ptr, seg.size);
     free(seg.ptr);
 
@@ -111,7 +142,10 @@ int ckb_checked_load_witness(void* addr, uint64_t* len, size_t offset,
 
     memcpy(addr, res.seg.ptr, res.seg.size);
     *len = res.seg.size;
+
     free(res.seg.ptr);
+    free(xwi_res.seg.ptr);
+    free(structure_seg.ptr);
   } else {
     // TODO: append <BytesVec structure> here
   }
@@ -209,28 +243,37 @@ int ckb_load_input_by_field(void* addr, uint64_t* len, size_t offset,
 int ckb_load_cell_code(void* addr, size_t memory_size, size_t content_offset,
                        size_t content_size, size_t index, size_t source);
 
-int ckb_checked_load_cell_data(void* addr, uint64_t* len, size_t offset,
-                               size_t index, size_t source) {
+int ckb_load_cell_data(void* addr, uint64_t* len, size_t offset, size_t index,
+                       size_t source) {
   ASSERT(offset == 0);
 
   if (source == CKB_SOURCE_GROUP_INPUT) {
     if (index >= g_input_count) {
       return CKB_INDEX_OUT_OF_BOUND;
     } else {
-      memcpy(addr, &g_input_amount[index], sizeof(__int128));
+      if (addr) {
+        memcpy(addr, &g_input_amount[index], sizeof(__int128));
+      }
       *len = sizeof(__int128);
     }
   } else if (source == CKB_SOURCE_GROUP_OUTPUT) {
     if (index >= g_output_count) {
       return CKB_INDEX_OUT_OF_BOUND;
     } else {
-      memcpy(addr, &g_output_amount[index], sizeof(__int128));
+      if (addr) {
+        memcpy(addr, &g_output_amount[index], sizeof(__int128));
+      }
       *len = sizeof(__int128);
     }
   } else {
     ASSERT(false);
   }
   return 0;
+}
+
+int ckb_checked_load_cell_data(void* addr, uint64_t* len, size_t offset,
+                               size_t index, size_t source) {
+  return ckb_load_cell_data(addr, len, offset, index, source);
 }
 
 int ckb_debug(const char* s);
@@ -265,6 +308,11 @@ int ckb_checked_load_cell_by_field(void* addr, uint64_t* len, size_t offset,
     ret = CKB_LENGTH_NOT_ENOUGH;
   }
   return ret;
+}
+
+int ckb_look_for_dep_with_hash2(const uint8_t* code_hash, uint8_t hash_type,
+                                size_t* index) {
+  return 0;
 }
 
 // dlopen simulator

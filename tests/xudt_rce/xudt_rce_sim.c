@@ -114,7 +114,6 @@ UTEST(smt, verify3) {
   ASSERT_EQ(0, rce_smt_verify(root_hash, &changes, proof, proof_length));
 }
 
-
 UTEST(smt, verify_multi_3) {
   uint8_t key[32];
   uint8_t value[32];
