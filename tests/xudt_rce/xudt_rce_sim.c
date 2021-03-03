@@ -85,6 +85,26 @@ exit:
   ASSERT_EQ(err, 0);
 }
 
+UTEST(rce, main) {
+  int err = 0;
+  // prepare basic data
+  xudt_begin_data();
+  xudt_set_flags(1);
+  xudt_add_extension_script_hash(RCE_HASH, 1, "not_existing");
+  xudt_add_input_amount(999);
+  xudt_add_output_amount(999);
+  uint8_t rcrule[32] = {0};   // TODO
+  rce_add_rcrule(rcrule, 0);  // TODO
+
+  xudt_end_data();
+
+  err = simulator_main();
+  ASSERT_EQ(err, 0);
+
+exit:
+  ASSERT_EQ(err, 0);
+}
+
 // this is the case from
 // https://github.com/nervosnetwork/ckb-simple-account-layer/blob/1970c0382271837ff46fdc276c5b63bccb4324db/c/tests/main.c#L136
 // the names are changed accordingly.

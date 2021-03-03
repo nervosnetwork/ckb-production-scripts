@@ -11,12 +11,49 @@ mol_seg_t build_bytes(const uint8_t* data, uint32_t len);
 mol_seg_t build_script(const uint8_t* code_hash, uint8_t hash_type,
                        const uint8_t* args, uint32_t args_len);
 extern int g_lib_size;
+// simulator for RCData
+typedef struct SIMRCRule {
+  uint8_t id;  // id = 0
+  uint8_t flags;
+  uint8_t smt_root[32];
+} SIMRCRule;
+
+typedef struct SIMRCCellVec {
+  uint8_t id;  // id = 1
+  uint8_t hash_count;
+  uint16_t hash[16];
+} SIMRCCellVec;
+
+typedef union SIMRCData {
+  SIMRCRule rcrule;
+  SIMRCCellVec rccell_vec;
+} SIMRCData;
+
+SIMRCData g_sim_rcdata[1024];
+uint16_t g_sim_rcdata_count = 0;
+
+uint8_t g_structure[32][1024];
+uint32_t g_structure_len[32] = {0};
+uint32_t g_structure_count = 0;
+
+uint8_t g_proof[32][1024];
+uint32_t g_proof_len[32] = {0};
+uint32_t g_proof_count = 0;
 
 uint32_t g_flags = 0;
 void xudt_set_flags(uint32_t flags) { g_flags = flags; }
 
 mol_builder_t g_extension_script_hash_builder = {0};
 mol_seg_t g_extension_script_hash = {0};
+
+uint8_t g_hash_in_args[32] = {0};
+uint8_t g_lock_script_hash[32] = {1};
+
+__int128 g_input_amount[32] = {0};
+uint32_t g_input_count = 0;
+__int128 g_output_amount[32] = {0};
+uint32_t g_output_count = 0;
+
 void xudt_add_extension_script_hash(const uint8_t* hash, uint8_t hash_type,
                                     const char* path) {
   uint8_t args[32] = {0};
@@ -29,21 +66,47 @@ void xudt_add_extension_script_hash(const uint8_t* hash, uint8_t hash_type,
   free(script.ptr);
 }
 
-void xudt_add_structure_item(const uint8_t* item, uint32_t len) {}
-void xudt_add_data(const uint8_t* data, uint32_t len) {}
+void xudt_add_structure_item(const uint8_t* item, uint32_t len) {
+  ASSERT(g_structure_count < 1024);
+  memcpy(&g_structure[g_structure_count][0], item, len);
+  g_structure_len[g_structure_count] = len;
+  g_structure_count++;
+}
 
-uint8_t g_hash_in_args[32] = {0};
-uint8_t g_lock_script_hash[32] = {0};
+void rce_begin_proof() { g_proof_count = 0; }
+
+void rce_add_proof(const uint8_t* proof, uint32_t proof_len) {
+  ASSERT(g_proof_count < 32);
+  ASSERT(proof_len < 1024);
+  memcpy(&g_proof[g_proof_count], proof, proof_len);
+  g_proof_len[g_proof_count] = proof_len;
+
+  g_proof_count++;
+}
+
+void rce_end_proof() {
+  mol_builder_t b;
+  MolBuilder_SmtProofVec_init(&b);
+  for (int i = 0; i < g_proof_count; i++) {
+    mol_seg_t seg = build_bytes(g_proof[i], g_proof_len[i]);
+    MolBuilder_SmtProofVec_push(&b, seg.ptr, seg.size);
+    free(seg.ptr);
+  }
+  mol_seg_res_t res = MolBuilder_SmtProofVec_build(b);
+  ASSERT(res.errno == 0);
+  xudt_add_structure_item(res.seg.ptr, res.seg.size);
+  free(res.seg.ptr);
+}
+
+void xudt_add_data(const uint8_t* data, uint32_t len) {
+  // not used
+}
+
 // set them to same to enable owner mode
 void xudt_set_owner_mode(uint8_t* hash_in_args, uint8_t* lock_script_hash) {
   memcpy(g_hash_in_args, hash_in_args, 32);
   memcpy(g_lock_script_hash, lock_script_hash, 32);
 }
-
-__int128 g_input_amount[32] = {0};
-uint32_t g_input_count = 0;
-__int128 g_output_amount[32] = {0};
-uint32_t g_output_count = 0;
 
 void xudt_add_input_amount(__int128 val) {
   g_input_amount[g_input_count] = val;
@@ -105,6 +168,12 @@ int ckb_checked_load_script_hash(void* addr, uint64_t* len, size_t offset) {
 mol_seg_t build_structure(void) {
   mol_builder_t b;
   MolBuilder_BytesVec_init(&b);
+  for (int i = 0; i < g_structure_count; i++) {
+    mol_seg_t seg = build_bytes(g_structure[i], g_structure_len[i]);
+    MolBuilder_BytesVec_push(&b, seg.ptr, seg.size);
+    free(seg.ptr);
+  }
+
   mol_seg_res_t res = MolBuilder_BytesVec_build(b);
   ASSERT(res.errno == MOL_OK);
   return res.seg;
@@ -115,40 +184,37 @@ int ckb_checked_load_witness(void* addr, uint64_t* len, size_t offset,
   if (index > 1) {
     return 1;  // CKB_INDEX_OUT_OF_BOUND;
   }
+  mol_builder_t w;
+  MolBuilder_WitnessArgs_init(&w);
+  mol_seg_t structure_seg = build_structure();
+
+  mol_builder_t xwi_builder;
+  MolBuilder_XudtWitnessInput_init(&xwi_builder);
   if (g_flags == 2) {
-    mol_builder_t w;
-    MolBuilder_WitnessArgs_init(&w);
-
-    // TODO: append <BytesVec structure> here
-    mol_seg_t structure_seg = build_structure();
-
-    mol_builder_t xwi_builder;
-    MolBuilder_XudtWitnessInput_init(&xwi_builder);
     MolBuilder_XudtWitnessInput_set_raw_extension_data(
         &xwi_builder, g_extension_script_hash.ptr,
         g_extension_script_hash.size);
-    MolBuilder_XudtWitnessInput_set_structure(&xwi_builder, structure_seg.ptr,
-                                              structure_seg.size);
-
-    mol_seg_res_t xwi_res = MolBuilder_XudtWitnessInput_build(xwi_builder);
-    ASSERT(xwi_res.errno == MOL_OK);
-
-    mol_seg_t seg = build_bytes(xwi_res.seg.ptr, xwi_res.seg.size);
-    MolBuilder_WitnessArgs_set_input_type(&w, seg.ptr, seg.size);
-    free(seg.ptr);
-
-    mol_seg_res_t res = MolBuilder_WitnessArgs_build(w);
-    assert(res.errno == 0);
-
-    memcpy(addr, res.seg.ptr, res.seg.size);
-    *len = res.seg.size;
-
-    free(res.seg.ptr);
-    free(xwi_res.seg.ptr);
-    free(structure_seg.ptr);
-  } else {
-    // TODO: append <BytesVec structure> here
   }
+  MolBuilder_XudtWitnessInput_set_structure(&xwi_builder, structure_seg.ptr,
+                                            structure_seg.size);
+
+  mol_seg_res_t xwi_res = MolBuilder_XudtWitnessInput_build(xwi_builder);
+  ASSERT(xwi_res.errno == MOL_OK);
+
+  mol_seg_t seg = build_bytes(xwi_res.seg.ptr, xwi_res.seg.size);
+  MolBuilder_WitnessArgs_set_input_type(&w, seg.ptr, seg.size);
+  free(seg.ptr);
+
+  mol_seg_res_t res = MolBuilder_WitnessArgs_build(w);
+  assert(res.errno == 0);
+
+  memcpy(addr, res.seg.ptr, res.seg.size);
+  *len = res.seg.size;
+
+  free(res.seg.ptr);
+  free(xwi_res.seg.ptr);
+  free(structure_seg.ptr);
+
   return 0;
 }
 
@@ -179,6 +245,43 @@ mol_seg_t build_script(const uint8_t* code_hash, uint8_t hash_type,
   assert(MolReader_Script_verify(&res.seg, false) == 0);
   free(bytes.ptr);
   return res.seg;
+}
+
+mol_seg_t build_rcdata(SIMRCData* rcdata) {
+  if (rcdata->rcrule.id == 0) {
+    // RCRule
+    mol_builder_t b;
+    MolBuilder_RCRule_init(&b);
+    MolBuilder_RCRule_set_flags(&b, rcdata->rcrule.flags);
+    MolBuilder_RCRule_set_smt_root(&b, rcdata->rcrule.smt_root);
+    mol_seg_res_t res = MolBuilder_RCRule_build(b);
+    ASSERT(res.errno == 0);
+
+    mol_builder_t b2;
+    mol_union_builder_initialize(&b2, 64, 0, MolDefault_RCRule, 33);
+    MolBuilder_RCData_set_RCRule(&b2, res.seg.ptr, res.seg.size);
+    mol_seg_res_t res2 = MolBuilder_RCData_build(b2);
+    ASSERT(res2.errno == 0);
+    free(res.seg.ptr);
+    return res2.seg;
+  } else if (rcdata->rcrule.id == 1) {
+    // RCCellVec
+    mol_builder_t b;
+    MolBuilder_RCCellVec_init(&b);
+    for (uint8_t i = 0; i < rcdata->rccell_vec.hash_count; i++) {
+      uint8_t hash[32] = {0};
+      // very small 2-byte hash
+      *((uint16_t*)hash) = rcdata->rccell_vec.hash[i];
+      MolBuilder_RCCellVec_push(&b, hash);
+    }
+    mol_seg_res_t res = MolBuilder_RCCellVec_build(b);
+    ASSERT(res.errno == 0);
+    return res.seg;
+  } else {
+    ASSERT(false);
+  }
+  mol_seg_t ret = {0};
+  return ret;
 }
 
 int ckb_checked_load_script(void* addr, uint64_t* len, size_t offset) {
@@ -265,6 +368,15 @@ int ckb_load_cell_data(void* addr, uint64_t* len, size_t offset, size_t index,
       }
       *len = sizeof(__int128);
     }
+  } else if (source == CKB_SOURCE_CELL_DEP) {
+    ASSERT(index < g_sim_rcdata_count);
+    SIMRCData* curr = g_sim_rcdata + index;
+    mol_seg_t seg = build_rcdata(curr);
+    if (addr) {
+      memcpy(addr, seg.ptr, seg.size);
+    }
+    *len = seg.size;
+    free(seg.ptr);
   } else {
     ASSERT(false);
   }
@@ -310,8 +422,31 @@ int ckb_checked_load_cell_by_field(void* addr, uint64_t* len, size_t offset,
   return ret;
 }
 
+// return index as hash
+uint16_t rce_add_rcrule(uint8_t* rcrule, uint8_t flags) {
+  ASSERT(g_sim_rcdata_count < 1024);
+
+  SIMRCData* curr = g_sim_rcdata + g_sim_rcdata_count;
+  curr->rcrule.id = 0;
+  curr->rcrule.flags = flags;
+  memcpy(curr->rcrule.smt_root, rcrule, 32);
+  g_sim_rcdata_count++;
+  return g_sim_rcdata_count - 1;
+}
+
+uint16_t rce_add_rccellvec(uint16_t* hash, uint32_t length) {
+  ASSERT(g_sim_rcdata_count < 1024);
+  SIMRCData* curr = g_sim_rcdata + g_sim_rcdata_count;
+  curr->rccell_vec.id = 1;
+  curr->rccell_vec.hash_count = length;
+  memcpy(curr->rccell_vec.hash, hash, length * sizeof(uint16_t));
+  g_sim_rcdata_count++;
+  return g_sim_rcdata_count - 1;
+}
+
 int ckb_look_for_dep_with_hash2(const uint8_t* code_hash, uint8_t hash_type,
                                 size_t* index) {
+  *index = *(uint16_t*)code_hash;
   return 0;
 }
 

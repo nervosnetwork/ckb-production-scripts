@@ -8,6 +8,7 @@ set(CMAKE_C_STANDARD 11)
 # uncomment it for coverage test
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage")
 #add_definitions(-DCKB_COVERAGE)
+#add_definitions(-Wno-incompatible-pointer-types)
 
 #add_definitions(-DCKB_SIMULATOR)
 add_definitions(-D__SHARED_LIBRARY__)

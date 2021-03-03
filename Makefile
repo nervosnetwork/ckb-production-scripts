@@ -52,7 +52,7 @@ ${PROTOCOL_SCHEMA}:
 	curl -L -o $@ ${PROTOCOL_URL}
 
 xudt_fmt:
-	clang-format -i -style=Google $(wildcard c/smt.h c/rce.h c/xudt.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
+	clang-format -i -style=Google $(wildcard c/smt.h c/rce.h c/xudt_rce.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
 	git diff --exit-code $(wildcard  c/smt.h c/rce.h c/xudt.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
 
 xudt_rce-via-docker:

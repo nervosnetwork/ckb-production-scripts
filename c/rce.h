@@ -22,10 +22,20 @@ typedef enum RCDataUnionType {
   RDUT_RCCellVec = 1
 } RCDataUnionType;
 
+// RCE scripts leverage optimized sparse merkle tree
+// (https://github.com/jjyr/sparse-merkle-tree)(SMT) extensively to reduce
+// storage costs. For each sparse merkle tree used here, the key will be lock
+// script hash, values are either 0 or 1: 0 represents the corresponding lock
+// hash is missing in the sparse merkle tree, whereas 1 means the lock hash is
+// included in the sparse merkle tree.
+uint8_t SMT_VALUE_NOT_EXISTING[RCE_VALUE_BYTES] = {0};
+uint8_t SMT_VALUE_EXISTING[RCE_VALUE_BYTES] = {1};
+
 bool is_white_list(uint8_t flags) { return flags & 0x2; }
 
 bool is_emergency_halt_mode(uint8_t flags) { return flags & 0x1; }
 
+// Note: RCRules is ordered as depth-first search
 int gather_rcrules_recursively(const uint8_t* rce_cell_hash, int depth) {
   int err = 0;
 
@@ -61,9 +71,10 @@ int gather_rcrules_recursively(const uint8_t* rce_cell_hash, int depth) {
 
     mol_seg_t smt_root = MolReader_RCRule_get_smt_root(&u.seg);
     mol_seg_t flags = MolReader_RCRule_get_flags(&u.seg);
+    // "Any more RCRule structures will result in an immediate failure."
     CHECK2(g_rcrules_count < MAX_RCRULES_COUNT, ERROR_TOO_MANY_RCRULES);
     g_rcrules[g_rcrules_count].flags = *(flags.ptr);
-    memcpy(g_rcrules[g_rcrules_count].smt_root, smt_root.ptr, 32);
+    memcpy(g_rcrules[g_rcrules_count].smt_root, smt_root.ptr, RCE_KEY_BYTES);
 
     g_rcrules_count++;
   } else if (u.item_id == RDUT_RCCellVec) {
@@ -74,7 +85,7 @@ int gather_rcrules_recursively(const uint8_t* rce_cell_hash, int depth) {
     for (uint32_t i = 0; i < len; i++) {
       mol_seg_res_t cell = MolReader_RCCellVec_get(&u.seg, i);
       CHECK2(cell.errno == MOL_OK, ERROR_INVALID_MOL_FORMAT);
-      CHECK2(seg.size == 32, ERROR_INVALID_MOL_FORMAT);
+      CHECK2(seg.size == RCE_KEY_BYTES, ERROR_INVALID_MOL_FORMAT);
 
       err = gather_rcrules_recursively(seg.ptr, depth + 1);
       CHECK(err);
@@ -88,11 +99,54 @@ exit:
   return err;
 }
 
+int collect_hashes(rce_state_t* bl_states, rce_state_t* wl_states) {
+  int err = 0;
+  uint32_t index = 0;
+
+  uint8_t not_existing_value[RCE_VALUE_BYTES] = {0};
+  uint8_t lock_script_hash[RCE_KEY_BYTES];
+  uint64_t lock_script_hash_len = RCE_KEY_BYTES;
+
+  index = 0;
+  while (true) {
+    err = ckb_checked_load_cell_by_field(
+        lock_script_hash, &lock_script_hash_len, 0, index,
+        CKB_SOURCE_GROUP_INPUT, CKB_CELL_FIELD_LOCK_HASH);
+    if (err == CKB_INDEX_OUT_OF_BOUND) {
+      break;
+    }
+    err = rce_state_insert(wl_states, lock_script_hash, SMT_VALUE_EXISTING);
+    CHECK(err);
+    err = rce_state_insert(bl_states, lock_script_hash, SMT_VALUE_NOT_EXISTING);
+    CHECK(err);
+    index++;
+  }
+  index = 0;
+  while (true) {
+    err = ckb_checked_load_cell_by_field(
+        lock_script_hash, &lock_script_hash_len, 0, index,
+        CKB_SOURCE_GROUP_OUTPUT, CKB_CELL_FIELD_LOCK_HASH);
+    if (err == CKB_INDEX_OUT_OF_BOUND) {
+      break;
+    }
+    err = rce_state_insert(wl_states, lock_script_hash, SMT_VALUE_EXISTING);
+    CHECK(err);
+    err = rce_state_insert(bl_states, lock_script_hash, SMT_VALUE_NOT_EXISTING);
+    CHECK(err);
+    index++;
+  }
+
+  err = 0;
+exit:
+  return err;
+}
+
 int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
                  size_t args_len) {
   int err = 0;
+  uint32_t index = 0;
 
-  CHECK2(args_len == 32, ERROR_INVALID_MOL_FORMAT);
+  CHECK2(args_len == BLAKE2B_BLOCK_SIZE, ERROR_INVALID_MOL_FORMAT);
   CHECK2(args != NULL, ERROR_INVALID_ARGS);
   // TODO: RCE under owner mode
   if (is_owner_mode) return 0;
@@ -115,52 +169,35 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
   CHECK2(proof_len == g_rcrules_count, ERROR_RCRULES_PROOFS_MISMATCHED);
 
   // TODO: limit?
-  rce_pair_t entries[MAX_LOCK_SCRIPT_HASH_COUNT];
-  rce_state_t states;
-  rce_state_init(&states, entries, MAX_LOCK_SCRIPT_HASH_COUNT);
+  rce_pair_t wl_entries[MAX_LOCK_SCRIPT_HASH_COUNT];
+  rce_pair_t bl_entries[MAX_LOCK_SCRIPT_HASH_COUNT];
+  rce_state_t wl_states;
+  rce_state_t bl_states;
+  rce_state_init(&wl_states, wl_entries, MAX_LOCK_SCRIPT_HASH_COUNT);
+  rce_state_init(&bl_states, bl_entries, MAX_LOCK_SCRIPT_HASH_COUNT);
 
-  uint8_t lock_script_hash[32];
-  uint64_t lock_script_hash_len = 32;
+  err = collect_hashes(&wl_states, &bl_states);
+  CHECK(err);
 
-  uint32_t index = 0;
-  while (true) {
-    err = ckb_checked_load_cell_by_field(
-        lock_script_hash, &lock_script_hash_len, 0, index,
-        CKB_SOURCE_GROUP_INPUT, CKB_CELL_FIELD_LOCK_HASH);
-    if (err == CKB_INDEX_OUT_OF_BOUND) {
-      break;
-    }
-    uint8_t key[32];
-    err = blake2b(key, 32, lock_script_hash, lock_script_hash_len, NULL, 0);
-    CHECK(err);
-    err = rce_state_insert(&states, key, lock_script_hash);
-    CHECK(err);
-    index++;
-  }
-  index = 0;
-  while (true) {
-    err = ckb_checked_load_cell_by_field(
-        lock_script_hash, &lock_script_hash_len, 0, index,
-        CKB_SOURCE_GROUP_OUTPUT, CKB_CELL_FIELD_LOCK_HASH);
-    if (err == CKB_INDEX_OUT_OF_BOUND) {
-      break;
-    }
-    uint8_t key[32];
-    err = blake2b(key, 32, lock_script_hash, lock_script_hash_len, NULL, 0);
-    CHECK(err);
-    err = rce_state_insert(&states, key, lock_script_hash);
-    CHECK(err);
-    index++;
-  }
-  rce_state_normalize(&states);
+  rce_state_normalize(&wl_states);
+  rce_state_normalize(&bl_states);
   for (index = 0; index < proof_len; index++) {
     mol_seg_res_t proof = MolReader_SmtProofVec_get(&proofs, index);
-    CHECK2(proof.errno == MOL_OK, ERROR_INVALID_MOL_FORMAT);
 
     const RCRule* current_rule = &g_rcrules[index];
 
     const uint8_t* root_hash = current_rule->smt_root;
-    err = rce_smt_verify(root_hash, &states, proof.seg.ptr, proof.seg.size);
+    // "Current RCRule must not be in Emergency Halt mode."
+    if (is_emergency_halt_mode(current_rule->flags)) {
+      continue;
+    }
+    if (is_white_list(current_rule->flags)) {
+      err =
+          rce_smt_verify(root_hash, &wl_states, proof.seg.ptr, proof.seg.size);
+    } else {
+      err =
+          rce_smt_verify(root_hash, &bl_states, proof.seg.ptr, proof.seg.size);
+    }
     CHECK2(err == 0, ERROR_SMT_VERIFY_FAILED);
   }
   err = 0;
