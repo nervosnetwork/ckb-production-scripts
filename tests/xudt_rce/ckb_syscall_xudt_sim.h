@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define countof(s) (sizeof(s) / sizeof(s[0]))
+
 // forward declarations
 void ckbsim_map_lib(const uint8_t* dep_cell_hash, const char* path);
 mol_seg_t build_bytes(const uint8_t* data, uint32_t len);
@@ -29,16 +31,10 @@ typedef union SIMRCData {
   SIMRCCellVec rccell_vec;
 } SIMRCData;
 
-SIMRCData g_sim_rcdata[1024];
+#define MAX_RCDATA_COUNT (8192 * 2)
+
+SIMRCData g_sim_rcdata[MAX_RCDATA_COUNT];
 uint16_t g_sim_rcdata_count = 0;
-
-uint8_t g_structure[32][1024];
-uint32_t g_structure_len[32] = {0};
-uint32_t g_structure_count = 0;
-
-uint8_t g_proof[32][1024];
-uint32_t g_proof_len[32] = {0};
-uint32_t g_proof_count = 0;
 
 uint32_t g_flags = 0;
 void xudt_set_flags(uint32_t flags) { g_flags = flags; }
@@ -46,8 +42,16 @@ void xudt_set_flags(uint32_t flags) { g_flags = flags; }
 mol_builder_t g_extension_script_hash_builder = {0};
 mol_seg_t g_extension_script_hash = {0};
 
+mol_builder_t g_proof_builder = {0};
+
+mol_builder_t g_structure_builder = {0};
+mol_seg_t g_structure = {0};
+
 uint8_t g_hash_in_args[32] = {0};
-uint8_t g_lock_script_hash[32] = {1};
+uint8_t g_input_lock_script_hash[32][16];
+uint32_t g_input_lock_script_hash_count = 0;
+uint8_t g_output_lock_script_hash[32][16];
+uint32_t g_output_lock_script_hash_count = 0;
 
 __int128 g_input_amount[32] = {0};
 uint32_t g_input_count = 0;
@@ -55,9 +59,9 @@ __int128 g_output_amount[32] = {0};
 uint32_t g_output_count = 0;
 
 void xudt_add_extension_script_hash(const uint8_t* hash, uint8_t hash_type,
+                                    uint8_t* args, uint32_t args_len,
                                     const char* path) {
-  uint8_t args[32] = {0};
-  mol_seg_t script = build_script(hash, hash_type, args, 32);
+  mol_seg_t script = build_script(hash, hash_type, args, args_len);
 
   MolBuilder_ScriptVec_push(&g_extension_script_hash_builder, script.ptr,
                             script.size);
@@ -67,33 +71,22 @@ void xudt_add_extension_script_hash(const uint8_t* hash, uint8_t hash_type,
 }
 
 void xudt_add_structure_item(const uint8_t* item, uint32_t len) {
-  ASSERT(g_structure_count < 1024);
-  memcpy(&g_structure[g_structure_count][0], item, len);
-  g_structure_len[g_structure_count] = len;
-  g_structure_count++;
+  mol_seg_t seg = build_bytes(item, len);
+  MolBuilder_BytesVec_push(&g_structure_builder, seg.ptr, seg.size);
+  free(seg.ptr);
 }
 
-void rce_begin_proof() { g_proof_count = 0; }
+void rce_begin_proof() { MolBuilder_SmtProofVec_init(&g_proof_builder); }
 
 void rce_add_proof(const uint8_t* proof, uint32_t proof_len) {
-  ASSERT(g_proof_count < 32);
-  ASSERT(proof_len < 1024);
-  memcpy(&g_proof[g_proof_count], proof, proof_len);
-  g_proof_len[g_proof_count] = proof_len;
-
-  g_proof_count++;
+  mol_seg_t seg = build_bytes(proof, proof_len);
+  MolBuilder_SmtProofVec_push(&g_proof_builder, seg.ptr, seg.size);
 }
 
 void rce_end_proof() {
-  mol_builder_t b;
-  MolBuilder_SmtProofVec_init(&b);
-  for (int i = 0; i < g_proof_count; i++) {
-    mol_seg_t seg = build_bytes(g_proof[i], g_proof_len[i]);
-    MolBuilder_SmtProofVec_push(&b, seg.ptr, seg.size);
-    free(seg.ptr);
-  }
-  mol_seg_res_t res = MolBuilder_SmtProofVec_build(b);
+  mol_seg_res_t res = MolBuilder_SmtProofVec_build(g_proof_builder);
   ASSERT(res.errno == 0);
+
   xudt_add_structure_item(res.seg.ptr, res.seg.size);
   free(res.seg.ptr);
 }
@@ -105,7 +98,19 @@ void xudt_add_data(const uint8_t* data, uint32_t len) {
 // set them to same to enable owner mode
 void xudt_set_owner_mode(uint8_t* hash_in_args, uint8_t* lock_script_hash) {
   memcpy(g_hash_in_args, hash_in_args, 32);
-  memcpy(g_lock_script_hash, lock_script_hash, 32);
+  memcpy(g_input_lock_script_hash[0], lock_script_hash, 32);
+}
+
+void xudt_add_input_lock_script_hash(uint8_t* hash) {
+  ASSERT(g_input_lock_script_hash_count < 16);
+  memcpy(g_input_lock_script_hash[g_input_lock_script_hash_count], hash, 32);
+  g_input_lock_script_hash_count++;
+}
+
+void xudt_add_output_lock_script_hash(uint8_t* hash) {
+  ASSERT(g_output_lock_script_hash_count < 16);
+  memcpy(g_output_lock_script_hash[g_output_lock_script_hash_count], hash, 32);
+  g_output_lock_script_hash_count++;
 }
 
 void xudt_add_input_amount(__int128 val) {
@@ -118,18 +123,27 @@ void xudt_add_output_amount(__int128 val) {
   g_output_count++;
 }
 
+extern bool g_witness_inited;
 void xudt_begin_data(void) {
+  g_witness_inited = false;
   g_flags = 0;
   MolBuilder_ScriptVec_init(&g_extension_script_hash_builder);
   if (g_extension_script_hash.ptr) free(g_extension_script_hash.ptr);
+
+  MolBuilder_BytesVec_init(&g_structure_builder);
+  if (g_structure.ptr) free(g_structure.ptr);
+
   g_extension_script_hash.ptr = 0;
   g_extension_script_hash.size = 0;
   g_input_count = 0;
   g_output_count = 0;
-  memset(g_lock_script_hash, 0, sizeof(g_lock_script_hash));
+  memset(g_input_lock_script_hash, 0, sizeof(g_input_lock_script_hash));
+  memset(g_output_lock_script_hash, 0, sizeof(g_output_lock_script_hash));
   memset(g_hash_in_args, 0, sizeof(g_hash_in_args));
 
   g_lib_size = 0;
+  g_input_lock_script_hash_count = 0;
+  g_output_lock_script_hash_count = 0;
 }
 
 void xudt_end_data(void) {
@@ -137,6 +151,9 @@ void xudt_end_data(void) {
       MolBuilder_ScriptVec_build(g_extension_script_hash_builder);
   ASSERT(res.errno == 0);
   g_extension_script_hash = res.seg;
+
+  mol_seg_res_t res2 = MolBuilder_BytesVec_build(g_structure_builder);
+  g_structure = res2.seg;
 }
 
 int ckb_exit(int8_t code);
@@ -165,20 +182,6 @@ int ckb_checked_load_script_hash(void* addr, uint64_t* len, size_t offset) {
   return ret;
 }
 
-mol_seg_t build_structure(void) {
-  mol_builder_t b;
-  MolBuilder_BytesVec_init(&b);
-  for (int i = 0; i < g_structure_count; i++) {
-    mol_seg_t seg = build_bytes(g_structure[i], g_structure_len[i]);
-    MolBuilder_BytesVec_push(&b, seg.ptr, seg.size);
-    free(seg.ptr);
-  }
-
-  mol_seg_res_t res = MolBuilder_BytesVec_build(b);
-  ASSERT(res.errno == MOL_OK);
-  return res.seg;
-}
-
 int ckb_checked_load_witness(void* addr, uint64_t* len, size_t offset,
                              size_t index, size_t source) {
   if (index > 1) {
@@ -186,7 +189,6 @@ int ckb_checked_load_witness(void* addr, uint64_t* len, size_t offset,
   }
   mol_builder_t w;
   MolBuilder_WitnessArgs_init(&w);
-  mol_seg_t structure_seg = build_structure();
 
   mol_builder_t xwi_builder;
   MolBuilder_XudtWitnessInput_init(&xwi_builder);
@@ -195,8 +197,8 @@ int ckb_checked_load_witness(void* addr, uint64_t* len, size_t offset,
         &xwi_builder, g_extension_script_hash.ptr,
         g_extension_script_hash.size);
   }
-  MolBuilder_XudtWitnessInput_set_structure(&xwi_builder, structure_seg.ptr,
-                                            structure_seg.size);
+  MolBuilder_XudtWitnessInput_set_structure(&xwi_builder, g_structure.ptr,
+                                            g_structure.size);
 
   mol_seg_res_t xwi_res = MolBuilder_XudtWitnessInput_build(xwi_builder);
   ASSERT(xwi_res.errno == MOL_OK);
@@ -213,7 +215,6 @@ int ckb_checked_load_witness(void* addr, uint64_t* len, size_t offset,
 
   free(res.seg.ptr);
   free(xwi_res.seg.ptr);
-  free(structure_seg.ptr);
 
   return 0;
 }
@@ -403,11 +404,30 @@ int ckb_calculate_inputs_len() { return 0; }
 
 int ckb_load_cell_by_field(void* addr, uint64_t* len, size_t offset,
                            size_t index, size_t source, size_t field) {
-  if (index > 0) return CKB_INDEX_OUT_OF_BOUND;
-
   if (field == CKB_CELL_FIELD_LOCK_HASH) {
-    memcpy(addr, g_lock_script_hash, 32);
-    *len = 32;
+    if (source == CKB_SOURCE_GROUP_OUTPUT) {
+      if (index >= g_output_lock_script_hash_count) {
+        return CKB_INDEX_OUT_OF_BOUND;
+      }
+      memcpy(addr, g_output_lock_script_hash[index], 32);
+      *len = 32;
+    } else if (source == CKB_SOURCE_GROUP_INPUT) {
+      if (index >= g_input_lock_script_hash_count) {
+        return CKB_INDEX_OUT_OF_BOUND;
+      }
+      memcpy(addr, g_input_lock_script_hash[index], 32);
+      *len = 32;
+    } else if (source == CKB_SOURCE_INPUT) {
+      // special case for CKB_SOURCE_INPUT
+      //     ret = ckb_checked_load_cell_by_field(buffer, &len2, 0, i,
+      //     CKB_SOURCE_INPUT,
+      //                                         CKB_CELL_FIELD_LOCK_HASH);
+      if (index > 0) return CKB_INDEX_OUT_OF_BOUND;
+      memcpy(addr, g_input_lock_script_hash[index], 32);
+      *len = 32;
+    } else {
+      ASSERT(false);
+    }
   }
   return 0;
 }
@@ -424,7 +444,7 @@ int ckb_checked_load_cell_by_field(void* addr, uint64_t* len, size_t offset,
 
 // return index as hash
 uint16_t rce_add_rcrule(uint8_t* rcrule, uint8_t flags) {
-  ASSERT(g_sim_rcdata_count < 1024);
+  ASSERT(g_sim_rcdata_count < countof(g_sim_rcdata));
 
   SIMRCData* curr = g_sim_rcdata + g_sim_rcdata_count;
   curr->rcrule.id = 0;
@@ -434,8 +454,19 @@ uint16_t rce_add_rcrule(uint8_t* rcrule, uint8_t flags) {
   return g_sim_rcdata_count - 1;
 }
 
+// return index as hash
+uint16_t rce_modify_rcrule(uint32_t index, uint8_t* rcrule, uint8_t flags) {
+  ASSERT(index < g_sim_rcdata_count);
+
+  SIMRCData* curr = g_sim_rcdata + index;
+  curr->rcrule.id = 0;
+  curr->rcrule.flags = flags;
+  memcpy(curr->rcrule.smt_root, rcrule, 32);
+  return index;
+}
+
 uint16_t rce_add_rccellvec(uint16_t* hash, uint32_t length) {
-  ASSERT(g_sim_rcdata_count < 1024);
+  ASSERT(g_sim_rcdata_count < countof(g_sim_rcdata));
   SIMRCData* curr = g_sim_rcdata + g_sim_rcdata_count;
   curr->rccell_vec.id = 1;
   curr->rccell_vec.hash_count = length;

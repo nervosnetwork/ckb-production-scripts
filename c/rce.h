@@ -159,7 +159,7 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
   err = get_structure(extension_index, &structure);
   CHECK(err);
 
-  CHECK2(MolReader_BytesVec_verify(&structure, false) == MOL_OK,
+  CHECK2(MolReader_Bytes_verify(&structure, false) == MOL_OK,
          ERROR_INVALID_MOL_FORMAT);
   mol_seg_t proofs = MolReader_Bytes_raw_bytes(&structure);
   CHECK2(MolReader_SmtProofVec_verify(&proofs, false) == MOL_OK,
@@ -176,13 +176,15 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
   rce_state_init(&wl_states, wl_entries, MAX_LOCK_SCRIPT_HASH_COUNT);
   rce_state_init(&bl_states, bl_entries, MAX_LOCK_SCRIPT_HASH_COUNT);
 
-  err = collect_hashes(&wl_states, &bl_states);
+  err = collect_hashes(&bl_states, &wl_states);
   CHECK(err);
 
   rce_state_normalize(&wl_states);
   rce_state_normalize(&bl_states);
   for (index = 0; index < proof_len; index++) {
-    mol_seg_res_t proof = MolReader_SmtProofVec_get(&proofs, index);
+    mol_seg_res_t mol_proof = MolReader_SmtProofVec_get(&proofs, index);
+    CHECK(mol_proof.errno);
+    mol_seg_t proof = MolReader_SmtProof_raw_bytes(&mol_proof.seg);
 
     const RCRule* current_rule = &g_rcrules[index];
 
@@ -192,11 +194,9 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
       continue;
     }
     if (is_white_list(current_rule->flags)) {
-      err =
-          rce_smt_verify(root_hash, &wl_states, proof.seg.ptr, proof.seg.size);
+      err = rce_smt_verify(root_hash, &wl_states, proof.ptr, proof.size);
     } else {
-      err =
-          rce_smt_verify(root_hash, &bl_states, proof.seg.ptr, proof.seg.size);
+      err = rce_smt_verify(root_hash, &bl_states, proof.ptr, proof.size);
     }
     CHECK2(err == 0, ERROR_SMT_VERIFY_FAILED);
   }

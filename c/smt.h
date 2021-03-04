@@ -78,7 +78,7 @@ int _rce_pair_cmp(const void *a, const void *b) {
   const rce_pair_t *pa = (const rce_pair_t *)a;
   const rce_pair_t *pb = (const rce_pair_t *)b;
 
-  for (uint32_t i = RCE_KEY_BYTES - 1; i >= 0; i--) {
+  for (int i = RCE_KEY_BYTES - 1; i >= 0; i--) {
     int cmp_result = pa->key[i] - pb->key[i];
     if (cmp_result != 0) {
       return cmp_result;
@@ -150,7 +150,37 @@ void _rce_parent_path(uint8_t key[32], uint8_t height) {
   }
 }
 
-int rce_smt_calculate_root(uint8_t buffer[32], const rce_state_t *state,
+int _rce_zero_value(const uint8_t value[32]) {
+  for (int i = 0; i < 32; i++) {
+    if (value[i] != 0) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+/* Notice that output might collide with one of lhs, or rhs */
+void _rce_merge(const uint8_t lhs[32], const uint8_t rhs[32],
+                uint8_t output[32]) {
+  if (_rce_zero_value(lhs)) {
+    memcpy(output, rhs, 32);
+  } else if (_rce_zero_value(rhs)) {
+    memcpy(output, lhs, 32);
+  } else {
+    blake2b_state blake2b_ctx;
+    blake2b_init(&blake2b_ctx, 32);
+    blake2b_update(&blake2b_ctx, lhs, 32);
+    blake2b_update(&blake2b_ctx, rhs, 32);
+    blake2b_final(&blake2b_ctx, output, 32);
+  }
+}
+
+/*
+ * Theoretically, a stack size of x should be able to process as many as
+ * 2 ** (x - 1) updates. In this case with a stack size of 32, we can deal
+ * with 2 ** 31 == 2147483648 updates, which is more than enough.
+ */
+int rce_smt_calculate_root(uint8_t buffer[32], const rce_state_t *pairs,
                            const uint8_t *proof, uint32_t proof_length) {
   blake2b_state blake2b_ctx;
   uint8_t stack_keys[_RCE_SMT_STACK_SIZE][RCE_KEY_BYTES];
@@ -165,17 +195,21 @@ int rce_smt_calculate_root(uint8_t buffer[32], const rce_state_t *state,
         if (stack_top >= _RCE_SMT_STACK_SIZE) {
           return ERROR_INVALID_STACK;
         }
-        if (leave_index >= state->len) {
+        if (leave_index >= pairs->len) {
           return ERROR_INVALID_PROOF;
         }
-        memcpy(stack_keys[stack_top], state->pairs[leave_index].key,
+        memcpy(stack_keys[stack_top], pairs->pairs[leave_index].key,
                RCE_KEY_BYTES);
-        blake2b_init(&blake2b_ctx, 32);
-        blake2b_update(&blake2b_ctx, state->pairs[leave_index].key,
-                       RCE_KEY_BYTES);
-        blake2b_update(&blake2b_ctx, state->pairs[leave_index].value,
-                       RCE_KEY_BYTES);
-        blake2b_final(&blake2b_ctx, stack_values[stack_top], 32);
+        if (_rce_zero_value(pairs->pairs[leave_index].value)) {
+          memset(stack_values[stack_top], 0, 32);
+        } else {
+          blake2b_init(&blake2b_ctx, 32);
+          blake2b_update(&blake2b_ctx, pairs->pairs[leave_index].key,
+                         RCE_KEY_BYTES);
+          blake2b_update(&blake2b_ctx, pairs->pairs[leave_index].value,
+                         RCE_KEY_BYTES);
+          blake2b_final(&blake2b_ctx, stack_values[stack_top], 32);
+        }
         stack_top++;
         leave_index++;
         break;
@@ -191,15 +225,11 @@ int rce_smt_calculate_root(uint8_t buffer[32], const rce_state_t *state,
         proof_index += 32;
         uint8_t *key = stack_keys[stack_top - 1];
         uint8_t *value = stack_values[stack_top - 1];
-        blake2b_init(&blake2b_ctx, 32);
         if (_rce_get_bit(key, height)) {
-          blake2b_update(&blake2b_ctx, current_proof, 32);
-          blake2b_update(&blake2b_ctx, value, 32);
+          _rce_merge(current_proof, value, value);
         } else {
-          blake2b_update(&blake2b_ctx, value, 32);
-          blake2b_update(&blake2b_ctx, current_proof, 32);
+          _rce_merge(value, current_proof, value);
         }
-        blake2b_final(&blake2b_ctx, value, 32);
         _rce_parent_path(key, height);
       } break;
       case 0x48: {
@@ -227,16 +257,12 @@ int rce_smt_calculate_root(uint8_t buffer[32], const rce_state_t *state,
         if (memcmp(sibling_key_a, key_b, 32) != 0 || (a_set == b_set)) {
           return ERROR_INVALID_SIBLING;
         }
-        blake2b_init(&blake2b_ctx, 32);
         if (a_set) {
-          blake2b_update(&blake2b_ctx, value_b, 32);
-          blake2b_update(&blake2b_ctx, value_a, 32);
+          _rce_merge(value_b, value_a, value_a);
         } else {
-          blake2b_update(&blake2b_ctx, value_a, 32);
-          blake2b_update(&blake2b_ctx, value_b, 32);
+          _rce_merge(value_a, value_b, value_a);
         }
         /* Top-of-stack key is already updated to parent_key_a */
-        blake2b_final(&blake2b_ctx, value_a, 32);
         stack_top++;
       } break;
       default:
@@ -244,7 +270,7 @@ int rce_smt_calculate_root(uint8_t buffer[32], const rce_state_t *state,
     }
   }
   /* All leaves must be used */
-  if (leave_index != state->len) {
+  if (leave_index != pairs->len) {
     return ERROR_INVALID_PROOF;
   }
   if (stack_top != 1) {

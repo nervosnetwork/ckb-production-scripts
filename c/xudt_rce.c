@@ -169,11 +169,19 @@ int get_structure(uint32_t index, mol_seg_t* item) {
 
   mol_seg_t seg = {.ptr = g_witness, .size = g_witness_len};
 
-  mol_seg_t structures = MolReader_XudtWitnessInput_get_structure(&seg);
-  MolReader_BytesVec_verify(&structures, false);
+  mol_seg_t output = MolReader_WitnessArgs_get_input_type(&seg);
+  CHECK2(MolReader_Bytes_verify(&output, false) == MOL_OK,
+         ERROR_INVALID_MOL_FORMAT);
+
+  mol_seg_t raw = MolReader_Bytes_raw_bytes(&output);
+  mol_seg_t structures = MolReader_XudtWitnessInput_get_structure(&raw);
+  CHECK2(MolReader_BytesVec_verify(&structures, false) == MOL_OK,
+         ERROR_INVALID_MOL_FORMAT);
 
   mol_seg_res_t structure = MolReader_BytesVec_get(&structures, index);
   CHECK(structure.errno);
+  CHECK2(MolReader_Bytes_verify(&structure.seg, false) == MOL_OK,
+         ERROR_INVALID_MOL_FORMAT);
 
   *item = structure.seg;
 
