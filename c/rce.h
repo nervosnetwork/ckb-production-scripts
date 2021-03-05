@@ -103,7 +103,6 @@ int collect_hashes(rce_state_t* bl_states, rce_state_t* wl_states) {
   int err = 0;
   uint32_t index = 0;
 
-  uint8_t not_existing_value[RCE_VALUE_BYTES] = {0};
   uint8_t lock_script_hash[RCE_KEY_BYTES];
   uint64_t lock_script_hash_len = RCE_KEY_BYTES;
 

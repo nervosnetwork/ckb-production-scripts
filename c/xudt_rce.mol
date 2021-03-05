@@ -41,3 +41,8 @@ table SmtUpdate {
     update: SmtUpdateVec,
     proof:  SmtProof,
 }
+
+table XudtData {
+  lock: Bytes,
+  data: BytesVec,
+}

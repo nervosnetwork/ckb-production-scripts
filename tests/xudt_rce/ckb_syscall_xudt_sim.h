@@ -48,8 +48,10 @@ mol_builder_t g_structure_builder = {0};
 mol_seg_t g_structure = {0};
 
 uint8_t g_hash_in_args[32] = {0};
+
 uint8_t g_input_lock_script_hash[32][16];
 uint32_t g_input_lock_script_hash_count = 0;
+
 uint8_t g_output_lock_script_hash[32][16];
 uint32_t g_output_lock_script_hash_count = 0;
 
@@ -514,10 +516,39 @@ void ckbsim_map_lib(const uint8_t* dep_cell_hash, const char* path) {
   g_lib_size++;
 }
 
+bool file_exists(const char* path) {
+  FILE* fp = fopen(path, "r");
+  if (fp != NULL) {
+    fclose(fp);
+  };
+  return fp != NULL;
+}
+
+void file_with_so(const char* input, char* output, uint32_t output_len) {
+  strcpy(output, input);
+  char* pos = strchr(output, '.');
+  if (pos != NULL) {
+    *pos = 0;
+    strcat(output, ".so");
+  }
+}
+
 int ckbsim_get_lib(const uint8_t* dep_cell_hash, char* path) {
   for (int i = 0; i < g_lib_size; i++) {
     if (memcmp(g_lib_mapping[i].dep_cell_hash, dep_cell_hash, 32) == 0) {
-      strcpy(path, g_lib_mapping[i].path);
+      const char* target = g_lib_mapping[i].path;
+      if (file_exists(target)) {
+        strcpy(path, target);
+      } else {
+        char output[1024] = {0};
+        file_with_so(target, output, sizeof(output));
+        if (file_exists(output)) {
+          strcpy(path, output);
+        } else {
+          ASSERT(false);
+          return -1;
+        }
+      }
       return 0;
     }
   }

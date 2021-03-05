@@ -55,7 +55,7 @@ UTEST(xudt, main) {
   xudt_set_owner_mode(hash0, hash1);
   xudt_add_extension_script_hash(
       extension_hash, 1, args, sizeof(args),
-      "tests/xudt_rce/cmake-build-debug/libextension_script_0.dylib");
+      "tests/xudt_rce/simulator-build-debug/libextension_script_0.dylib");
   xudt_add_input_amount(999);
   xudt_add_output_amount(999);
   xudt_end_data();
@@ -135,7 +135,7 @@ UTEST(rce, black_list) {
   xudt_begin_data();
   set_basic_data();
 
-  // rcrool and proof should 1:1
+  // rcrule and proof should 1:1
   // rc rule
   uint8_t rcrule[32] = {143, 95, 66, 207, 251, 51,  58,  199, 247, 61,  211,
                         60,  28, 25, 51,  99,  174, 94,  226, 239, 134, 201,
