@@ -8,8 +8,6 @@ set(CMAKE_C_STANDARD 11)
 # uncomment it for coverage test
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage")
 #add_definitions(-DCKB_COVERAGE)
-
-
 add_definitions(-DCKB_SIMULATOR)
 add_definitions(-D__SHARED_LIBRARY__)
 add_definitions(-DCKB_DECLARATION_ONLY)
@@ -100,3 +98,8 @@ add_executable(validate_signature_rsa tests/validate_signature_rsa/validate_sign
 target_compile_definitions(validate_signature_rsa PUBLIC -D_FILE_OFFSET_BITS=64 -DCKB_DECLARATION_ONLY)
 target_include_directories(validate_signature_rsa PUBLIC deps/ckb-c-stdlib-simulator-only/libc)
 target_link_libraries(validate_signature_rsa mbedtls)
+
+
+add_executable(dlopen_sim tests/validate_signature_rsa/dlopen_sim.c)
+target_compile_definitions(dlopen_sim PUBLIC -D_FILE_OFFSET_BITS=64 -DCKB_DECLARATION_ONLY)
+#target_include_directories(dlopen_sim PUBLIC deps/ckb-c-stdlib-simulator-only/libc)

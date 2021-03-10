@@ -50,6 +50,8 @@ enum ErrorCode {
   ERROR_ISO97962_INVALID_ARG10,
   ERROR_ISO97962_INVALID_ARG11,
   ERROR_ISO97962_INVALID_ARG12,
+  ERROR_ISO97962_INVALID_ARG13,
+  ERROR_WRONG_PUBKEY,
 };
 
 #define CHECK2(cond, code) \
@@ -77,14 +79,24 @@ int validate_signature_iso9796_2(void *, const uint8_t *sig_buf,
                                  size_t msg_size, uint8_t *out,
                                  size_t *out_len);
 
-bool is_valid_md_type(uint8_t md) {
+bool is_valid_iso97962_md_type(uint8_t md) {
   return md == CKB_MD_SHA1 || md == CKB_MD_SHA224 || md == CKB_MD_SHA256 ||
-         md == CKB_MD_SHA384 || md == CKB_MD_SHA512 || md == CKB_MD_RIPEMD160;
+         md == CKB_MD_SHA384 || md == CKB_MD_SHA512;
+}
+
+// remove SHA1 and RIPEMD160 as options for the message digest hash functions.
+bool is_valid_rsa_md_type(uint8_t md) {
+  return md == CKB_MD_SHA224 || md == CKB_MD_SHA256 || md == CKB_MD_SHA384 ||
+         md == CKB_MD_SHA512;
 }
 
 bool is_valid_key_size(uint8_t size) {
   return size == CKB_KEYSIZE_1024 || size == CKB_KEYSIZE_2048 ||
          size == CKB_KEYSIZE_4096;
+}
+
+bool is_valid_key_size_in_bit(uint32_t size) {
+  return size == 1024 || size == 2048 || size == 4096;
 }
 
 bool is_valid_padding(uint8_t padding) {
@@ -104,6 +116,23 @@ uint32_t get_key_size(uint8_t key_size_enum) {
   }
 }
 
+int check_pubkey(mbedtls_mpi *N, mbedtls_mpi *E) {
+  int err = 0;
+  size_t key_size = mbedtls_mpi_size(N) * 8;
+  CHECK2(is_valid_key_size_in_bit(key_size), ERROR_WRONG_PUBKEY);
+
+  mbedtls_mpi two;
+  mbedtls_mpi_init(&two);
+  err = mbedtls_mpi_lset(&two, 2);
+  CHECK(err);
+  CHECK2(mbedtls_mpi_cmp_mpi(&two, E) < 0 && mbedtls_mpi_cmp_mpi(E, N) < 0,
+         ERROR_WRONG_PUBKEY);
+
+  err = 0;
+exit:
+  return err;
+}
+
 mbedtls_md_type_t convert_md_type(uint8_t type) {
   mbedtls_md_type_t result = MBEDTLS_MD_NONE;
   switch (type) {
@@ -118,9 +147,6 @@ mbedtls_md_type_t convert_md_type(uint8_t type) {
       break;
     case CKB_MD_SHA512:
       result = MBEDTLS_MD_SHA512;
-      break;
-    case CKB_MD_RIPEMD160:
-      result = MBEDTLS_MD_RIPEMD160;
       break;
     case CKB_MD_SHA1:
       result = MBEDTLS_MD_SHA1;
@@ -184,7 +210,7 @@ int validate_signature_rsa(void *prefilled_data,
   unsigned char alloc_buff[alloc_buff_size];
   mbedtls_memory_buffer_alloc_init(alloc_buff, alloc_buff_size);
 
-  CHECK2(is_valid_md_type(input_info->md_type), ERROR_INVALID_MD_TYPE);
+  CHECK2(is_valid_rsa_md_type(input_info->md_type), ERROR_INVALID_MD_TYPE);
   CHECK2(is_valid_padding(input_info->padding), ERROR_INVALID_PADDING);
   CHECK2(is_valid_key_size(input_info->key_size), ERROR_RSA_INVALID_KEY_SIZE);
   key_size = get_key_size(input_info->key_size);
@@ -211,7 +237,10 @@ int validate_signature_rsa(void *prefilled_data,
   err = mbedtls_mpi_read_binary_le(&rsa.N, input_info->N, key_size / 8);
   CHECK2(err == 0, ERROR_MBEDTLS_ERROR_1);
 
+  CHECK(check_pubkey(&rsa.N, &rsa.E));
+
   rsa.len = (mbedtls_mpi_bitlen(&rsa.N) + 7) >> 3;
+  CHECK2(is_valid_key_size_in_bit(rsa.len * 8), ERROR_WRONG_PUBKEY);
 
   err = md_string(md_info, msg_buf, msg_size, hash_buf);
   CHECK2(err == 0, ERROR_MD_FAILED);
@@ -450,7 +479,11 @@ int validate_signature_iso9796_2(void *_p, const uint8_t *sig_buf,
   mbedtls_mpi N;
   mbedtls_mpi E;
 
+  if (sig_len < sizeof(RsaInfo)) {
+    return ERROR_ISO97962_INVALID_ARG12;
+  }
   uint32_t key_size_byte = get_key_size(info->key_size) / 8;
+
   uint8_t *sig = NULL;
   uint8_t block[key_size_byte];
   uint8_t m1[key_size_byte];
@@ -468,7 +501,7 @@ int validate_signature_iso9796_2(void *_p, const uint8_t *sig_buf,
   CHECK2(out != NULL, ERROR_ISO97962_INVALID_ARG8);
   CHECK2(out_len != NULL, ERROR_ISO97962_INVALID_ARG8);
   CHECK2(key_size_byte > 0, ERROR_ISO97962_INVALID_ARG8);
-  CHECK2(is_valid_md_type(info->md_type), ERROR_INVALID_MD_TYPE);
+  CHECK2(is_valid_iso97962_md_type(info->md_type), ERROR_INVALID_MD_TYPE);
 
   mbedtls_mpi_init(&N);
   mbedtls_mpi_init(&E);
@@ -477,6 +510,8 @@ int validate_signature_iso9796_2(void *_p, const uint8_t *sig_buf,
   CHECK2(err == 0, ERROR_ISO97962_INVALID_ARG9);
   err = mbedtls_mpi_read_binary_le(&E, (uint8_t *)&info->E, 4);
   CHECK2(err == 0, ERROR_ISO97962_INVALID_ARG10);
+
+  CHECK(check_pubkey(&N, &E));
 
   mbedtls_rsa_init(&rsa, MBEDTLS_RSA_PKCS_V15, 0);
   err = mbedtls_rsa_import(&rsa, &N, NULL, NULL, NULL, &E);

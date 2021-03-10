@@ -12,6 +12,8 @@
 #    * contracts/validate-signature-rsa/rust-toolchain
 #    * contracts/validate-signature-rsa/.cargo/config
 #    They make contracts built with nightly tool chain and proper options.
+# 4. add target
+#    rustup  target add riscv64imac-unknown-none-elf
 
 set -e
 BIN=./target/riscv64imac-unknown-none-elf/debug/validate-signature-rsa

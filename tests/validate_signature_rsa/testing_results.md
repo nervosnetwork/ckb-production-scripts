@@ -88,3 +88,36 @@ uint8_t *get_rsa_signature(RsaInfo *info) {
 Load of misaligned address 0x7ffee94dd25c for type 'size_t' (aka 'unsigned long'), which requires 8 byte alignment
 ```
 It happens in memory allocation in mbedtls source code. It's difficult to change.
+
+### Fuzzing test on ckb_dlopen2
+This work is contributed by Trail of Bits. It only works for "ckb_dlfcn.h", mainly for the function "ckb_dlopen2".
+
+```bash
+make
+./dlopen_fuzzer -workers=40 -jobs=40 corpus
+```
+adjust "40" to CPU cores of your machine. It's great to put some dynamic library files in "corpus" folder first:
+```bash
+cp ../../build/always_success corpus/
+cp ../../build/validate_signature_rsa corpus/
+```
+
+Get code coverage by:
+```bash
+make report
+make show
+```
+
+#### heap-buffer-overflow at "context->dynstr + sym->st_name"
+This issue is resolved by post-checking.
+```C
+    // here the fuzzer reports "heap-buffer-overflow" issue
+    // we will check "str" in range next
+    const char *str = context->dynstr + sym->st_name;
+    // issue:
+    // 9. Possible out-of-bounds read in ckb_dlsym
+    if (!check_in_range(str, context)) {
+      return 0;
+    }
+```
+

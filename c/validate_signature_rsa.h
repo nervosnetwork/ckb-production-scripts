@@ -29,12 +29,13 @@
 //#define CKB_MD_MD4 2       /**< The MD4 message digest. */
 //#define CKB_MD_MD5 3       /**< The MD5 message digest. */
 // SHA1 is weak too, but it's already used by ISO 9796-2
-#define CKB_MD_SHA1 4      /**< The SHA-1 message digest. */
-#define CKB_MD_SHA224 5    /**< The SHA-224 message digest. */
-#define CKB_MD_SHA256 6    /**< The SHA-256 message digest. */
-#define CKB_MD_SHA384 7    /**< The SHA-384 message digest. */
-#define CKB_MD_SHA512 8    /**< The SHA-512 message digest. */
-#define CKB_MD_RIPEMD160 9 /**< The RIPEMD-160 message digest. */
+// It's not allowed to set SHA1 while using RSA
+#define CKB_MD_SHA1 4   /**< The SHA-1 message digest. */
+#define CKB_MD_SHA224 5 /**< The SHA-224 message digest. */
+#define CKB_MD_SHA256 6 /**< The SHA-256 message digest. */
+#define CKB_MD_SHA384 7 /**< The SHA-384 message digest. */
+#define CKB_MD_SHA512 8 /**< The SHA-512 message digest. */
+// #define CKB_MD_RIPEMD160 9 /**< The RIPEMD-160 message digest. */
 
 #define PLACEHOLDER_SIZE (128)
 

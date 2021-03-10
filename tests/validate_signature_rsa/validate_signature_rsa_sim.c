@@ -457,8 +457,8 @@ exit:
 // cover all test cases
 int validate_signature_all_test(void) {
   int err = 0;
-  uint8_t md_type_set[] = {CKB_MD_SHA1,   CKB_MD_SHA224, CKB_MD_SHA256,
-                           CKB_MD_SHA384, CKB_MD_SHA512, CKB_MD_RIPEMD160};
+  uint8_t md_type_set[] = {CKB_MD_SHA224, CKB_MD_SHA256, CKB_MD_SHA384,
+                           CKB_MD_SHA512};
   uint8_t key_size_set[] = {CKB_KEYSIZE_1024, CKB_KEYSIZE_2048,
                             CKB_KEYSIZE_4096};
   //  uint8_t key_size_set[] = {CKB_KEYSIZE_1024};
