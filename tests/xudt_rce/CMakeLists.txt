@@ -30,3 +30,6 @@ target_include_directories(xudt_rce_simulator PUBLIC deps/ckb-c-stdlib-simulator
 target_link_libraries(xudt_rce_simulator dl)
 
 add_library(extension_script_0 SHARED ../../tests/xudt_rce/extension_script_0.c)
+
+
+add_executable(smt_coverage smt_fuzzer/smt_coverage.c smt_fuzzer/smt_fuzzer.c)
