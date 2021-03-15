@@ -5,6 +5,8 @@ OBJCOPY := $(TARGET)-objcopy
 CFLAGS := -fPIC -O3 -fno-builtin-printf -fno-builtin-memcmp -nostdinc -nostdlib -nostartfiles -fvisibility=hidden -fdata-sections -ffunction-sections -I deps/secp256k1/src -I deps/secp256k1 -I deps/ckb-c-std-lib -I deps/ckb-c-std-lib/libc -I deps/ckb-c-std-lib/molecule -I c -I build -Wall -Werror -Wno-nonnull -Wno-nonnull-compare -Wno-unused-function -g
 LDFLAGS := -Wl,-static -fdata-sections -ffunction-sections -Wl,--gc-sections
 SECP256K1_SRC := deps/secp256k1/src/ecmult_static_pre_context.h
+# we have some un-ununsed variables in generated code "blockchain-api2.h and molecule2_reader.h"
+XUDT_RCE_CFLAGS := -fPIC -O3 -fno-builtin-printf -fno-builtin-memcmp -nostdinc -nostdlib -nostartfiles -fvisibility=hidden -fdata-sections -ffunction-sections -I deps/secp256k1/src -I deps/secp256k1 -I deps/ckb-c-stdlib-simulator-only2  -I deps/ckb-c-stdlib-simulator-only2/libc -I deps/ckb-c-stdlib-simulator-only2/molecule -I c -I build -Wall -Werror -Wno-nonnull -Wno-nonnull-compare -Wno-unused-variable -Wno-unused-function -g
 PROTOCOL_HEADER := c/blockchain.h
 PROTOCOL_SCHEMA := c/blockchain.mol
 PROTOCOL_VERSION := d75e4c56ffa40e17fd2fe477da3f98c5578edcd1
@@ -59,8 +61,16 @@ fmt:
 c/xudt_rce_mol.h: c/xudt_rce.mol
 	${MOLC} --language c --schema-file $< > $@
 
+JSON_TEMP_FILE=build/blockchain_mol2.json
+
+$(JSON_TEMP_FILE): c/xudt_rce.mol
+	moleculec --language - --schema-file c/xudt_rce.mol --format json > $(JSON_TEMP_FILE)
+
+c/xudt_rce_mol2.h: $(JSON_TEMP_FILE)
+	moleculec-c2 --input $(JSON_TEMP_FILE) | clang-format -style=Google > c/xudt_rce_mol2.h
+
 build/xudt_rce: c/xudt_rce.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+	$(CC) $(XUDT_RCE_CFLAGS) $(LDFLAGS) -o $@ $<
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 

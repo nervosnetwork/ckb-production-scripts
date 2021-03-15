@@ -9,6 +9,7 @@
 #include <assert.h>
 #define ASSERT assert
 #endif
+int ckb_exit(signed char code);
 
 #include "utest.h"
 #include "xudt_rce.c"
@@ -461,8 +462,7 @@ UTEST(smt, update) {
   smt_state_init(&changes, entries, 32);
   smt_state_insert(&changes, key, value);
   smt_state_normalize(&changes);
-  ASSERT_EQ(0,
-            smt_calculate_root(root_hash, &changes, proof, proof_length));
+  ASSERT_EQ(0, smt_calculate_root(root_hash, &changes, proof, proof_length));
   hex2bin(expected_hash,
           "0x5faa7bccd1095c904fe34c99236f0734f909823d8d48b81b0b92bab531f372c1");
   ASSERT_EQ(0, memcmp(root_hash, expected_hash, 32));
@@ -479,8 +479,7 @@ UTEST(smt, update) {
   smt_state_init(&changes, entries, 32);
   smt_state_insert(&changes, key, value);
   smt_state_normalize(&changes);
-  ASSERT_EQ(0,
-            smt_calculate_root(root_hash, &changes, proof, proof_length));
+  ASSERT_EQ(0, smt_calculate_root(root_hash, &changes, proof, proof_length));
   hex2bin(expected_hash,
           "0x32845309d34f132cd6f7ac6a7881962401adc35c19a08d4fffeb511b97eabf86");
   ASSERT_EQ(0, memcmp(root_hash, expected_hash, 32));
@@ -496,8 +495,7 @@ UTEST(smt, update) {
   smt_state_init(&changes, entries, 32);
   smt_state_insert(&changes, key, value);
   smt_state_normalize(&changes);
-  ASSERT_EQ(0,
-            smt_calculate_root(root_hash, &changes, proof, proof_length));
+  ASSERT_EQ(0, smt_calculate_root(root_hash, &changes, proof, proof_length));
   hex2bin(expected_hash,
           "0xa4cbf1b69a848396ac759f362679e2b185ac87a17cba747d2db1ef6fd929042f");
   ASSERT_EQ(0, memcmp(root_hash, expected_hash, 32));

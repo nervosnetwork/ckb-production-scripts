@@ -6,8 +6,10 @@
 #include <string.h>
 
 #include "blake2b.h"
+#include "blockchain-api2.h"
 #include "ckb_consts.h"
 #include "xudt_rce_mol.h"
+#include "xudt_rce_mol2.h"
 
 #if defined(CKB_USE_SIM)
 #include <stdio.h>
@@ -15,6 +17,9 @@
 #include "ckb_syscall_xudt_sim.h"
 #define xudt_printf printf
 #else
+// it will be re-defined in ckb_dlfcn.h
+#undef MAX
+#undef MIN
 #include "ckb_dlfcn.h"
 #include "ckb_syscalls.h"
 #define xudt_printf(x, ...) (void)0
@@ -159,7 +164,7 @@ exit:
   return err;
 }
 
-int get_extesion_data(uint32_t index, mol_seg_t* item) {
+int get_extension_data(uint32_t index, mol_seg_t* item) {
   int err = 0;
   if (!g_witness_inited) {
     uint64_t witness_len = WITNESS_SIZE;
@@ -187,6 +192,44 @@ int get_extesion_data(uint32_t index, mol_seg_t* item) {
          ERROR_INVALID_MOL_FORMAT);
 
   *item = structure.seg;
+
+  err = 0;
+exit:
+  return err;
+}
+
+static uint32_t read_from_witness(uintptr_t arg[], uint8_t* ptr, uint32_t len,
+                                  uint32_t offset) {
+  int err;
+  uint64_t output_len = len;
+  err = ckb_checked_load_witness(ptr, &output_len, offset, arg[0], arg[1]);
+  if (err != 0) {
+    return 0;
+  }
+  return output_len;
+}
+
+int make_cursor_from_witness(mol2_cursor_t* result) {
+  int err = 0;
+  uint64_t witness_len = 0;
+  err = ckb_checked_load_witness(NULL, &witness_len, 0, 0,
+                                 CKB_SOURCE_GROUP_INPUT);
+  CHECK(err);
+
+  result->offset = 0;
+  result->size = witness_len;
+
+  static mol2_data_source_t s_data_source = {0};
+
+  s_data_source.read = read_from_witness;
+  s_data_source.total_size = witness_len;
+  s_data_source.args[0] = 0;
+  s_data_source.args[1] = CKB_SOURCE_GROUP_INPUT;
+
+  s_data_source.cache_size = 0;
+  s_data_source.start_point = 0;
+  s_data_source.max_cache_size = MAX_CACHE_SIZE;
+  result->data_source = &s_data_source;
 
   err = 0;
 exit:

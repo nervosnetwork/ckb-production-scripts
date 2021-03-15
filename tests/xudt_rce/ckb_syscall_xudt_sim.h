@@ -83,6 +83,7 @@ void rce_begin_proof() { MolBuilder_SmtProofVec_init(&g_proof_builder); }
 void rce_add_proof(const uint8_t* proof, uint32_t proof_len) {
   mol_seg_t seg = build_bytes(proof, proof_len);
   MolBuilder_SmtProofVec_push(&g_proof_builder, seg.ptr, seg.size);
+  free(seg.ptr);
 }
 
 void rce_end_proof() {
@@ -104,13 +105,18 @@ void xudt_set_owner_mode(uint8_t* hash_in_args, uint8_t* lock_script_hash) {
 }
 
 void xudt_add_input_lock_script_hash(uint8_t* hash) {
-  ASSERT(g_input_lock_script_hash_count < 16);
+  if (g_input_lock_script_hash_count >= 16) {
+    ASSERT(false);
+    return;
+  }
   memcpy(g_input_lock_script_hash[g_input_lock_script_hash_count], hash, 32);
   g_input_lock_script_hash_count++;
 }
 
 void xudt_add_output_lock_script_hash(uint8_t* hash) {
-  ASSERT(g_output_lock_script_hash_count < 16);
+  if (g_output_lock_script_hash_count > 16) {
+    return;
+  }
   memcpy(g_output_lock_script_hash[g_output_lock_script_hash_count], hash, 32);
   g_output_lock_script_hash_count++;
 }
@@ -158,7 +164,10 @@ void xudt_end_data(void) {
   g_structure = res2.seg;
 }
 
-int ckb_exit(int8_t code);
+int ckb_exit(int8_t code) {
+  exit(code);
+  return 0;
+}
 
 int ckb_load_tx_hash(void* addr, uint64_t* len, size_t offset) { return 0; }
 
@@ -212,8 +221,18 @@ int ckb_checked_load_witness(void* addr, uint64_t* len, size_t offset,
   mol_seg_res_t res = MolBuilder_WitnessArgs_build(w);
   assert(res.errno == 0);
 
-  memcpy(addr, res.seg.ptr, res.seg.size);
-  *len = res.seg.size;
+  if (res.seg.size <= offset) {
+    return 0;
+  }
+
+  uint32_t remaining = res.seg.size - offset;
+  if (remaining > *len) {
+    memcpy(addr, res.seg.ptr + offset, *len);
+    // keep "len" unchanged
+  } else {
+    memcpy(addr, res.seg.ptr + offset, res.seg.size);
+    *len = res.seg.size;
+  }
 
   free(res.seg.ptr);
   free(xwi_res.seg.ptr);

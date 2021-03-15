@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include "blake2b.h"
 
-#include "smt.h"
+#include "ckb_smt.h"
 
 #define MAX_ENTRIES_COUNT 8196
 int smt_func(const uint8_t* data, size_t size) {

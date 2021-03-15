@@ -25,7 +25,7 @@ ifeq ($(OS),MacOS)
 	COVERAGE_FLAGS+=-Wl,-U,_LLVMFuzzerCustomMutator -Wl,-U,_LLVMFuzzerInitialize
 endif
 
-EXTERNAL_HEADERS=../../../c/smt.h
+EXTERNAL_HEADERS=../../../deps/ckb-c-stdlib-simulator-only2/ckb_smt.h
 
 all: fuzzer coverage
 
@@ -36,7 +36,7 @@ report: $(COVERAGE_DIR)/fuzzer.profdata coverage $(EXTERNAL_HEADERS)
 	$(LLVM_COV) report --show-functions --instr-profile=$(COVERAGE_DIR)/fuzzer.profdata smt_coverage $(EXTERNAL_HEADERS)
 
 fuzzer: $(EXTERNAL_HEADERS)
-	clang $(FUZZER_FLAGS) smt_fuzzer.c -o smt_fuzzer
+	clang  $(FUZZER_FLAGS) smt_fuzzer.c -o smt_fuzzer
 
 coverage: $(EXTERNAL_HEADERS)
 	clang $(COVERAGE_FLAGS) smt_coverage.c smt_fuzzer.c -o smt_coverage

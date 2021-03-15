@@ -2,7 +2,7 @@
 #define XUDT_RCE_SIMULATOR_C_RCE_H_
 #include "ckb_smt.h"
 
-int get_extesion_data(uint32_t index, mol_seg_t* item);
+int get_extension_data(uint32_t index, mol_seg_t* item);
 
 #define MAX_RCRULES_COUNT 8192
 
@@ -154,7 +154,7 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
   CHECK(err);
 
   mol_seg_t structure = {0};
-  err = get_extesion_data(extension_index, &structure);
+  err = get_extension_data(extension_index, &structure);
   CHECK(err);
 
   CHECK2(MolReader_Bytes_verify(&structure, false) == MOL_OK,
