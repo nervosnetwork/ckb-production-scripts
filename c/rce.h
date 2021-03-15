@@ -1,11 +1,10 @@
 #ifndef XUDT_RCE_SIMULATOR_C_RCE_H_
 #define XUDT_RCE_SIMULATOR_C_RCE_H_
-#include "smt.h"
+#include "ckb_smt.h"
 
-int get_structure(uint32_t index, mol_seg_t* item);
+int get_extesion_data(uint32_t index, mol_seg_t* item);
 
 #define MAX_RCRULES_COUNT 8192
-#define MAX_LOCK_SCRIPT_HASH_COUNT 32
 
 // RC stands for Regulation Compliance
 typedef struct RCRule {
@@ -28,8 +27,8 @@ typedef enum RCDataUnionType {
 // script hash, values are either 0 or 1: 0 represents the corresponding lock
 // hash is missing in the sparse merkle tree, whereas 1 means the lock hash is
 // included in the sparse merkle tree.
-uint8_t SMT_VALUE_NOT_EXISTING[RCE_VALUE_BYTES] = {0};
-uint8_t SMT_VALUE_EXISTING[RCE_VALUE_BYTES] = {1};
+uint8_t SMT_VALUE_NOT_EXISTING[SMT_VALUE_BYTES] = {0};
+uint8_t SMT_VALUE_EXISTING[SMT_VALUE_BYTES] = {1};
 
 bool is_white_list(uint8_t flags) { return flags & 0x2; }
 
@@ -74,7 +73,7 @@ int gather_rcrules_recursively(const uint8_t* rce_cell_hash, int depth) {
     // "Any more RCRule structures will result in an immediate failure."
     CHECK2(g_rcrules_count < MAX_RCRULES_COUNT, ERROR_TOO_MANY_RCRULES);
     g_rcrules[g_rcrules_count].flags = *(flags.ptr);
-    memcpy(g_rcrules[g_rcrules_count].smt_root, smt_root.ptr, RCE_KEY_BYTES);
+    memcpy(g_rcrules[g_rcrules_count].smt_root, smt_root.ptr, SMT_KEY_BYTES);
 
     g_rcrules_count++;
   } else if (u.item_id == RDUT_RCCellVec) {
@@ -85,7 +84,7 @@ int gather_rcrules_recursively(const uint8_t* rce_cell_hash, int depth) {
     for (uint32_t i = 0; i < len; i++) {
       mol_seg_res_t cell = MolReader_RCCellVec_get(&u.seg, i);
       CHECK2(cell.errno == MOL_OK, ERROR_INVALID_MOL_FORMAT);
-      CHECK2(seg.size == RCE_KEY_BYTES, ERROR_INVALID_MOL_FORMAT);
+      CHECK2(seg.size == SMT_KEY_BYTES, ERROR_INVALID_MOL_FORMAT);
 
       err = gather_rcrules_recursively(seg.ptr, depth + 1);
       CHECK(err);
@@ -99,12 +98,12 @@ exit:
   return err;
 }
 
-int collect_hashes(rce_state_t* bl_states, rce_state_t* wl_states) {
+int collect_hashes(smt_state_t* bl_states, smt_state_t* wl_states) {
   int err = 0;
   uint32_t index = 0;
 
-  uint8_t lock_script_hash[RCE_KEY_BYTES];
-  uint64_t lock_script_hash_len = RCE_KEY_BYTES;
+  uint8_t lock_script_hash[SMT_KEY_BYTES];
+  uint64_t lock_script_hash_len = SMT_KEY_BYTES;
 
   index = 0;
   while (true) {
@@ -114,9 +113,9 @@ int collect_hashes(rce_state_t* bl_states, rce_state_t* wl_states) {
     if (err == CKB_INDEX_OUT_OF_BOUND) {
       break;
     }
-    err = rce_state_insert(wl_states, lock_script_hash, SMT_VALUE_EXISTING);
+    err = smt_state_insert(wl_states, lock_script_hash, SMT_VALUE_EXISTING);
     CHECK(err);
-    err = rce_state_insert(bl_states, lock_script_hash, SMT_VALUE_NOT_EXISTING);
+    err = smt_state_insert(bl_states, lock_script_hash, SMT_VALUE_NOT_EXISTING);
     CHECK(err);
     index++;
   }
@@ -128,9 +127,9 @@ int collect_hashes(rce_state_t* bl_states, rce_state_t* wl_states) {
     if (err == CKB_INDEX_OUT_OF_BOUND) {
       break;
     }
-    err = rce_state_insert(wl_states, lock_script_hash, SMT_VALUE_EXISTING);
+    err = smt_state_insert(wl_states, lock_script_hash, SMT_VALUE_EXISTING);
     CHECK(err);
-    err = rce_state_insert(bl_states, lock_script_hash, SMT_VALUE_NOT_EXISTING);
+    err = smt_state_insert(bl_states, lock_script_hash, SMT_VALUE_NOT_EXISTING);
     CHECK(err);
     index++;
   }
@@ -155,7 +154,7 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
   CHECK(err);
 
   mol_seg_t structure = {0};
-  err = get_structure(extension_index, &structure);
+  err = get_extesion_data(extension_index, &structure);
   CHECK(err);
 
   CHECK2(MolReader_Bytes_verify(&structure, false) == MOL_OK,
@@ -168,18 +167,18 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
   CHECK2(proof_len == g_rcrules_count, ERROR_RCRULES_PROOFS_MISMATCHED);
 
   // TODO: limit?
-  rce_pair_t wl_entries[MAX_LOCK_SCRIPT_HASH_COUNT];
-  rce_pair_t bl_entries[MAX_LOCK_SCRIPT_HASH_COUNT];
-  rce_state_t wl_states;
-  rce_state_t bl_states;
-  rce_state_init(&wl_states, wl_entries, MAX_LOCK_SCRIPT_HASH_COUNT);
-  rce_state_init(&bl_states, bl_entries, MAX_LOCK_SCRIPT_HASH_COUNT);
+  smt_pair_t wl_entries[MAX_LOCK_SCRIPT_HASH_COUNT];
+  smt_pair_t bl_entries[MAX_LOCK_SCRIPT_HASH_COUNT];
+  smt_state_t wl_states;
+  smt_state_t bl_states;
+  smt_state_init(&wl_states, wl_entries, MAX_LOCK_SCRIPT_HASH_COUNT);
+  smt_state_init(&bl_states, bl_entries, MAX_LOCK_SCRIPT_HASH_COUNT);
 
   err = collect_hashes(&bl_states, &wl_states);
   CHECK(err);
 
-  rce_state_normalize(&wl_states);
-  rce_state_normalize(&bl_states);
+  smt_state_normalize(&wl_states);
+  smt_state_normalize(&bl_states);
   for (index = 0; index < proof_len; index++) {
     mol_seg_res_t mol_proof = MolReader_SmtProofVec_get(&proofs, index);
     CHECK(mol_proof.errno);
@@ -190,12 +189,12 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
     const uint8_t* root_hash = current_rule->smt_root;
     // "Current RCRule must not be in Emergency Halt mode."
     if (is_emergency_halt_mode(current_rule->flags)) {
-      continue;
+      return ERROR_RCE_EMERGENCY_HATL;
     }
     if (is_white_list(current_rule->flags)) {
-      err = rce_smt_verify(root_hash, &wl_states, proof.ptr, proof.size);
+      err = smt_verify(root_hash, &wl_states, proof.ptr, proof.size);
     } else {
-      err = rce_smt_verify(root_hash, &bl_states, proof.ptr, proof.size);
+      err = smt_verify(root_hash, &bl_states, proof.ptr, proof.size);
     }
     CHECK2(err == 0, ERROR_SMT_VERIFY_FAILED);
   }

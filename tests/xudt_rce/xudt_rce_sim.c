@@ -179,14 +179,14 @@ UTEST(smt, verify_not_existing) {
       146, 222, 163, 40,  147, 106, 150, 97,  234, 134, 107, 237, 60, 9,   193,
       0,   16,  226, 17,  209, 89,  52,  22,  71,  135, 172, 225};
 
-  rce_pair_t entries[8];
-  rce_state_t changes;
-  rce_state_init(&changes, entries, 32);
-  rce_state_insert(&changes, key1, value1);
-  rce_state_insert(&changes, key2, value2);
-  rce_state_normalize(&changes);
+  smt_pair_t entries[8];
+  smt_state_t changes;
+  smt_state_init(&changes, entries, 32);
+  smt_state_insert(&changes, key1, value1);
+  smt_state_insert(&changes, key2, value2);
+  smt_state_normalize(&changes);
 
-  ASSERT_EQ(0, rce_smt_verify(root_hash, &changes, proof, sizeof(proof)));
+  ASSERT_EQ(0, smt_verify(root_hash, &changes, proof, sizeof(proof)));
 }
 // this is the case from
 // https://github.com/nervosnetwork/ckb-simple-account-layer/blob/1970c0382271837ff46fdc276c5b63bccb4324db/c/tests/main.c#L136
@@ -205,13 +205,13 @@ UTEST(smt, verify_empty) {
           "0x0000000000000000000000000000000000000000000000000000000000000000");
   int proof_length = hex2bin(proof, "0x4c");
 
-  rce_pair_t entries[8];
-  rce_state_t changes;
-  rce_state_init(&changes, entries, 32);
-  rce_state_insert(&changes, key, value);
-  rce_state_normalize(&changes);
+  smt_pair_t entries[8];
+  smt_state_t changes;
+  smt_state_init(&changes, entries, 32);
+  smt_state_insert(&changes, key, value);
+  smt_state_normalize(&changes);
 
-  ASSERT_EQ(0, rce_smt_verify(root_hash, &changes, proof, proof_length));
+  ASSERT_EQ(0, smt_verify(root_hash, &changes, proof, proof_length));
 }
 
 UTEST(smt, verify_empty2) {
@@ -230,13 +230,13 @@ UTEST(smt, verify_empty2) {
                              "0x4c50f027cdd63d6d03e2a8dfc28d1919def1324b11b4473"
                              "3937ce66b8cf343a2fb536e");
 
-  rce_pair_t entries[8];
-  rce_state_t changes;
-  rce_state_init(&changes, entries, 32);
-  rce_state_insert(&changes, key, value);
-  rce_state_normalize(&changes);
+  smt_pair_t entries[8];
+  smt_state_t changes;
+  smt_state_init(&changes, entries, 32);
+  smt_state_insert(&changes, key, value);
+  smt_state_normalize(&changes);
 
-  ASSERT_EQ(0, rce_smt_verify(root_hash, &changes, proof, proof_length));
+  ASSERT_EQ(0, smt_verify(root_hash, &changes, proof, proof_length));
 }
 
 UTEST(smt, verify1) {
@@ -256,13 +256,13 @@ UTEST(smt, verify1) {
       "0x4c50f85faa7bccd1095c904fe34c99236f0734f909823d8d48b81b0b92bab531f372c1"
       "50fe3f2a0a59ba1081f2d343682b200a778191a4e5838a46774eda8e1ee201c6cb2f");
 
-  rce_pair_t entries[8];
-  rce_state_t changes;
-  rce_state_init(&changes, entries, 32);
-  rce_state_insert(&changes, key, value);
-  rce_state_normalize(&changes);
+  smt_pair_t entries[8];
+  smt_state_t changes;
+  smt_state_init(&changes, entries, 32);
+  smt_state_insert(&changes, key, value);
+  smt_state_normalize(&changes);
 
-  ASSERT_EQ(0, rce_smt_verify(root_hash, &changes, proof, proof_length));
+  ASSERT_EQ(0, smt_verify(root_hash, &changes, proof, proof_length));
 }
 
 UTEST(smt, verify2) {
@@ -282,13 +282,13 @@ UTEST(smt, verify2) {
       "0x4c50f8a9cee9b111fddde5dd16c6684715587ba628bf73407e03e9db579e41af0c09b8"
       "50fe3f2a0a59ba1081f2d343682b200a778191a4e5838a46774eda8e1ee201c6cb2f");
 
-  rce_pair_t entries[8];
-  rce_state_t changes;
-  rce_state_init(&changes, entries, 32);
-  rce_state_insert(&changes, key, value);
-  rce_state_normalize(&changes);
+  smt_pair_t entries[8];
+  smt_state_t changes;
+  smt_state_init(&changes, entries, 32);
+  smt_state_insert(&changes, key, value);
+  smt_state_normalize(&changes);
 
-  ASSERT_EQ(0, rce_smt_verify(root_hash, &changes, proof, proof_length));
+  ASSERT_EQ(0, smt_verify(root_hash, &changes, proof, proof_length));
 }
 
 UTEST(smt, verify3) {
@@ -308,13 +308,13 @@ UTEST(smt, verify3) {
       "0x4c50fe32845309d34f132cd6f7ac6a7881962401adc35c19a08d4fffeb511b97ea"
       "bf86");
 
-  rce_pair_t entries[8];
-  rce_state_t changes;
-  rce_state_init(&changes, entries, 32);
-  rce_state_insert(&changes, key, value);
-  rce_state_normalize(&changes);
+  smt_pair_t entries[8];
+  smt_state_t changes;
+  smt_state_init(&changes, entries, 32);
+  smt_state_insert(&changes, key, value);
+  smt_state_normalize(&changes);
 
-  ASSERT_EQ(0, rce_smt_verify(root_hash, &changes, proof, proof_length));
+  ASSERT_EQ(0, smt_verify(root_hash, &changes, proof, proof_length));
 }
 
 UTEST(smt, verify_invalid_hash) {
@@ -334,13 +334,13 @@ UTEST(smt, verify_invalid_hash) {
       "0x4c50fe32845309d34f132cd6f7ac6a7881962401adc35c19a18d4fffeb511b97ea"
       "bf86");
 
-  rce_pair_t entries[8];
-  rce_state_t changes;
-  rce_state_init(&changes, entries, 32);
-  rce_state_insert(&changes, key, value);
-  rce_state_normalize(&changes);
+  smt_pair_t entries[8];
+  smt_state_t changes;
+  smt_state_init(&changes, entries, 32);
+  smt_state_insert(&changes, key, value);
+  smt_state_normalize(&changes);
 
-  ASSERT_NE(0, rce_smt_verify(root_hash, &changes, proof, proof_length));
+  ASSERT_NE(0, smt_verify(root_hash, &changes, proof, proof_length));
 }
 
 UTEST(smt, verify_all_leaves_used) {}
@@ -358,22 +358,22 @@ UTEST(smt, verify_multi_2) {
       "0x4c4c48f950fe32845309d34f132cd6f7ac6a7881962401adc35c19a08d4fffeb51"
       "1b97eabf86");
 
-  rce_pair_t entries[8];
-  rce_state_t changes;
-  rce_state_init(&changes, entries, 32);
+  smt_pair_t entries[8];
+  smt_state_t changes;
+  smt_state_init(&changes, entries, 32);
   hex2bin(key,
           "0xe8c0265680a02b680b6cbc880348f062b825b28e237da7169aded4bcac0a04e5");
   hex2bin(value,
           "0x2ca41595841e46ce8e74ad749e5c3f1d17202150f99c3d8631233ebdd19b19eb");
-  rce_state_insert(&changes, key, value);
+  smt_state_insert(&changes, key, value);
   hex2bin(key,
           "0xe8c0265680a02b680b6cbc880348f062b825b28e237da7169aded4bcac0a04e6");
   hex2bin(value,
           "0x2ca41595841e46ce8e74ad749e5c3f1d17202150f99c3d8631233ebdd19b19ec");
-  rce_state_insert(&changes, key, value);
-  rce_state_normalize(&changes);
+  smt_state_insert(&changes, key, value);
+  smt_state_normalize(&changes);
 
-  ASSERT_EQ(0, rce_smt_verify(root_hash, &changes, proof, proof_length));
+  ASSERT_EQ(0, smt_verify(root_hash, &changes, proof, proof_length));
 }
 
 UTEST(smt, verify_multi_3) {
@@ -386,27 +386,27 @@ UTEST(smt, verify_multi_3) {
           "0xa4cbf1b69a848396ac759f362679e2b185ac87a17cba747d2db1ef6fd929042f");
   int proof_length = hex2bin(proof, "0x4c4c48f84c48fe");
 
-  rce_pair_t entries[8];
-  rce_state_t changes;
-  rce_state_init(&changes, entries, 32);
+  smt_pair_t entries[8];
+  smt_state_t changes;
+  smt_state_init(&changes, entries, 32);
   hex2bin(key,
           "0xe8c0265680a02b680b6cbc880348f062b825b28e237da7169aded4bcac0a04e5");
   hex2bin(value,
           "0x2ca41595841e46ce8e74ad749e5c3f1d17202150f99c3d8631233ebdd19b19eb");
-  rce_state_insert(&changes, key, value);
+  smt_state_insert(&changes, key, value);
   hex2bin(key,
           "0x381dc5391dab099da5e28acd1ad859a051cf18ace804d037f12819c6fbc0e18b");
   hex2bin(value,
           "0x9158ce9b0e11dd150ba2ae5d55c1db04b1c5986ec626f2e38a93fe8ad0b2923b");
-  rce_state_insert(&changes, key, value);
+  smt_state_insert(&changes, key, value);
   hex2bin(key,
           "0xa9bb945be71f0bd2757d33d2465b6387383da42f321072e47472f0c9c7428a8a");
   hex2bin(value,
           "0xa939a47335f777eac4c40fbc0970e25f832a24e1d55adc45a7b76d63fe364e82");
-  rce_state_insert(&changes, key, value);
-  rce_state_normalize(&changes);
+  smt_state_insert(&changes, key, value);
+  smt_state_normalize(&changes);
 
-  ASSERT_EQ(0, rce_smt_verify(root_hash, &changes, proof, proof_length));
+  ASSERT_EQ(0, smt_verify(root_hash, &changes, proof, proof_length));
 }
 
 UTEST(smt, verify_invalid_height) {
@@ -419,27 +419,27 @@ UTEST(smt, verify_invalid_height) {
           "0xa4cbf1b69a848396ac759f362679e2b185ac87a17cba747d2db1ef6fd929042f");
   int proof_length = hex2bin(proof, "0x4c4c48204c4840");
 
-  rce_pair_t entries[8];
-  rce_state_t changes;
-  rce_state_init(&changes, entries, 32);
+  smt_pair_t entries[8];
+  smt_state_t changes;
+  smt_state_init(&changes, entries, 32);
   hex2bin(key,
           "0xe8c0265680a02b680b6cbc880348f062b825b28e237da7169aded4bcac0a04e5");
   hex2bin(value,
           "0x2ca41595841e46ce8e74ad749e5c3f1d17202150f99c3d8631233ebdd19b19eb");
-  rce_state_insert(&changes, key, value);
+  smt_state_insert(&changes, key, value);
   hex2bin(key,
           "0x381dc5391dab099da5e28acd1ad859a051cf18ace804d037f12819c6fbc0e18b");
   hex2bin(value,
           "0x9158ce9b0e11dd150ba2ae5d55c1db04b1c5986ec626f2e38a93fe8ad0b2923b");
-  rce_state_insert(&changes, key, value);
+  smt_state_insert(&changes, key, value);
   hex2bin(key,
           "0xa9bb945be71f0bd2757d33d2465b6387383da42f321072e47472f0c9c7428a8a");
   hex2bin(value,
           "0xa939a47335f777eac4c40fbc0970e25f832a24e1d55adc45a7b76d63fe364e82");
-  rce_state_insert(&changes, key, value);
-  rce_state_normalize(&changes);
+  smt_state_insert(&changes, key, value);
+  smt_state_normalize(&changes);
 
-  ASSERT_NE(0, rce_smt_verify(root_hash, &changes, proof, proof_length));
+  ASSERT_NE(0, smt_verify(root_hash, &changes, proof, proof_length));
 }
 
 UTEST(smt, update) {
@@ -448,8 +448,8 @@ UTEST(smt, update) {
   uint8_t root_hash[32];
   uint8_t expected_hash[32];
   uint8_t proof[96];
-  rce_pair_t entries[8];
-  rce_state_t changes;
+  smt_pair_t entries[8];
+  smt_state_t changes;
 
   memset(root_hash, 0, 32);
   hex2bin(key,
@@ -458,11 +458,11 @@ UTEST(smt, update) {
           "0xa939a47335f777eac4c40fbc0970e25f832a24e1d55adc45a7b76d63fe364e82");
   int proof_length = hex2bin(proof, "0x4c");
   memset(&proof[32], 0, 64);
-  rce_state_init(&changes, entries, 32);
-  rce_state_insert(&changes, key, value);
-  rce_state_normalize(&changes);
+  smt_state_init(&changes, entries, 32);
+  smt_state_insert(&changes, key, value);
+  smt_state_normalize(&changes);
   ASSERT_EQ(0,
-            rce_smt_calculate_root(root_hash, &changes, proof, proof_length));
+            smt_calculate_root(root_hash, &changes, proof, proof_length));
   hex2bin(expected_hash,
           "0x5faa7bccd1095c904fe34c99236f0734f909823d8d48b81b0b92bab531f372c1");
   ASSERT_EQ(0, memcmp(root_hash, expected_hash, 32));
@@ -476,11 +476,11 @@ UTEST(smt, update) {
       "0x4c50f85faa7bccd1095c904fe34c99236f0734f909823d8d48b81b0b92bab531f3"
       "72c1");
   memset(&proof[64], 0, 32);
-  rce_state_init(&changes, entries, 32);
-  rce_state_insert(&changes, key, value);
-  rce_state_normalize(&changes);
+  smt_state_init(&changes, entries, 32);
+  smt_state_insert(&changes, key, value);
+  smt_state_normalize(&changes);
   ASSERT_EQ(0,
-            rce_smt_calculate_root(root_hash, &changes, proof, proof_length));
+            smt_calculate_root(root_hash, &changes, proof, proof_length));
   hex2bin(expected_hash,
           "0x32845309d34f132cd6f7ac6a7881962401adc35c19a08d4fffeb511b97eabf86");
   ASSERT_EQ(0, memcmp(root_hash, expected_hash, 32));
@@ -493,11 +493,11 @@ UTEST(smt, update) {
       proof,
       "0x4c50fe32845309d34f132cd6f7ac6a7881962401adc35c19a08d4fffeb511b97ea"
       "bf86");
-  rce_state_init(&changes, entries, 32);
-  rce_state_insert(&changes, key, value);
-  rce_state_normalize(&changes);
+  smt_state_init(&changes, entries, 32);
+  smt_state_insert(&changes, key, value);
+  smt_state_normalize(&changes);
   ASSERT_EQ(0,
-            rce_smt_calculate_root(root_hash, &changes, proof, proof_length));
+            smt_calculate_root(root_hash, &changes, proof, proof_length));
   hex2bin(expected_hash,
           "0xa4cbf1b69a848396ac759f362679e2b185ac87a17cba747d2db1ef6fd929042f");
   ASSERT_EQ(0, memcmp(root_hash, expected_hash, 32));

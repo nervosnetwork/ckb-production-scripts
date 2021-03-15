@@ -46,6 +46,8 @@ enum ErrorCode {
   ERROR_TOO_MANY_RCRULES,
   ERROR_RCRULES_PROOFS_MISMATCHED,
   ERROR_SMT_VERIFY_FAILED,
+  ERROR_RCE_EMERGENCY_HATL,
+  ERROR_NOT_VALIDATED,
 };
 
 #define CHECK2(cond, code) \
@@ -73,6 +75,7 @@ enum ErrorCode {
 #define EXPORTED_FUNC_NAME "validate"
 #define MAX_CODE_SIZE (1024 * 1024)
 #define FLAGS_SIZE 4
+#define MAX_LOCK_SCRIPT_HASH_COUNT 2048
 
 #include "rce.h"
 
@@ -121,7 +124,7 @@ int load_validate_func(const uint8_t* hash, uint8_t hash_type,
   void* handle = NULL;
   size_t consumed_size = 0;
 
-  if (memcmp(RCE_HASH, hash, 32) == 0) {
+  if (memcmp(RCE_HASH, hash, 32) == 0 && hash_type == 1) {
     *cat = XVFC_RCE;
     *func = rce_validate;
     return 0;
@@ -156,7 +159,7 @@ exit:
   return err;
 }
 
-int get_structure(uint32_t index, mol_seg_t* item) {
+int get_extesion_data(uint32_t index, mol_seg_t* item) {
   int err = 0;
   if (!g_witness_inited) {
     uint64_t witness_len = WITNESS_SIZE;
@@ -225,7 +228,8 @@ exit:
 // *var_data will point to "Raw Extension Data", which can be in args or witness
 // *var_data will refer to a memory location of g_script or g_witness
 int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
-               uint32_t* var_len) {
+               uint32_t* var_len, uint8_t* input_lock_script_hashes,
+               uint32_t* input_lock_script_hashes_count) {
   int err = 0;
 
   uint64_t len = SCRIPT_SIZE;
@@ -244,6 +248,7 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
   mol_seg_t args_bytes_seg = MolReader_Bytes_raw_bytes(&args_seg);
   CHECK2(args_bytes_seg.size >= BLAKE2B_BLOCK_SIZE, ERROR_ARGUMENTS_LEN);
 
+  *input_lock_script_hashes_count = 0;
   // With owner lock script extracted, we will look through each input in the
   // current transaction to see if any unlocked cell uses owner lock.
   *owner_mode = 0;
@@ -266,6 +271,11 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
       break;
     }
     CHECK(ret);
+    if (i < MAX_LOCK_SCRIPT_HASH_COUNT) {
+      memcpy(&input_lock_script_hashes[i * BLAKE2B_BLOCK_SIZE], buffer,
+             BLAKE2B_BLOCK_SIZE);
+      *input_lock_script_hashes_count += 1;
+    }
 
     if (args_bytes_seg.size == BLAKE2B_BLOCK_SIZE &&
         memcmp(buffer, args_bytes_seg.ptr, BLAKE2B_BLOCK_SIZE) == 0) {
@@ -418,6 +428,31 @@ int simple_udt(int owner_mode) {
   return CKB_SUCCESS;
 }
 
+//   If the extension script is identical to a lock script of one input cell in
+//   current transaction, we consider the extension script to be already
+//   validated, no additional check is needed for current extension
+int is_extension_script_validated(mol_seg_t extension_script,
+                                  uint8_t* input_lock_script_hash,
+                                  uint32_t input_lock_script_hash_count) {
+  int err = 0;
+
+  // verify the hash
+  uint8_t hash[BLAKE2B_BLOCK_SIZE];
+  err = blake2b(hash, BLAKE2B_BLOCK_SIZE, extension_script.ptr,
+                extension_script.size, NULL, 0);
+  CHECK2(err == 0, ERROR_BLAKE2B_ERROR);
+
+  for (uint32_t i = 0; i < input_lock_script_hash_count; i++) {
+    if (memcmp(&input_lock_script_hash[i * BLAKE2B_BLOCK_SIZE], hash,
+               BLAKE160_SIZE) == 0) {
+      return 0;
+    }
+  }
+  err = ERROR_NOT_VALIDATED;
+exit:
+  return err;
+}
+
 #ifdef CKB_USE_SIM
 int simulator_main() {
 #else
@@ -428,9 +463,11 @@ int main() {
   uint8_t* raw_extension_data = NULL;
   uint32_t raw_extension_len = 0;
   XUDTFlags flags = XUDTFlags_Plain;
-
-  err =
-      parse_args(&owner_mode, &flags, &raw_extension_data, &raw_extension_len);
+  uint8_t
+      input_lock_script_hash[MAX_LOCK_SCRIPT_HASH_COUNT * BLAKE2B_BLOCKBYTES];
+  uint32_t input_lock_script_hash_count = 0;
+  err = parse_args(&owner_mode, &flags, &raw_extension_data, &raw_extension_len,
+                   input_lock_script_hash, &input_lock_script_hash_count);
   CHECK(err);
   CHECK2(owner_mode == 1 || owner_mode == 0, ERROR_INVALID_ARGS_FORMAT);
   if (flags != XUDTFlags_Plain) {
@@ -465,6 +502,14 @@ int main() {
     XUDTValidateFuncCategory cat = XVFC_Normal;
     err = load_validate_func(code_hash.ptr, hash_type2, &func, &cat);
     CHECK(err);
+    // RCE is with high priority, must be checked
+    if (cat != XVFC_RCE) {
+      int err2 = is_extension_script_validated(res.seg, input_lock_script_hash,
+                                               input_lock_script_hash_count);
+      if (err2 == 0) {
+        continue;
+      }
+    }
     mol_seg_t args_raw_bytes = MolReader_Bytes_raw_bytes(&args);
 
     int result = 0;

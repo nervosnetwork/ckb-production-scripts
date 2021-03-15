@@ -15,7 +15,7 @@ MOLC_VERSION := 0.7.0
 # docker pull nervos/ckb-riscv-gnu-toolchain:gnu-bionic-20191012
 BUILDER_DOCKER := nervos/ckb-riscv-gnu-toolchain@sha256:aae8a3f79705f67d505d1f1d5ddc694a4fd537ed1c7e9622420a470d59ba2ec3
 
-all: build/simple_udt build/anyone_can_pay build/always_success
+all: build/simple_udt build/anyone_can_pay build/always_success build/xudt_rce
 
 all-via-docker: ${PROTOCOL_HEADER}
 	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make"
@@ -51,18 +51,13 @@ $(SECP256K1_SRC):
 ${PROTOCOL_SCHEMA}:
 	curl -L -o $@ ${PROTOCOL_URL}
 
-xudt_fmt:
-	clang-format -i -style=Google $(wildcard c/smt.h c/rce.h c/xudt_rce.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
-	git diff --exit-code $(wildcard  c/smt.h c/rce.h c/xudt.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
+fmt:
+	clang-format -i -style=Google $(wildcard c/always_success.c c/anyone_can_pay.c c/smt.h c/rce.h c/xudt_rce.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
+	git diff --exit-code $(wildcard c/always_success.c c/anyone_can_pay.c c/smt.h c/rce.h c/xudt_rce.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
 
-xudt_rce-via-docker:
-	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make build/xudt_rce"
 
 c/xudt_rce_mol.h: c/xudt_rce.mol
 	${MOLC} --language c --schema-file $< > $@
-
-xudt_rce_clean:
-	rm -f build/xudt_rce
 
 build/xudt_rce: c/xudt_rce.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
