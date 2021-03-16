@@ -38,7 +38,7 @@ struct XudtWitnessInputVTable *GetXudtWitnessInputVTable(void);
 struct XudtWitnessInputType make_XudtWitnessInput(mol2_cursor_t *cur);
 struct ScriptVecOptType XudtWitnessInput_get_raw_extension_data_impl(
     struct XudtWitnessInputType *);
-struct BytesVecType XudtWitnessInput_get_structure_impl(
+struct BytesVecType XudtWitnessInput_get_extension_data_impl(
     struct XudtWitnessInputType *);
 struct RCRuleType;
 struct RCRuleVTable;
@@ -120,7 +120,7 @@ typedef struct ScriptVecOptType {
 
 typedef struct XudtWitnessInputVTable {
   struct ScriptVecOptType (*raw_extension_data)(struct XudtWitnessInputType *);
-  struct BytesVecType (*structure)(struct XudtWitnessInputType *);
+  struct BytesVecType (*extension_data)(struct XudtWitnessInputType *);
 } XudtWitnessInputVTable;
 typedef struct XudtWitnessInputType {
   mol2_cursor_t cur;
@@ -283,7 +283,7 @@ struct XudtWitnessInputVTable *GetXudtWitnessInputVTable(void) {
   static int inited = 0;
   if (inited) return &s_vtable;
   s_vtable.raw_extension_data = XudtWitnessInput_get_raw_extension_data_impl;
-  s_vtable.structure = XudtWitnessInput_get_structure_impl;
+  s_vtable.extension_data = XudtWitnessInput_get_extension_data_impl;
   return &s_vtable;
 }
 ScriptVecOptType XudtWitnessInput_get_raw_extension_data_impl(
@@ -294,7 +294,8 @@ ScriptVecOptType XudtWitnessInput_get_raw_extension_data_impl(
   ret.t = GetScriptVecOptVTable();
   return ret;
 }
-BytesVecType XudtWitnessInput_get_structure_impl(XudtWitnessInputType *this) {
+BytesVecType XudtWitnessInput_get_extension_data_impl(
+    XudtWitnessInputType *this) {
   BytesVecType ret;
   mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 1);
   ret.cur = cur;

@@ -2,9 +2,12 @@
 #define XUDT_RCE_SIMULATOR_C_RCE_H_
 #include "ckb_smt.h"
 
-int get_extension_data(uint32_t index, mol_seg_t* item);
+int get_extension_data(uint32_t index, uint8_t* buff, uint32_t buff_len,
+                       uint32_t* out_len);
 
 #define MAX_RCRULES_COUNT 8192
+#define MAX_RECURSIVE_DEPTH 16
+#define MAX_EXTENSION_DATA_SIZE 32768
 
 // RC stands for Regulation Compliance
 typedef struct RCRule {
@@ -38,8 +41,7 @@ bool is_emergency_halt_mode(uint8_t flags) { return flags & 0x1; }
 int gather_rcrules_recursively(const uint8_t* rce_cell_hash, int depth) {
   int err = 0;
 
-  // TODO:
-  if (depth > 10) return ERROR_RCRULES_TOO_DEEP;
+  if (depth > MAX_RECURSIVE_DEPTH) return ERROR_RCRULES_TOO_DEEP;
 
   size_t index = 0;
   // note: RCE Cell is with hash_type = 1
@@ -146,27 +148,25 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
 
   CHECK2(args_len == BLAKE2B_BLOCK_SIZE, ERROR_INVALID_MOL_FORMAT);
   CHECK2(args != NULL, ERROR_INVALID_ARGS);
-  // TODO: RCE under owner mode
   if (is_owner_mode) return 0;
 
   g_rcrules_count = 0;
   err = gather_rcrules_recursively(args, 0);
   CHECK(err);
 
-  mol_seg_t structure = {0};
-  err = get_extension_data(extension_index, &structure);
+  uint8_t buff[MAX_EXTENSION_DATA_SIZE];
+  uint32_t out_len = 0;
+  err = get_extension_data(extension_index, buff, MAX_EXTENSION_DATA_SIZE,
+                           &out_len);
   CHECK(err);
 
-  CHECK2(MolReader_Bytes_verify(&structure, false) == MOL_OK,
-         ERROR_INVALID_MOL_FORMAT);
-  mol_seg_t proofs = MolReader_Bytes_raw_bytes(&structure);
+  mol_seg_t proofs = {.ptr = buff, .size = out_len};
   CHECK2(MolReader_SmtProofVec_verify(&proofs, false) == MOL_OK,
          ERROR_INVALID_MOL_FORMAT);
   uint32_t proof_len = MolReader_SmtProofVec_length(&proofs);
   // count of proof should be same as size of RCRules
   CHECK2(proof_len == g_rcrules_count, ERROR_RCRULES_PROOFS_MISMATCHED);
 
-  // TODO: limit?
   smt_pair_t wl_entries[MAX_LOCK_SCRIPT_HASH_COUNT];
   smt_pair_t bl_entries[MAX_LOCK_SCRIPT_HASH_COUNT];
   smt_state_t wl_states;

@@ -5,7 +5,7 @@ option ScriptVecOpt (ScriptVec);
 
 table XudtWitnessInput {
     raw_extension_data: ScriptVecOpt,
-    structure: BytesVec,
+    extension_data: BytesVec,
 }
 
 struct RCRule {

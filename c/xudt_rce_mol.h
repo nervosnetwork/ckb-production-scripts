@@ -33,7 +33,7 @@ MOLECULE_API_DECORATOR  mol_errno       MolReader_XudtWitnessInput_verify       
 #define                                 MolReader_XudtWitnessInput_actual_field_count(s) mol_table_actual_field_count(s)
 #define                                 MolReader_XudtWitnessInput_has_extra_fields(s)  mol_table_has_extra_fields(s, 2)
 #define                                 MolReader_XudtWitnessInput_get_raw_extension_data(s) mol_table_slice_by_index(s, 0)
-#define                                 MolReader_XudtWitnessInput_get_structure(s)     mol_table_slice_by_index(s, 1)
+#define                                 MolReader_XudtWitnessInput_get_extension_data(s) mol_table_slice_by_index(s, 1)
 #define                                 MolReader_RCRule_verify(s, c)                   mol_verify_fixed_size(s, 33)
 #define                                 MolReader_RCRule_get_smt_root(s)                mol_slice_by_offset(s, 0, 32)
 #define                                 MolReader_RCRule_get_flags(s)                   mol_slice_by_offset(s, 32, 1)
@@ -81,7 +81,7 @@ MOLECULE_API_DECORATOR  mol_errno       MolReader_XudtData_verify               
 #define                                 MolBuilder_ScriptVecOpt_clear(b)                mol_builder_discard(b)
 #define                                 MolBuilder_XudtWitnessInput_init(b)             mol_table_builder_initialize(b, 64, 2)
 #define                                 MolBuilder_XudtWitnessInput_set_raw_extension_data(b, p, l) mol_table_builder_add(b, 0, p, l)
-#define                                 MolBuilder_XudtWitnessInput_set_structure(b, p, l) mol_table_builder_add(b, 1, p, l)
+#define                                 MolBuilder_XudtWitnessInput_set_extension_data(b, p, l) mol_table_builder_add(b, 1, p, l)
 MOLECULE_API_DECORATOR  mol_seg_res_t   MolBuilder_XudtWitnessInput_build               (mol_builder_t);
 #define                                 MolBuilder_XudtWitnessInput_clear(b)            mol_builder_discard(b)
 #define                                 MolBuilder_RCRule_init(b)                       mol_builder_initialize_fixed_size(b, 33)

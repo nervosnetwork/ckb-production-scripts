@@ -2,6 +2,12 @@
 #define ASSERT(s) (void)0
 #endif
 
+// it's used by blockchain-api2.h, the behavior when panic
+#ifndef MOL2_EXIT
+#define MOL2_EXIT ckb_exit
+#endif
+int ckb_exit(signed char);
+
 #include <stdbool.h>
 #include <string.h>
 
@@ -53,6 +59,7 @@ enum ErrorCode {
   ERROR_SMT_VERIFY_FAILED,
   ERROR_RCE_EMERGENCY_HATL,
   ERROR_NOT_VALIDATED,
+  ERROR_TOO_MANY_LOCK,
 };
 
 #define CHECK2(cond, code) \
@@ -76,7 +83,7 @@ enum ErrorCode {
 #define BLAKE2B_BLOCK_SIZE 32
 #define BLAKE160_SIZE 20
 #define SCRIPT_SIZE 32768
-#define WITNESS_SIZE 32768
+#define RAW_EXTENSION_SIZE 32768
 #define EXPORTED_FUNC_NAME "validate"
 #define MAX_CODE_SIZE (1024 * 1024)
 #define FLAGS_SIZE 4
@@ -90,9 +97,8 @@ enum ErrorCode {
 typedef unsigned __int128 uint128_t;
 
 uint8_t g_script[SCRIPT_SIZE] = {0};
-uint8_t g_witness[WITNESS_SIZE] = {0};
-uint32_t g_witness_len = 0;
-bool g_witness_inited = false;
+uint8_t g_raw_extension_data[RAW_EXTENSION_SIZE] = {0};
+WitnessArgsType g_witness_args;
 
 uint8_t g_code_buffer[MAX_CODE_SIZE] __attribute__((aligned(RISCV_PGSIZE)));
 uint32_t g_code_used = 0;
@@ -164,40 +170,6 @@ exit:
   return err;
 }
 
-int get_extension_data(uint32_t index, mol_seg_t* item) {
-  int err = 0;
-  if (!g_witness_inited) {
-    uint64_t witness_len = WITNESS_SIZE;
-    err = ckb_checked_load_witness(g_witness, &witness_len, 0, 0,
-                                   CKB_SOURCE_GROUP_INPUT);
-    CHECK(err);
-    g_witness_len = witness_len;
-    g_witness_inited = true;
-  }
-
-  mol_seg_t seg = {.ptr = g_witness, .size = g_witness_len};
-
-  mol_seg_t output = MolReader_WitnessArgs_get_input_type(&seg);
-  CHECK2(MolReader_Bytes_verify(&output, false) == MOL_OK,
-         ERROR_INVALID_MOL_FORMAT);
-
-  mol_seg_t raw = MolReader_Bytes_raw_bytes(&output);
-  mol_seg_t structures = MolReader_XudtWitnessInput_get_structure(&raw);
-  CHECK2(MolReader_BytesVec_verify(&structures, false) == MOL_OK,
-         ERROR_INVALID_MOL_FORMAT);
-
-  mol_seg_res_t structure = MolReader_BytesVec_get(&structures, index);
-  CHECK(structure.errno);
-  CHECK2(MolReader_Bytes_verify(&structure.seg, false) == MOL_OK,
-         ERROR_INVALID_MOL_FORMAT);
-
-  *item = structure.seg;
-
-  err = 0;
-exit:
-  return err;
-}
-
 static uint32_t read_from_witness(uintptr_t arg[], uint8_t* ptr, uint32_t len,
                                   uint32_t offset) {
   int err;
@@ -209,27 +181,65 @@ static uint32_t read_from_witness(uintptr_t arg[], uint8_t* ptr, uint32_t len,
   return output_len;
 }
 
-int make_cursor_from_witness(mol2_cursor_t* result) {
+// due to the "static" data (s_data_source), the "WitnessArgsType" is a
+// singleton. note: mol2_data_source_t consumes a lot of memory due to the
+// "cache" field (default 2K)
+int make_cursor_from_witness(WitnessArgsType* witness) {
   int err = 0;
   uint64_t witness_len = 0;
   err = ckb_checked_load_witness(NULL, &witness_len, 0, 0,
                                  CKB_SOURCE_GROUP_INPUT);
   CHECK(err);
+  CHECK2(witness_len > 0, ERROR_INVALID_MOL_FORMAT);
+  CHECK2(witness_len <= RAW_EXTENSION_SIZE, ERROR_INVALID_MOL_FORMAT);
 
-  result->offset = 0;
-  result->size = witness_len;
+  mol2_cursor_t cur;
+
+  cur.offset = 0;
+  cur.size = witness_len;
 
   static mol2_data_source_t s_data_source = {0};
 
   s_data_source.read = read_from_witness;
   s_data_source.total_size = witness_len;
+  // pass index and source as args
   s_data_source.args[0] = 0;
   s_data_source.args[1] = CKB_SOURCE_GROUP_INPUT;
 
   s_data_source.cache_size = 0;
   s_data_source.start_point = 0;
   s_data_source.max_cache_size = MAX_CACHE_SIZE;
-  result->data_source = &s_data_source;
+  cur.data_source = &s_data_source;
+
+  *witness = make_WitnessArgs(&cur);
+
+  err = 0;
+exit:
+  return err;
+}
+
+int get_extension_data(uint32_t index, uint8_t* buff, uint32_t buff_len,
+                       uint32_t* out_len) {
+  int err = 0;
+  err = make_cursor_from_witness(&g_witness_args);
+  CHECK(err);
+
+  BytesOptType input = g_witness_args.t->input_type(&g_witness_args);
+  CHECK2(!input.t->is_none(&input), ERROR_INVALID_MOL_FORMAT);
+
+  mol2_cursor_t bytes = input.t->unwrap(&input);
+  // convert Bytes to XudtWitnessInputType
+  XudtWitnessInputType witness_input = make_XudtWitnessInput(&bytes);
+  BytesVecType extension_data_vec =
+      witness_input.t->extension_data(&witness_input);
+
+  bool existing = false;
+  mol2_cursor_t extension_data =
+      extension_data_vec.t->get(&extension_data_vec, index, &existing);
+  CHECK2(existing, ERROR_INVALID_MOL_FORMAT);
+  CHECK2(buff_len >= extension_data.size, ERROR_INVALID_MOL_FORMAT);
+
+  *out_len = mol2_read_at(&extension_data, buff, buff_len);
 
   err = 0;
 exit:
@@ -239,29 +249,24 @@ exit:
 // the *var_len may be bigger than real length of raw extension data
 int load_raw_extension_data(uint8_t** var_data, uint32_t* var_len) {
   int err = 0;
-  // Load witness of first input
-  uint64_t witness_len = WITNESS_SIZE;
-  err = ckb_checked_load_witness(g_witness, &witness_len, 0, 0,
-                                 CKB_SOURCE_GROUP_INPUT);
+  err = make_cursor_from_witness(&g_witness_args);
   CHECK(err);
-  mol_seg_t seg = {.ptr = g_witness, .size = witness_len};
-  g_witness_len = witness_len;
-  g_witness_inited = true;
 
-  err = MolReader_WitnessArgs_verify(&seg, true);
-  CHECK2(err == MOL_OK, ERROR_INVALID_MOL_FORMAT);
-  mol_seg_t input_seg = MolReader_WitnessArgs_get_input_type(&seg);
-  CHECK2(input_seg.size > 0, ERROR_INVALID_MOL_FORMAT);
+  BytesOptType input = g_witness_args.t->input_type(&g_witness_args);
+  CHECK2(!input.t->is_none(&input), ERROR_INVALID_MOL_FORMAT);
 
-  mol_seg_t input_content_seg = MolReader_Bytes_raw_bytes(&input_seg);
-  CHECK2(input_content_seg.size > 0, ERROR_INVALID_MOL_FORMAT);
+  struct mol2_cursor_t bytes = input.t->unwrap(&input);
+  // convert Bytes to XudtWitnessInputType
+  XudtWitnessInputType witness_input = make_XudtWitnessInput(&bytes);
+  ScriptVecOptType script_vec =
+      witness_input.t->raw_extension_data(&witness_input);
 
-  CHECK2(MolReader_XudtWitnessInput_verify(&input_content_seg, false) == MOL_OK,
-         ERROR_INVALID_MOL_FORMAT);
-  mol_seg_t data =
-      MolReader_XudtWitnessInput_get_raw_extension_data(&input_content_seg);
-  *var_data = data.ptr;
-  *var_len = data.size;
+  uint32_t read_len =
+      mol2_read_at(&script_vec.cur, g_raw_extension_data, RAW_EXTENSION_SIZE);
+  CHECK2(read_len >= script_vec.cur.size, ERROR_INVALID_MOL_FORMAT);
+
+  *var_data = g_raw_extension_data;
+  *var_len = read_len;
 
   err = 0;
 exit:
@@ -269,10 +274,9 @@ exit:
 }
 
 // *var_data will point to "Raw Extension Data", which can be in args or witness
-// *var_data will refer to a memory location of g_script or g_witness
+// *var_data will refer to a memory location of g_script or g_raw_extension_data
 int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
-               uint32_t* var_len, uint8_t* input_lock_script_hashes,
-               uint32_t* input_lock_script_hashes_count) {
+               uint32_t* var_len, uint8_t* hashes, uint32_t* hashes_count) {
   int err = 0;
 
   uint64_t len = SCRIPT_SIZE;
@@ -291,7 +295,7 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
   mol_seg_t args_bytes_seg = MolReader_Bytes_raw_bytes(&args_seg);
   CHECK2(args_bytes_seg.size >= BLAKE2B_BLOCK_SIZE, ERROR_ARGUMENTS_LEN);
 
-  *input_lock_script_hashes_count = 0;
+  *hashes_count = 0;
   // With owner lock script extracted, we will look through each input in the
   // current transaction to see if any unlocked cell uses owner lock.
   *owner_mode = 0;
@@ -314,11 +318,11 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
       break;
     }
     CHECK(ret);
-    if (i < MAX_LOCK_SCRIPT_HASH_COUNT) {
-      memcpy(&input_lock_script_hashes[i * BLAKE2B_BLOCK_SIZE], buffer,
-             BLAKE2B_BLOCK_SIZE);
-      *input_lock_script_hashes_count += 1;
-    }
+    CHECK2(*hashes_count < MAX_LOCK_SCRIPT_HASH_COUNT, ERROR_TOO_MANY_LOCK);
+
+    memcpy(&hashes[(*hashes_count) * BLAKE2B_BLOCK_SIZE], buffer,
+           BLAKE2B_BLOCK_SIZE);
+    *hashes_count += 1;
 
     if (args_bytes_seg.size == BLAKE2B_BLOCK_SIZE &&
         memcmp(buffer, args_bytes_seg.ptr, BLAKE2B_BLOCK_SIZE) == 0) {
@@ -471,15 +475,13 @@ int simple_udt(int owner_mode) {
   return CKB_SUCCESS;
 }
 
-//   If the extension script is identical to a lock script of one input cell in
-//   current transaction, we consider the extension script to be already
-//   validated, no additional check is needed for current extension
+// If the extension script is identical to a lock script of one input cell in
+// current transaction, we consider the extension script to be already
+// validated, no additional check is needed for current extension
 int is_extension_script_validated(mol_seg_t extension_script,
                                   uint8_t* input_lock_script_hash,
                                   uint32_t input_lock_script_hash_count) {
   int err = 0;
-
-  // verify the hash
   uint8_t hash[BLAKE2B_BLOCK_SIZE];
   err = blake2b(hash, BLAKE2B_BLOCK_SIZE, extension_script.ptr,
                 extension_script.size, NULL, 0);
@@ -487,7 +489,7 @@ int is_extension_script_validated(mol_seg_t extension_script,
 
   for (uint32_t i = 0; i < input_lock_script_hash_count; i++) {
     if (memcmp(&input_lock_script_hash[i * BLAKE2B_BLOCK_SIZE], hash,
-               BLAKE160_SIZE) == 0) {
+               BLAKE2B_BLOCK_SIZE) == 0) {
       return 0;
     }
   }

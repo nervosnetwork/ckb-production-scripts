@@ -131,9 +131,7 @@ void xudt_add_output_amount(__int128 val) {
   g_output_count++;
 }
 
-extern bool g_witness_inited;
 void xudt_begin_data(void) {
-  g_witness_inited = false;
   g_flags = 0;
   MolBuilder_ScriptVec_init(&g_extension_script_hash_builder);
   if (g_extension_script_hash.ptr) free(g_extension_script_hash.ptr);
@@ -208,8 +206,8 @@ int ckb_checked_load_witness(void* addr, uint64_t* len, size_t offset,
         &xwi_builder, g_extension_script_hash.ptr,
         g_extension_script_hash.size);
   }
-  MolBuilder_XudtWitnessInput_set_structure(&xwi_builder, g_structure.ptr,
-                                            g_structure.size);
+  MolBuilder_XudtWitnessInput_set_extension_data(&xwi_builder, g_structure.ptr,
+                                                 g_structure.size);
 
   mol_seg_res_t xwi_res = MolBuilder_XudtWitnessInput_build(xwi_builder);
   ASSERT(xwi_res.errno == MOL_OK);
@@ -222,6 +220,11 @@ int ckb_checked_load_witness(void* addr, uint64_t* len, size_t offset,
   assert(res.errno == 0);
 
   if (res.seg.size <= offset) {
+    *len = 0;
+    return 0;
+  }
+  if (addr == NULL) {
+    *len = res.seg.size;
     return 0;
   }
 
