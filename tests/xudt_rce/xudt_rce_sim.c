@@ -1,14 +1,9 @@
-
-// uncomment to enable printf in CKB-VM
-//#define CKB_C_STDLIB_PRINTF
-//#include <stdio.h>
-#define CKB_COVERAGE
 #if defined(CKB_COVERAGE)
 #define ASSERT(s) (void)0
 #else
-#include <assert.h>
-#define ASSERT assert
+#define ASSERT(s) (void)0
 #endif
+
 int ckb_exit(signed char code);
 
 #include "utest.h"
@@ -42,23 +37,68 @@ int hex2bin(uint8_t* buf, const char* src) {
   return length;
 }
 
+void set_basic_data() {
+  xudt_set_flags(1);
+  xudt_add_input_amount(999);
+  xudt_add_output_amount(999);
+
+  // lock script hash
+  uint8_t input_lock_script_hash[32] = {11};
+  uint8_t output_lock_script_hash[32] = {22};
+  xudt_add_input_lock_script_hash(input_lock_script_hash);
+  xudt_add_output_lock_script_hash(output_lock_script_hash);
+}
+
+// the following hash_root, proof pairs are verified successfully
+// with the following lock script hash:
+//  uint8_t input_lock_script_hash[32] = {11};
+//  uint8_t output_lock_script_hash[32] = {22};
+
+uint8_t BLACK_LIST_HASH_ROOT[32] = {143, 95,  66,  207, 251, 51,  58,  199,
+                                    247, 61,  211, 60,  28,  25,  51,  99,
+                                    174, 94,  226, 239, 134, 201, 125, 79,
+                                    63,  194, 180, 109, 161, 2,   92,  178};
+uint8_t BLACK_LIST_PROOF[] = {
+    76,  76,  72,  4,   80,  6,   62,  195, 223, 65,  89,  79,  50, 133, 172,
+    95,  118, 228, 237, 101, 113, 8,   175, 152, 171, 153, 202, 45, 125, 177,
+    0,   236, 236, 176, 183, 31,  109, 113, 80,  7,   88,  178, 89, 155, 132,
+    146, 222, 163, 40,  147, 106, 150, 97,  234, 134, 107, 237, 60, 9,   193,
+    0,   16,  226, 17,  209, 89,  52,  22,  71,  135, 172, 225};
+
+uint8_t WHITE_LIST_HASH_ROOT[32] = {151, 81,  37,  242, 189, 99,  62,  175,
+                                    115, 9,   251, 94,  105, 190, 173, 153,
+                                    42,  249, 87,  115, 253, 152, 110, 88,
+                                    1,   58,  224, 21,  51,  99,  72,  182};
+uint8_t WHITE_LIST_PROOF[] = {76, 76, 72, 4};
+
+void set_rce_data() {
+  int err = 0;
+  set_basic_data();
+  uint16_t root_rcrule =
+      rce_add_rcrule(BLACK_LIST_HASH_ROOT, 0x0);  // black list
+  rce_begin_proof();
+  rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF));
+  rce_end_proof();
+  xudt_add_extension_script(RCE_HASH, 1, (uint8_t*)&root_rcrule, 32,
+                            "internal extension script, no path");
+}
+
 UTEST(xudt, main) {
   int err = 0;
 
   // prepare basic data
+  xudt_begin_data();
+  set_basic_data();
+
   uint8_t hash0[BLAKE2B_BLOCK_SIZE] = {0};
   uint8_t hash1[BLAKE2B_BLOCK_SIZE] = {1};
   uint8_t extension_hash[BLAKE2B_BLOCK_SIZE] = {0x66};
-  xudt_begin_data();
-  xudt_set_flags(1);
-  // not owner mode
   uint8_t args[32] = {0};
   xudt_set_owner_mode(hash0, hash1);
-  xudt_add_extension_script_hash(
+  xudt_add_extension_script(
       extension_hash, 1, args, sizeof(args),
       "tests/xudt_rce/simulator-build-debug/libextension_script_0.dylib");
-  xudt_add_input_amount(999);
-  xudt_add_output_amount(999);
+
   xudt_end_data();
 
   // flags = 1
@@ -71,8 +111,14 @@ UTEST(xudt, main) {
   err = simulator_main();
   ASSERT_EQ(err, 0);
   CHECK(err);
-  // flags = 0
+  // flags is not available
   xudt_set_flags(0);
+  err = simulator_main();
+  ASSERT_EQ(err, 0);
+  CHECK(err);
+  // flags is available, but it's value is 0,
+  // Note: testing purpose, there is no such 0xFF flags.
+  xudt_set_flags(0xFF);
   err = simulator_main();
   ASSERT_EQ(err, 0);
   CHECK(err);
@@ -87,38 +133,118 @@ UTEST(xudt, main) {
 exit:
   ASSERT_EQ(err, 0);
 }
-void set_basic_data() {
-  xudt_set_flags(1);
-  xudt_add_input_amount(999);
-  xudt_add_output_amount(999);
-
-  // lock script hash
-  uint8_t input_lock_script_hash[32] = {11};
-  uint8_t output_lock_script_hash[32] = {22};
-  xudt_add_input_lock_script_hash(input_lock_script_hash);
-  xudt_add_output_lock_script_hash(output_lock_script_hash);
-}
 
 UTEST(rce, white_list) {
   int err = 0;
-  // prepare basic data
+  xudt_begin_data();
+  set_basic_data();
+  uint16_t root_rcrule =
+      rce_add_rcrule(WHITE_LIST_HASH_ROOT, 0x2);  // white list
+  rce_begin_proof();
+  rce_add_proof(WHITE_LIST_PROOF, countof(WHITE_LIST_PROOF));
+  rce_end_proof();
+  xudt_add_extension_script(RCE_HASH, 1, (uint8_t*)&root_rcrule, 32,
+                            "internal extension script, no path");
+  xudt_end_data();
+
+  err = simulator_main();
+  ASSERT_EQ(err, 0);
+exit:
+  return;
+}
+
+UTEST(rce, white_list_not_passed) {
+  int err = 0;
   xudt_begin_data();
   set_basic_data();
 
-  // rcrool and proof should 1:1
-  // rc rule
-  uint8_t rcrule[32] = {151, 81,  37,  242, 189, 99, 62,  175, 115, 9,   251,
-                        94,  105, 190, 173, 153, 42, 249, 87,  115, 253, 152,
-                        110, 88,  1,   58,  224, 21, 51,  99,  72,  182};
+  uint8_t rcrule[32] = {0};                            // invalid root_hash
   uint16_t root_rcrule = rce_add_rcrule(rcrule, 0x2);  // white list
-  // proof
   uint8_t proof[] = {76, 76, 72, 4};
   rce_begin_proof();
   rce_add_proof(proof, countof(proof));
   rce_end_proof();
-  //
-  xudt_add_extension_script_hash(RCE_HASH, 1, (uint8_t*)&root_rcrule, 32,
-                                 "internal extension script, no path");
+  xudt_add_extension_script(RCE_HASH, 1, (uint8_t*)&root_rcrule, 32,
+                            "internal extension script, no path");
+  xudt_end_data();
+
+  err = simulator_main();
+  ASSERT_EQ(err, ERROR_SMT_VERIFY_FAILED);
+exit:
+  return;
+}
+
+UTEST(rce, black_list) {
+  int err = 0;
+  xudt_begin_data();
+  set_basic_data();
+  uint16_t root_rcrule =
+      rce_add_rcrule(BLACK_LIST_HASH_ROOT, 0x0);  // black list
+  rce_begin_proof();
+  rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF));
+  rce_end_proof();
+  xudt_add_extension_script(RCE_HASH, 1, (uint8_t*)&root_rcrule, 32,
+                            "internal extension script, no path");
+  xudt_end_data();
+  err = simulator_main();
+  ASSERT_EQ(err, 0);
+exit:
+  return;
+}
+
+UTEST(xudt, simple_udt) {
+  int err = 0;
+  xudt_begin_data();
+  set_rce_data();
+  xudt_add_input_amount(999);
+  xudt_add_output_amount(1000);
+  xudt_end_data();
+  err = simulator_main();
+  ASSERT_EQ(err, ERROR_AMOUNT);
+
+exit:
+  return;
+}
+
+UTEST(xudt, emergency_halt_mode) {
+  int err = 0;
+  xudt_begin_data();
+  xudt_set_flags(2);
+
+  uint16_t root_rcrule = rce_add_rcrule(
+      BLACK_LIST_HASH_ROOT, 0x1);  // emergency halt mode, black list
+  rce_begin_proof();
+  rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF));
+  rce_end_proof();
+  xudt_add_extension_script(RCE_HASH, 1, (uint8_t*)&root_rcrule, 32,
+                            "internal extension script, no path");
+  xudt_end_data();
+  err = simulator_main();
+  ASSERT_EQ(err, ERROR_RCE_EMERGENCY_HATL);
+exit:
+  return;
+}
+
+UTEST(xudt, extension_script_is_realdy_validated) {
+  int err = 0;
+
+  xudt_begin_data();
+
+  xudt_set_flags(1);
+  xudt_add_input_amount(999);
+  xudt_add_output_amount(999);
+  uint8_t extension_hash[BLAKE2B_BLOCK_SIZE] = {0x66};
+  uint8_t args[32] = {0};
+
+  xudt_add_extension_script(
+      extension_hash, 1, args, sizeof(args),
+      "tests/xudt_rce/simulator-build-debug/libextension_script_0.dylib");
+  uint8_t hash[32];
+  xudt_calc_extension_script_hash(extension_hash, 1, args, sizeof(args), hash);
+  uint8_t output_lock_script_hash[32] = {22};
+  // extension script hash is identical to lock script hash
+  xudt_add_input_lock_script_hash(hash);
+  xudt_add_output_lock_script_hash(output_lock_script_hash);
 
   // finish data
   xudt_end_data();
@@ -129,34 +255,40 @@ exit:
   return;
 }
 
-UTEST(rce, black_list) {
+UTEST(xudt, extension_script_returns_non_zero) {
   int err = 0;
+  xudt_begin_data();
+  set_rce_data();
+  uint8_t extension_hash[BLAKE2B_BLOCK_SIZE] = {0x66};
+  uint8_t args[32] = {0};
+  xudt_add_extension_script(
+      extension_hash, 1, args, sizeof(args),
+      "tests/xudt_rce/simulator-build-debug/libextension_script_1.dylib");
+  xudt_end_data();
+  err = simulator_main();
+  ASSERT_EQ(err, 1);
 
+exit:
+  return;
+}
+
+UTEST(rce, use_rc_cell_vec) {
+  int err = 0;
   // prepare basic data
   xudt_begin_data();
   set_basic_data();
-
-  // rcrule and proof should 1:1
-  // rc rule
-  uint8_t rcrule[32] = {143, 95, 66, 207, 251, 51,  58,  199, 247, 61,  211,
-                        60,  28, 25, 51,  99,  174, 94,  226, 239, 134, 201,
-                        125, 79, 63, 194, 180, 109, 161, 2,   92,  178};
-  uint16_t root_rcrule = rce_add_rcrule(rcrule, 0x0);  // black list
-  // proof
-  uint8_t proof[] = {
-      76,  76,  72,  4,   80,  6,   62,  195, 223, 65,  89,  79,  50, 133, 172,
-      95,  118, 228, 237, 101, 113, 8,   175, 152, 171, 153, 202, 45, 125, 177,
-      0,   236, 236, 176, 183, 31,  109, 113, 80,  7,   88,  178, 89, 155, 132,
-      146, 222, 163, 40,  147, 106, 150, 97,  234, 134, 107, 237, 60, 9,   193,
-      0,   16,  226, 17,  209, 89,  52,  22,  71,  135, 172, 225};
+  uint16_t rcrulevec[MAX_RCRULE_IN_CELL] = {0};
+  for (int i = 0; i < MAX_RCRULE_IN_CELL; i++) {
+    rcrulevec[i] = rce_add_rcrule(BLACK_LIST_HASH_ROOT, 0x0);  // black list
+  }
+  RCHashType root_rcrule = rce_add_rccellvec(rcrulevec, MAX_RCRULE_IN_CELL);
   rce_begin_proof();
-  rce_add_proof(proof, countof(proof));
+  for (int i = 0; i < MAX_RCRULE_IN_CELL; i++) {
+    rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF));
+  }
   rce_end_proof();
-  //
-  xudt_add_extension_script_hash(RCE_HASH, 1, (uint8_t*)&root_rcrule, 32,
-                                 "internal extension script, no path");
-
-  // finish data
+  xudt_add_extension_script(RCE_HASH, 1, (uint8_t*)&root_rcrule, 32,
+                            "internal extension script, no path");
   xudt_end_data();
 
   err = simulator_main();

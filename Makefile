@@ -69,7 +69,7 @@ $(JSON_TEMP_FILE): c/xudt_rce.mol
 c/xudt_rce_mol2.h: $(JSON_TEMP_FILE)
 	moleculec-c2 --input $(JSON_TEMP_FILE) | clang-format -style=Google > c/xudt_rce_mol2.h
 
-build/xudt_rce: c/xudt_rce.c
+build/xudt_rce: c/xudt_rce.c c/rce.h c/xudt_rce_mol.h c/xudt_rce_mol2.h
 	$(CC) $(XUDT_RCE_CFLAGS) $(LDFLAGS) -o $@ $<
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@

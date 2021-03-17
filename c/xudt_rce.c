@@ -1,6 +1,7 @@
-#ifndef ASSERT
-#define ASSERT(s) (void)0
-#endif
+
+// uncomment to enable printf in CKB-VM
+//#define CKB_C_STDLIB_PRINTF
+//#include <stdio.h>
 
 // it's used by blockchain-api2.h, the behavior when panic
 #ifndef MOL2_EXIT
@@ -181,7 +182,7 @@ static uint32_t read_from_witness(uintptr_t arg[], uint8_t* ptr, uint32_t len,
   return output_len;
 }
 
-// due to the "static" data (s_data_source), the "WitnessArgsType" is a
+// due to the "static" data (s_witness_data_source), the "WitnessArgsType" is a
 // singleton. note: mol2_data_source_t consumes a lot of memory due to the
 // "cache" field (default 2K)
 int make_cursor_from_witness(WitnessArgsType* witness) {
@@ -198,18 +199,20 @@ int make_cursor_from_witness(WitnessArgsType* witness) {
   cur.offset = 0;
   cur.size = witness_len;
 
-  static mol2_data_source_t s_data_source = {0};
+  static uint8_t s_witness_data_source[DEFAULT_DATA_SOURCE_LENGTH];
 
-  s_data_source.read = read_from_witness;
-  s_data_source.total_size = witness_len;
+  mol2_data_source_t* ptr = (mol2_data_source_t*)s_witness_data_source;
+
+  ptr->read = read_from_witness;
+  ptr->total_size = witness_len;
   // pass index and source as args
-  s_data_source.args[0] = 0;
-  s_data_source.args[1] = CKB_SOURCE_GROUP_INPUT;
+  ptr->args[0] = 0;
+  ptr->args[1] = CKB_SOURCE_GROUP_INPUT;
 
-  s_data_source.cache_size = 0;
-  s_data_source.start_point = 0;
-  s_data_source.max_cache_size = MAX_CACHE_SIZE;
-  cur.data_source = &s_data_source;
+  ptr->cache_size = 0;
+  ptr->start_point = 0;
+  ptr->max_cache_size = MAX_CACHE_SIZE;
+  cur.data_source = ptr;
 
   *witness = make_WitnessArgs(&cur);
 
@@ -324,7 +327,7 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
            BLAKE2B_BLOCK_SIZE);
     *hashes_count += 1;
 
-    if (args_bytes_seg.size == BLAKE2B_BLOCK_SIZE &&
+    if (args_bytes_seg.size >= BLAKE2B_BLOCK_SIZE &&
         memcmp(buffer, args_bytes_seg.ptr, BLAKE2B_BLOCK_SIZE) == 0) {
       *owner_mode = 1;
       break;
@@ -520,10 +523,13 @@ int main() {
     CHECK2(raw_extension_len > 0, ERROR_INVALID_ARGS_FORMAT);
   }
   err = simple_udt(owner_mode);
-  CHECK(err);
+  if (err != 0) {
+    goto exit;
+  }
 
   if (flags == XUDTFlags_Plain) {
-    return CKB_SUCCESS;
+    err = 0;
+    goto exit;
   }
 
   mol_seg_t raw_extension_seg = {0};
@@ -557,12 +563,8 @@ int main() {
     }
     mol_seg_t args_raw_bytes = MolReader_Bytes_raw_bytes(&args);
 
-    int result = 0;
-    result = func(owner_mode, i, args_raw_bytes.ptr, args_raw_bytes.size);
-    if (result != 0) {
-      xudt_printf("A non-zero returned from xUDT extension scripts.\n");
-    }
-    CHECK(result);
+    err = func(owner_mode, i, args_raw_bytes.ptr, args_raw_bytes.size);
+    CHECK(err);
   }
 
   err = 0;
