@@ -15,8 +15,12 @@ typedef struct RCRule {
   uint8_t flags;
 } RCRule;
 
-RCRule g_rcrules[MAX_RCRULES_COUNT];
-uint32_t g_rcrules_count = 0;
+typedef struct RceState {
+  RCRule rcrules[MAX_RCRULES_COUNT];
+  uint32_t rcrules_count;
+} RceState;
+
+void rce_init_state(RceState* state) { state->rcrules_count = 0; }
 
 // molecule doesn't provide names
 typedef enum RCDataUnionType {
@@ -82,7 +86,8 @@ exit:
 }
 
 // Note: RCRules is ordered as depth-first search
-int rce_gather_rcrules_recursively(const uint8_t* rce_cell_hash, int depth) {
+int rce_gather_rcrules_recursively(RceState* rce_state,
+                                   const uint8_t* rce_cell_hash, int depth) {
   int err = 0;
 
   if (depth > MAX_RECURSIVE_DEPTH) return ERROR_RCRULES_TOO_DEEP;
@@ -108,13 +113,16 @@ int rce_gather_rcrules_recursively(const uint8_t* rce_cell_hash, int depth) {
   if (item_id == RCDataUnionRule) {
     RCRuleType rule = rc_data.t->as_RCRule(&rc_data);
     // "Any more RCRule structures will result in an immediate failure."
-    CHECK2(g_rcrules_count < MAX_RCRULES_COUNT, ERROR_TOO_MANY_RCRULES);
+    CHECK2(rce_state->rcrules_count < MAX_RCRULES_COUNT,
+           ERROR_TOO_MANY_RCRULES);
 
-    g_rcrules[g_rcrules_count].flags = rule.t->flags(&rule);
+    rce_state->rcrules[rce_state->rcrules_count].flags = rule.t->flags(&rule);
     mol2_cursor_t smt_root = rule.t->smt_root(&rule);
-    mol2_read_at(&smt_root, g_rcrules[g_rcrules_count].smt_root, SMT_KEY_BYTES);
+    mol2_read_at(&smt_root,
+                 rce_state->rcrules[rce_state->rcrules_count].smt_root,
+                 SMT_KEY_BYTES);
 
-    g_rcrules_count++;
+    rce_state->rcrules_count++;
   } else if (item_id == RCDataUnionCellVec) {
     RCCellVecType cell_vec = rc_data.t->as_RCCellVec(&rc_data);
 
@@ -129,7 +137,7 @@ int rce_gather_rcrules_recursively(const uint8_t* rce_cell_hash, int depth) {
 
       uint32_t read_len = mol2_read_at(&item, hash, sizeof(hash));
       CHECK2(read_len == sizeof(hash), ERROR_INVALID_MOL_FORMAT);
-      err = rce_gather_rcrules_recursively(hash, depth + 1);
+      err = rce_gather_rcrules_recursively(rce_state, hash, depth + 1);
       CHECK(err);
     }
   } else {
@@ -185,14 +193,17 @@ exit:
 int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
                  size_t args_len) {
   int err = 0;
+  RceState rce_state;
+  rce_init_state(&rce_state);
+
   uint32_t index = 0;
 
   CHECK2(args_len == BLAKE2B_BLOCK_SIZE, ERROR_INVALID_MOL_FORMAT);
   CHECK2(args != NULL, ERROR_INVALID_ARGS);
   if (is_owner_mode) return 0;
 
-  g_rcrules_count = 0;
-  err = rce_gather_rcrules_recursively(args, 0);
+  rce_state.rcrules_count = 0;
+  err = rce_gather_rcrules_recursively(&rce_state, args, 0);
   CHECK(err);
 
   uint8_t buff[MAX_EXTENSION_DATA_SIZE];
@@ -206,7 +217,7 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
          ERROR_INVALID_MOL_FORMAT);
   uint32_t proof_len = MolReader_SmtProofVec_length(&proofs);
   // count of proof should be same as size of RCRules
-  CHECK2(proof_len == g_rcrules_count, ERROR_RCRULES_PROOFS_MISMATCHED);
+  CHECK2(proof_len == rce_state.rcrules_count, ERROR_RCRULES_PROOFS_MISMATCHED);
 
   smt_pair_t wl_entries[MAX_LOCK_SCRIPT_HASH_COUNT];
   smt_pair_t bl_entries[MAX_LOCK_SCRIPT_HASH_COUNT];
@@ -222,30 +233,48 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
   smt_state_normalize(&bl_states);
 
   err = ERROR_SMT_VERIFY_FAILED;
+  bool on_white_list = false;
+  bool on_black_list = false;
   for (index = 0; index < proof_len; index++) {
     mol_seg_res_t mol_proof = MolReader_SmtProofVec_get(&proofs, index);
     CHECK(mol_proof.errno);
     mol_seg_t proof = MolReader_SmtProof_raw_bytes(&mol_proof.seg);
 
-    const RCRule* current_rule = &g_rcrules[index];
+    const RCRule* current_rule = &rce_state.rcrules[index];
 
     const uint8_t* root_hash = current_rule->smt_root;
     // "Current RCRule must not be in Emergency Halt mode."
     if (rce_is_emergency_halt_mode(current_rule->flags)) {
-      return ERROR_RCE_EMERGENCY_HATL;
+      err = ERROR_RCE_EMERGENCY_HATL;
+      // the emergency halt has the highest priority, can return immediately
+      goto exit;
     }
     if (rce_is_white_list(current_rule->flags)) {
       err = smt_verify(root_hash, &wl_states, proof.ptr, proof.size);
       // For all RCRules using whitelists, as long as there is one RCRule which
       // satisfies err == 0, we consider validation to be success.
       if (err == 0) {
-        goto exit;
-      } else {
-        err = ERROR_SMT_VERIFY_FAILED;
+        on_white_list = true;
+        // don't break when verify successfully: it's possible to be on
+        // emergency halt afterward.
       }
     } else {
+      // black list
       err = smt_verify(root_hash, &bl_states, proof.ptr, proof.size);
-      CHECK2(err == 0, ERROR_SMT_VERIFY_FAILED);
+      if (err == 0) {
+        on_black_list = true;
+      }
+      // don't break when verify failed: it's possible to be on white list
+      // afterward.
+    }
+  }
+  if (on_white_list) {
+    err = 0;
+  } else {
+    if (on_black_list) {
+      err = ERROR_ON_BLACK_LIST;
+    } else {
+      err = 0;
     }
   }
 exit:

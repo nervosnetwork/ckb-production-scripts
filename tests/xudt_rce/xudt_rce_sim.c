@@ -71,7 +71,7 @@ uint8_t WHITE_LIST_HASH_ROOT[32] = {151, 81,  37,  242, 189, 99,  62,  175,
                                     1,   58,  224, 21,  51,  99,  72,  182};
 uint8_t WHITE_LIST_PROOF[] = {76, 76, 72, 4};
 
-void set_rce_data() {
+void set_rce_black_list_data() {
   int err = 0;
   set_basic_data();
   uint16_t root_rcrule =
@@ -79,7 +79,25 @@ void set_rce_data() {
   rce_begin_proof();
   rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF));
   rce_end_proof();
-  xudt_add_extension_script(RCE_HASH, 1, (uint8_t*)&root_rcrule, 32,
+  uint8_t args[32] = {0};
+  memcpy(args, &root_rcrule, 2);
+  xudt_add_extension_script(RCE_HASH, 1, args, sizeof(args),
+                            "internal extension script, no path");
+}
+
+void set_rce_not_on_black_list_data() {
+  int err = 0;
+  set_basic_data();
+  uint16_t root_rcrule =
+      rce_add_rcrule(BLACK_LIST_HASH_ROOT, 0x0);  // black list
+  rce_begin_proof();
+  BLACK_LIST_PROOF[0] ^= 0x01;
+  rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF));
+  rce_end_proof();
+
+  uint8_t args[32] = {0};
+  memcpy(args, &root_rcrule, 2);
+  xudt_add_extension_script(RCE_HASH, 1, args, sizeof(args),
                             "internal extension script, no path");
 }
 
@@ -143,7 +161,9 @@ UTEST(rce, white_list) {
   rce_begin_proof();
   rce_add_proof(WHITE_LIST_PROOF, countof(WHITE_LIST_PROOF));
   rce_end_proof();
-  xudt_add_extension_script(RCE_HASH, 1, (uint8_t*)&root_rcrule, 32,
+  uint8_t args[32] = {0};
+  memcpy(args, &root_rcrule, 2);
+  xudt_add_extension_script(RCE_HASH, 1, args, sizeof(args),
                             "internal extension script, no path");
   xudt_end_data();
 
@@ -153,7 +173,7 @@ exit:
   return;
 }
 
-UTEST(rce, white_list_not_passed) {
+UTEST(rce, not_on_white_list) {
   int err = 0;
   xudt_begin_data();
   set_basic_data();
@@ -164,12 +184,14 @@ UTEST(rce, white_list_not_passed) {
   rce_begin_proof();
   rce_add_proof(proof, countof(proof));
   rce_end_proof();
-  xudt_add_extension_script(RCE_HASH, 1, (uint8_t*)&root_rcrule, 32,
+  uint8_t args[32] = {0};
+  memcpy(args, &root_rcrule, 2);
+  xudt_add_extension_script(RCE_HASH, 1, args, sizeof(args),
                             "internal extension script, no path");
   xudt_end_data();
 
   err = simulator_main();
-  ASSERT_EQ(err, ERROR_SMT_VERIFY_FAILED);
+  ASSERT_EQ(err, 0);
 exit:
   return;
 }
@@ -183,11 +205,13 @@ UTEST(rce, black_list) {
   rce_begin_proof();
   rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF));
   rce_end_proof();
-  xudt_add_extension_script(RCE_HASH, 1, (uint8_t*)&root_rcrule, 32,
+  uint8_t args[32] = {0};
+  memcpy(args, &root_rcrule, 2);
+  xudt_add_extension_script(RCE_HASH, 1, args, sizeof(args),
                             "internal extension script, no path");
   xudt_end_data();
   err = simulator_main();
-  ASSERT_EQ(err, 0);
+  ASSERT_EQ(err, ERROR_ON_BLACK_LIST);
 exit:
   return;
 }
@@ -195,7 +219,7 @@ exit:
 UTEST(xudt, simple_udt) {
   int err = 0;
   xudt_begin_data();
-  set_rce_data();
+  set_rce_black_list_data();
   xudt_add_input_amount(999);
   xudt_add_output_amount(1000);
   xudt_end_data();
@@ -216,7 +240,9 @@ UTEST(xudt, emergency_halt_mode) {
   rce_begin_proof();
   rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF));
   rce_end_proof();
-  xudt_add_extension_script(RCE_HASH, 1, (uint8_t*)&root_rcrule, 32,
+  uint8_t args[32] = {0};
+  memcpy(args, &root_rcrule, 2);
+  xudt_add_extension_script(RCE_HASH, 1, args, sizeof(args),
                             "internal extension script, no path");
   xudt_end_data();
   err = simulator_main();
@@ -258,7 +284,7 @@ exit:
 UTEST(xudt, extension_script_returns_non_zero) {
   int err = 0;
   xudt_begin_data();
-  set_rce_data();
+  set_rce_not_on_black_list_data();
   uint8_t extension_hash[BLAKE2B_BLOCK_SIZE] = {0x66};
   uint8_t args[32] = {0};
   xudt_add_extension_script(
@@ -287,7 +313,9 @@ UTEST(rce, use_rc_cell_vec) {
     rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF));
   }
   rce_end_proof();
-  xudt_add_extension_script(RCE_HASH, 1, (uint8_t*)&root_rcrule, 32,
+  uint8_t args[32] = {0};
+  memcpy(args, &root_rcrule, 2);
+  xudt_add_extension_script(RCE_HASH, 1, args, sizeof(args),
                             "internal extension script, no path");
   xudt_end_data();
 

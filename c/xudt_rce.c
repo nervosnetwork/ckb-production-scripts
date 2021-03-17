@@ -61,6 +61,7 @@ enum ErrorCode {
   ERROR_RCE_EMERGENCY_HATL,
   ERROR_NOT_VALIDATED,
   ERROR_TOO_MANY_LOCK,
+  ERROR_ON_BLACK_LIST,
 };
 
 #define CHECK2(cond, code) \
