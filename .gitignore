@@ -5,3 +5,4 @@ tests/xudt_rce/simulator-build-debug
 tests/xudt_rce/smt_fuzzer/smt_fuzzer.dSYM
 smt_coverage
 smt_fuzzer
+.vscode
