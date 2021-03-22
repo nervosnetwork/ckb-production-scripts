@@ -103,9 +103,6 @@ uint8_t g_script[SCRIPT_SIZE] = {0};
 uint8_t g_raw_extension_data[RAW_EXTENSION_SIZE] = {0};
 WitnessArgsType g_witness_args;
 
-uint8_t g_code_buffer[MAX_CODE_SIZE] __attribute__((aligned(RISCV_PGSIZE)));
-uint32_t g_code_used = 0;
-
 /*
 is_owner_mode indicates if current xUDT is unlocked via owner mode(as
 described by sUDT), extension_index refers to the index of current extension in
@@ -132,7 +129,8 @@ typedef enum XUDTValidateFuncCategory {
 uint8_t RCE_HASH[32] = {1};
 
 // functions
-int load_validate_func(const uint8_t* hash, uint8_t hash_type,
+int load_validate_func(uint8_t* code_buff, uint32_t* code_used,
+                       const uint8_t* hash, uint8_t hash_type,
                        ValidateFuncType* func, XUDTValidateFuncCategory* cat) {
   int err = 0;
   void* handle = NULL;
@@ -144,13 +142,13 @@ int load_validate_func(const uint8_t* hash, uint8_t hash_type,
     return 0;
   }
 
-  CHECK2(MAX_CODE_SIZE > g_code_used, ERROR_NOT_ENOUGH_BUFF);
-  err = ckb_dlopen2(hash, hash_type, &g_code_buffer[g_code_used],
-                    MAX_CODE_SIZE - g_code_used, &handle, &consumed_size);
+  CHECK2(MAX_CODE_SIZE > *code_used, ERROR_NOT_ENOUGH_BUFF);
+  err = ckb_dlopen2(hash, hash_type, &code_buff[*code_used],
+                    MAX_CODE_SIZE - *code_used, &handle, &consumed_size);
   CHECK(err);
   CHECK2(handle != NULL, ERROR_CANT_LOAD_LIB);
   ASSERT(consumed_size % RISCV_PGSIZE == 0);
-  g_code_used += consumed_size;
+  *code_used += consumed_size;
 
   *func = (ValidateFuncType)ckb_dlsym(handle, EXPORTED_FUNC_NAME);
   CHECK2(*func != NULL, ERROR_CANT_FIND_SYMBOL);
@@ -508,6 +506,13 @@ int simulator_main() {
 #else
 int main() {
 #endif
+  // don't move code_buff into global variable. It doesn't work.
+  // it's a ckb-vm bug: the global variable will be freezed:
+  // https://github.com/nervosnetwork/ckb-vm/blob/d43f58d6bf8cc6210721fdcdb6e5ecba513ade0c/src/machine/elf_adaptor.rs#L28-L32
+  // The code can't be loaded into freezed memory.
+  uint8_t code_buff[MAX_CODE_SIZE] __attribute__((aligned(RISCV_PGSIZE)));
+  uint32_t code_used = 0;
+
   int err = 0;
   int owner_mode = 0;
   uint8_t* raw_extension_data = NULL;
@@ -553,7 +558,8 @@ int main() {
 
     uint8_t hash_type2 = *((uint8_t*)hash_type.ptr);
     XUDTValidateFuncCategory cat = XVFC_Normal;
-    err = load_validate_func(code_hash.ptr, hash_type2, &func, &cat);
+    err = load_validate_func(code_buff, &code_used, code_hash.ptr, hash_type2,
+                             &func, &cat);
     CHECK(err);
     // RCE is with high priority, must be checked
     if (cat != XVFC_RCE) {

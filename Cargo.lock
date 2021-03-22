@@ -429,6 +429,7 @@ dependencies = [
  "ripemd160",
  "secp256k1",
  "sha2",
+ "sparse-merkle-tree",
 ]
 
 [[package]]
@@ -2068,6 +2069,16 @@ name = "smallvec"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c2fb2ec9bcd216a5b0d0ccf31ab17b5ed1d627960edff65bbe95d3ce221cefc"
+
+[[package]]
+name = "sparse-merkle-tree"
+version = "0.4.0-rc1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec860bc00b39e71398547445bda898397ee341c97796cb65fd8a0f3bff22cc10"
+dependencies = [
+ "blake2b-rs",
+ "cfg-if 0.1.10",
+]
 
 [[package]]
 name = "stable_deref_trait"
