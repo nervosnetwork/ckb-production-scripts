@@ -199,7 +199,7 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
   uint32_t index = 0;
 
   CHECK2(args_len == BLAKE2B_BLOCK_SIZE, ERROR_INVALID_MOL_FORMAT);
-  CHECK2(args != NULL, ERROR_INVALID_ARGS);
+  CHECK2(args != NULL, ERROR_INVALID_RCE_ARGS);
   if (is_owner_mode) return 0;
 
   rce_state.rcrules_count = 0;

@@ -46,7 +46,8 @@ enum ErrorCode {
   // error code is starting from 40, to avoid conflict with
   // common error code in other scripts.
   ERROR_CANT_LOAD_LIB = 40,
-  ERROR_INVALID_ARGS,
+  ERROR_CANT_FIND_SYMBOL,
+  ERROR_INVALID_RCE_ARGS,
   ERROR_NOT_ENOUGH_BUFF,
   ERROR_INVALID_FLAG,
   ERROR_INVALID_ARGS_FORMAT,
@@ -152,7 +153,7 @@ int load_validate_func(const uint8_t* hash, uint8_t hash_type,
   g_code_used += consumed_size;
 
   *func = (ValidateFuncType)ckb_dlsym(handle, EXPORTED_FUNC_NAME);
-  CHECK2(*func != NULL, ERROR_CANT_LOAD_LIB);
+  CHECK2(*func != NULL, ERROR_CANT_FIND_SYMBOL);
 
   *cat = XVFC_Normal;
   err = 0;

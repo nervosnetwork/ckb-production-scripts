@@ -171,20 +171,19 @@ pub fn gen_tx(
 
     // setup default tx builder
     let dummy_capacity = Capacity::shannons(50000);
-    let tx_builder = TransactionBuilder::default();
-
-    let (tx_builder, args) = if !extension_scripts_bin.is_empty() {
+    let mut tx_builder = TransactionBuilder::default();
+    let mut args = Bytes::from([0u8; 32].as_ref());
+    if !extension_scripts_bin.is_empty() {
         let mut extension_scripts: Vec<Script> = vec![];
-        let (tx_builder, e_script) = build_script(dummy, tx_builder, true, extension_scripts_bin[0], vec![0u8; 32].into());
-        extension_scripts.push(e_script);
-
+        for e_script in extension_scripts_bin {
+            let (b0, e_script) = build_script(dummy, tx_builder, true, e_script, vec![0u8; 32].into());
+            tx_builder = b0;
+            extension_scripts.push(e_script);
+        }
         // xUDT args on "args" field
         let xudt_args = build_xudt_args(1, extension_scripts);
-        let args = build_args([0u8; 32], xudt_args);
-        (tx_builder, args)
-    } else {
-        (tx_builder, Bytes::from([0u8; 32].as_ref()))
-    };
+        args = build_args([0u8; 32], xudt_args);
+    }
 
     let (tx_builder, always_success_script) =
         build_script(dummy, tx_builder, false, &ALWAYS_SUCCESS_BIN, vec![0u8; 32].into());
@@ -230,8 +229,16 @@ pub fn gen_tx(
 
     tx_builder.build()
 }
+use ckb_types::packed::Byte32;
 
-#[test]
+fn debug_printer(script: &Byte32, msg: & str) {
+    let slice = script.as_slice();
+    let str = format!("Script({:x}{:x}{:x}{:x}{:x})", slice[0], slice[1], slice[2], slice[3], slice[4]);
+    println!("{:?}: {}", str, msg);
+}
+
+
+// #[test]
 fn test_simple_udt() {
     let mut rng = thread_rng();
     let mut data_loader = DummyDataLoader::new();
@@ -244,7 +251,7 @@ fn test_simple_udt() {
     verify_result.expect("pass verification");
 }
 
-#[test]
+// #[test]
 fn test_simple_udt_failed() {
     let mut rng = thread_rng();
     let mut data_loader = DummyDataLoader::new();
@@ -269,12 +276,12 @@ fn test_xudt_extension_returns_success() {
                     vec![&EXNTENSION_SCRIPT_0], &mut rng);
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
     let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
-    verifier.set_debug_printer(|_script, msg| eprintln!("[XUDT debug] {}", msg));
+    verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
     verify_result.expect("pass verification");
 }
 
-#[test]
+// #[test]
 fn test_xudt_extension_returns_failed() {
     let mut rng = thread_rng();
     let mut data_loader = DummyDataLoader::new();
@@ -283,7 +290,7 @@ fn test_xudt_extension_returns_failed() {
                     vec![&EXNTENSION_SCRIPT_1], &mut rng);
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
     let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
-    verifier.set_debug_printer(|_script, msg| eprintln!("[XUDT debug] {}", msg));
+    verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
     assert_error_eq!(
         verify_result.unwrap_err(),
