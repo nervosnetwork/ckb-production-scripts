@@ -188,8 +188,7 @@ static uint32_t read_from_witness(uintptr_t arg[], uint8_t* ptr, uint32_t len,
 int make_cursor_from_witness(WitnessArgsType* witness) {
   int err = 0;
   uint64_t witness_len = 0;
-  err = ckb_checked_load_witness(NULL, &witness_len, 0, 0,
-                                 CKB_SOURCE_GROUP_INPUT);
+  err = ckb_load_witness(NULL, &witness_len, 0, 0, CKB_SOURCE_GROUP_INPUT);
   CHECK(err);
   CHECK2(witness_len > 0, ERROR_INVALID_MOL_FORMAT);
   CHECK2(witness_len <= RAW_EXTENSION_SIZE, ERROR_INVALID_MOL_FORMAT);

@@ -208,8 +208,8 @@ int ckb_checked_load_script_hash(void* addr, uint64_t* len, size_t offset) {
   return ret;
 }
 
-int ckb_checked_load_witness(void* addr, uint64_t* len, size_t offset,
-                             size_t index, size_t source) {
+int ckb_load_witness(void* addr, uint64_t* len, size_t offset, size_t index,
+                     size_t source) {
   if (index > 1) {
     return 1;  // CKB_INDEX_OUT_OF_BOUND;
   }
@@ -258,6 +258,16 @@ int ckb_checked_load_witness(void* addr, uint64_t* len, size_t offset,
   free(xwi_res.seg.ptr);
 
   return 0;
+}
+
+int ckb_checked_load_witness(void* addr, uint64_t* len, size_t offset,
+                             size_t index, size_t source) {
+  uint64_t old_len = *len;
+  int ret = ckb_load_witness(addr, len, offset, index, source);
+  if (ret == CKB_SUCCESS && (*len) > old_len) {
+    ret = CKB_LENGTH_NOT_ENOUGH;
+  }
+  return ret;
 }
 
 mol_seg_t build_bytes(const uint8_t* data, uint32_t len) {

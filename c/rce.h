@@ -58,8 +58,7 @@ static int rce_make_cursor_from_cell_data(uint8_t* data_source,
                                           size_t index) {
   int err = 0;
   uint64_t cell_data_len = 0;
-  err = ckb_checked_load_cell_data(NULL, &cell_data_len, 0, index,
-                                   CKB_SOURCE_CELL_DEP);
+  err = ckb_load_cell_data(NULL, &cell_data_len, 0, index, CKB_SOURCE_CELL_DEP);
   CHECK(err);
   CHECK2(cell_data_len > 0, ERROR_INVALID_MOL_FORMAT);
 
@@ -254,14 +253,22 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
       // For all RCRules using whitelists, as long as there is one RCRule which
       // satisfies err == 0, we consider validation to be success.
       if (err == 0) {
+        // *** all hashes on white list
         on_white_list = true;
         // don't break when verify successfully: it's possible to be on
         // emergency halt afterward.
-      }
+      } else {
+        //  *** not all hashes on white list
+        on_white_list = false;
+      };
     } else {
       // black list
       err = smt_verify(root_hash, &bl_states, proof.ptr, proof.size);
       if (err == 0) {
+        //  *** all hashes *not* on black list
+        on_black_list = false;
+      } else {
+        //  *** any one of hashes on black list
         on_black_list = true;
       }
       // don't break when verify failed: it's possible to be on white list

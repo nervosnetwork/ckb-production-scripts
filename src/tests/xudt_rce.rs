@@ -8,8 +8,7 @@ use ckb_crypto::secp::Privkey;
 use ckb_error::assert_error_eq;
 use ckb_script::DataLoader;
 use ckb_script::{ScriptError, TransactionScriptsVerifier};
-use ckb_types::packed::{Byte32, Byte};
-use ckb_types::prelude::Entity;
+use ckb_types::packed::{Byte, Byte32};
 use ckb_types::{
     bytes::Bytes,
     core::{
@@ -33,16 +32,42 @@ use sparse_merkle_tree::{
 
 // internal lib
 use super::{
-    blockchain::Script as ExtensionScript,
+    blockchain::Script as ExtensionScript, build_resolved_tx,
     xudt_rce_mol::ScriptVec as ExtensionScriptVec,
-    xudt_rce_mol::ScriptVecBuilder as ExtensionScriptVecBuilder,
-    build_resolved_tx,
-    DummyDataLoader,
-    MAX_CYCLES,
+    xudt_rce_mol::ScriptVecBuilder as ExtensionScriptVecBuilder, DummyDataLoader, MAX_CYCLES,
 };
 
-use ckb_hash::blake2b_256;
 use crate::tests::xudt_rce_mol::{RCData, RCDataBuilder, RCRuleBuilder};
+use blake2b_rs::{Blake2b, Blake2bBuilder};
+use ckb_hash::blake2b_256;
+use sparse_merkle_tree::traits::Hasher;
+
+const BLAKE2B_KEY: &[u8] = &[];
+const BLAKE2B_LEN: usize = 32;
+const PERSONALIZATION: &[u8] = b"ckb-default-hash";
+
+pub struct CKBBlake2bHasher(Blake2b);
+
+impl Default for CKBBlake2bHasher {
+    fn default() -> Self {
+        let blake2b = Blake2bBuilder::new(BLAKE2B_LEN)
+            .personal(PERSONALIZATION)
+            .key(BLAKE2B_KEY)
+            .build();
+        CKBBlake2bHasher(blake2b)
+    }
+}
+
+impl Hasher for CKBBlake2bHasher {
+    fn write_h256(&mut self, h: &SmtH256) {
+        self.0.update(h.as_slice());
+    }
+    fn finish(self) -> SmtH256 {
+        let mut hash = [0u8; 32];
+        self.0.finalize(&mut hash);
+        hash.into()
+    }
+}
 
 lazy_static! {
     pub static ref RCE_HASH: [u8; 32] = [
@@ -58,13 +83,20 @@ lazy_static! {
     pub static ref EXTENSION_SCRIPT_1: Bytes =
         Bytes::from(include_bytes!("../../build/extension_script_1").as_ref());
     pub static ref EXTENSION_SCRIPT_RCE: Bytes = Bytes::from(RCE_HASH.as_ref());
-
-    pub static ref SMT_EXISTING: SmtH256 = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].into();
-    pub static ref SMT_NOT_EXISTING: SmtH256 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].into();
+    pub static ref SMT_EXISTING: SmtH256 = [
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0
+    ]
+    .into();
+    pub static ref SMT_NOT_EXISTING: SmtH256 = [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0
+    ]
+    .into();
 }
 
-const WHITE_LIST : u8 = 0x2;
-const BLACK_LIST : u8 = 0x0;
+const WHITE_LIST: u8 = 0x2;
+const BLACK_LIST: u8 = 0x0;
 
 pub fn gen_random_out_point(rng: &mut ThreadRng) -> OutPoint {
     let hash = {
@@ -152,7 +184,7 @@ fn build_rce_script(args: &Bytes) -> Script {
         .build()
 }
 
-fn build_xudt_args(flags: u32, scripts: Vec<Script>) -> Bytes {
+fn build_xudt_args(flags: u32, scripts: &Vec<Script>) -> Bytes {
     // note, the types listed here are different than outside
     use molecule::bytes::Bytes;
     use molecule::prelude::Builder;
@@ -173,13 +205,13 @@ fn build_xudt_args(flags: u32, scripts: Vec<Script>) -> Bytes {
     result.into()
 }
 
-fn build_args(lock: [u8; 32], xudt_args: Bytes) -> Bytes {
-    let mut res = Bytes::from(lock.as_ref());
-    res.extend(xudt_args);
+fn build_args(lock: &[u8], xudt_args: &Bytes) -> Bytes {
+    let mut res = Bytes::from(lock);
+    res.extend(xudt_args.clone());
     res
 }
 
-type SMT = SparseMerkleTree<Blake2bHasher, SmtH256, DefaultStore<SmtH256>>;
+type SMT = SparseMerkleTree<CKBBlake2bHasher, SmtH256, DefaultStore<SmtH256>>;
 
 fn new_smt(pairs: Vec<(SmtH256, SmtH256)>) -> SMT {
     let mut smt = SMT::default();
@@ -190,90 +222,169 @@ fn new_smt(pairs: Vec<(SmtH256, SmtH256)>) -> SMT {
 }
 
 // return smt root and proof
-fn build_smt_bl(hashes: &Vec<[u8; 32]>) -> (SmtH256, Vec<u8>) {
-    let not_existing_pairs : Vec<(SmtH256, SmtH256)> = hashes.clone().into_iter().map(|hash| (hash.into(), SmtH256::zero())).collect();
-
+fn build_smt_on_bl(hashes: &Vec<[u8; 32]>, on: bool) -> (SmtH256, Vec<u8>) {
+    let test_pairs: Vec<(SmtH256, SmtH256)> = hashes
+        .clone()
+        .into_iter()
+        .map(|hash| (hash.into(), SMT_NOT_EXISTING.clone()))
+        .collect();
     // this is the hash on black list, but "hashes" are not on that.
-    let key_on_bl1: SmtH256 = [111, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0].into();
-    let key_on_bl2 : SmtH256 = [222, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0].into();
-    let pairs = vec![(key_on_bl1, SMT_EXISTING.clone()), (key_on_bl2, SMT_EXISTING.clone())];
-
-    let smt = new_smt(pairs);
+    let key_on_bl1: SmtH256 = [
+        111, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0,
+    ]
+    .into();
+    let key_on_bl2: SmtH256 = [
+        222, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0,
+    ]
+    .into();
+    let pairs = vec![
+        (key_on_bl1, SMT_EXISTING.clone()),
+        (key_on_bl2, SMT_EXISTING.clone()),
+    ];
+    let smt = new_smt(pairs.clone());
     let root = smt.root();
 
-    let proof = smt.merkle_proof(not_existing_pairs.clone().into_iter().map(|(k,_)| k).collect()).expect("gen proof");
-    let compiled_proof = proof.clone().compile(not_existing_pairs.clone()).expect("compile proof");
-    assert!(compiled_proof.verify::<Blake2bHasher>(smt.root(), not_existing_pairs.clone()).expect("verify compiled proof"));
-
-    return (root.clone(), compiled_proof.into())
+    let proof = smt
+        .merkle_proof(test_pairs.clone().into_iter().map(|(k, _)| k).collect())
+        .expect("gen proof");
+    let compiled_proof = proof
+        .clone()
+        .compile(test_pairs.clone())
+        .expect("compile proof");
+    let test_on = compiled_proof
+        .verify::<CKBBlake2bHasher>(smt.root(), test_pairs.clone())
+        .expect("verify compiled proof");
+    assert!(test_on);
+    if on {
+        let mut new_root = root.clone();
+        let one = new_root.get_bit(0);
+        if one {
+            new_root.clear_bit(0);
+        } else {
+            new_root.set_bit(0);
+        }
+        (new_root.clone(), compiled_proof.into())
+    } else {
+        (root.clone(), compiled_proof.into())
+    }
 }
 
 // return smt root and proof
-fn build_smt_wl(hashes: &Vec<[u8; 32]>) -> (SmtH256, Vec<u8>) {
-    let existing_pairs: Vec<(SmtH256, SmtH256)> = hashes.clone().into_iter().map(|hash| (hash.into(), SMT_EXISTING.clone())).collect();
+fn build_smt_on_wl(hashes: &Vec<[u8; 32]>, on: bool) -> (SmtH256, Vec<u8>) {
+    let existing_pairs: Vec<(SmtH256, SmtH256)> = hashes
+        .clone()
+        .into_iter()
+        .map(|hash| (hash.into(), SMT_EXISTING.clone()))
+        .collect();
 
     // this is the hash on white list, and "hashes" are on that.
-    let key_on_wl1: SmtH256 = [111, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0].into();
-    let key_on_wl2 : SmtH256 = [222, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0].into();
-    let mut pairs = vec![(key_on_wl1, SMT_EXISTING.clone()), (key_on_wl2, SMT_EXISTING.clone())];
-    pairs.extend(existing_pairs.clone());
+    let key_on_wl1: SmtH256 = [
+        111, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0,
+    ]
+    .into();
+    let key_on_wl2: SmtH256 = [
+        222, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0,
+    ]
+    .into();
+    let mut pairs = vec![
+        (key_on_wl1, SMT_EXISTING.clone()),
+        (key_on_wl2, SMT_EXISTING.clone()),
+    ];
+    if on {
+        pairs.extend(existing_pairs.clone());
+    }
 
     let smt = new_smt(pairs);
     let root = smt.root();
 
-    let proof = smt.merkle_proof(existing_pairs.clone().into_iter().map(|(k,_)| k).collect()).expect("gen proof");
-    let compiled_proof = proof.clone().compile(existing_pairs.clone()).expect("compile proof");
-    assert!(compiled_proof.verify::<Blake2bHasher>(smt.root(), existing_pairs.clone()).expect("verify compiled proof"));
-
-    return (root.clone(), compiled_proof.into())
+    let proof = smt
+        .merkle_proof(existing_pairs.clone().into_iter().map(|(k, _)| k).collect())
+        .expect("gen proof");
+    let compiled_proof = proof
+        .clone()
+        .compile(existing_pairs.clone())
+        .expect("compile proof");
+    let test_on = compiled_proof
+        .verify::<CKBBlake2bHasher>(root, existing_pairs.clone())
+        .expect("verify compiled proof");
+    if on {
+        assert!(test_on);
+    } else {
+        assert!(!test_on);
+    }
+    return (root.clone(), compiled_proof.into());
 }
 
-
-fn build_rc_rule(smt_root: [u8; 32], is_black: bool) -> ckb_types::bytes::Bytes {
-    use molecule::prelude::*;
+fn build_rc_rule(smt_root: &[u8; 32], is_black: bool) -> ckb_types::bytes::Bytes {
     use super::blockchain::*;
     use super::xudt_rce_mol::*;
+    use molecule::prelude::*;
 
     let flags = if is_black {
         Byte::new(BLACK_LIST)
     } else {
         Byte::new(WHITE_LIST)
     };
-
-    let sr = Byte32::from_slice(smt_root.as_ref()).expect("Byte32");
+    let smt_root = molecule::bytes::Bytes::from(smt_root.as_ref());
+    let sr = Byte32::new_unchecked(smt_root);
     let rcrule = RCRuleBuilder::default().flags(flags).smt_root(sr).build();
-    let union = RCDataUnion::RCRule(rcrule);
-
-    let res = RCDataBuilder::default().set(union).build();
-    let res2 = res.as_slice();
-
-    res2.into()
+    let res = RCDataBuilder::default()
+        .set(RCDataUnion::RCRule(rcrule))
+        .build();
+    res.as_slice().into()
 }
 
-fn build_extension_data(count : u32, rce_index: u32, proof: &Vec<u8>) -> ckb_types::bytes::Bytes {
+fn make_blockchain_bytes(input: &[u8]) -> super::blockchain::Bytes {
     use molecule::prelude::*;
-    use molecule::bytes::Bytes;
+    super::blockchain::BytesBuilder::default()
+        .set(input.into_iter().map(|v| Byte::new(v.clone())).collect())
+        .build()
+}
+
+fn build_extension_data(
+    count: u32,
+    rce_index: u32,
+    proofs: Vec<Vec<u8>>,
+) -> ckb_types::bytes::Bytes {
     use super::blockchain::*;
     use super::xudt_rce_mol::*;
-
-    let p : Bytes = proof.clone().into();
+    use molecule::bytes::Bytes;
+    use molecule::prelude::*;
 
     let mut builder = SmtProofVecBuilder::default();
+    for p in proofs {
+        let temp = SmtProofBuilder::default().set(p.into_iter().map(|v| Byte::new(v)).collect());
+        builder = builder.push(temp.build());
+    }
+    let proofs: SmtProofVec = builder.build();
+
+    let mut bytes_vec_builder = BytesVecBuilder::default();
+
     for i in 0..count {
         if i == rce_index {
-            builder = builder.push(SmtProof::new_unchecked(p.clone()));
+            bytes_vec_builder = bytes_vec_builder.push(make_blockchain_bytes(proofs.as_slice()));
         } else {
-            builder = builder.push(SmtProof::default());
+            bytes_vec_builder = bytes_vec_builder.push(super::blockchain::Bytes::default());
         }
     }
+    let mut wi_builder = XudtWitnessInputBuilder::default();
+    wi_builder = wi_builder.extension_data(bytes_vec_builder.build());
 
-    let res = builder.build();
-    let res2 = res.as_slice();
-    res2.into()
+    wi_builder.build().as_slice().into()
+}
+
+pub enum TestScheme {
+    None,
+    OnWhiteList,
+    NotOnWhiteList,
+    OnBlackList,
+    NotOnBlackList,
+    BothOn,
+    EmergencyHaltMode,
 }
 
 pub fn gen_tx(
@@ -284,6 +395,7 @@ pub fn gen_tx(
     input_amount: Vec<u128>,
     output_amount: Vec<u128>,
     extension_scripts_bin: Vec<&Bytes>,
+    scheme: TestScheme,
     rng: &mut ThreadRng,
 ) -> TransactionView {
     assert_eq!(input_amount.len(), input_count);
@@ -303,9 +415,28 @@ pub fn gen_tx(
     tx_builder = tx0;
     let always_success_script_hash = blake2b_256(always_success_script.as_slice());
 
-    let (smt_root, proof) = build_smt_wl(&vec![always_success_script_hash]);
+    let mut is_black_list = false;
+    let (smt_root, proof) = match scheme {
+        TestScheme::OnWhiteList => {
+            is_black_list = false;
+            build_smt_on_wl(&vec![always_success_script_hash], true)
+        }
+        TestScheme::NotOnWhiteList => {
+            is_black_list = false;
+            build_smt_on_wl(&vec![always_success_script_hash], false)
+        }
+        TestScheme::OnBlackList => {
+            is_black_list = true;
+            build_smt_on_bl(&vec![always_success_script_hash], true)
+        }
+        TestScheme::NotOnBlackList => {
+            is_black_list = true;
+            build_smt_on_bl(&vec![always_success_script_hash], false)
+        }
+        _ => (SmtH256::default(), Vec::<u8>::default()),
+    };
 
-    let rce_cell_content = build_rc_rule(smt_root.into(), false);
+    let rce_cell_content = build_rc_rule(&smt_root.into(), is_black_list);
 
     let mut total_count = 0;
     let mut rce_index = 0;
@@ -315,9 +446,18 @@ pub fn gen_tx(
         let mut extension_scripts: Vec<Script> = vec![];
         for e_script in extension_scripts_bin {
             if e_script == EXTENSION_SCRIPT_RCE.as_ref() {
+                let mut random_args: [u8; 32] = Default::default();
+                rng.fill(&mut random_args[..]);
                 // let's first build the RCE cell which contains the RCData(RCRule/RCCellVec).
-                let rce_cell = build_rce_script(&rce_cell_content);
-                let rce_cell_hash = rce_cell.code_hash();
+                let (b0, rce_script) = build_script(
+                    dummy,
+                    tx_builder,
+                    true,
+                    &rce_cell_content,
+                    Bytes::from(random_args.as_ref()),
+                );
+                tx_builder = b0;
+                let rce_cell_hash = rce_script.code_hash();
                 // then create a script with args pointed to that RCE cell
                 let e_script = build_rce_script(&rce_cell_hash.as_bytes());
                 extension_scripts.push(e_script);
@@ -331,10 +471,9 @@ pub fn gen_tx(
             total_count += 1;
         }
         // xUDT args on "args" field
-        let xudt_args = build_xudt_args(1, extension_scripts);
-        args = build_args([0u8; 32], xudt_args);
+        let xudt_args = build_xudt_args(1, &extension_scripts);
+        args = build_args(&[0u8; 32][..], &xudt_args);
     }
-    build_extension_data(total_count, rce_index, &proof);
 
     let (mut tx_builder, xudt_rce_script) =
         build_script(dummy, tx_builder, true, &XUDT_RCE_BIN, args);
@@ -370,11 +509,10 @@ pub fn gen_tx(
             ),
         );
 
-        // TODO: fill witness here
-        let mut random_extra_witness = [0u8; 32];
-        rng.fill(&mut random_extra_witness);
+        // fill witness
+        let witness_input_type = build_extension_data(total_count, rce_index, vec![proof.clone()]);
         let witness_args = WitnessArgsBuilder::default()
-            .extra(Bytes::from(random_extra_witness.to_vec()).pack())
+            .type_(witness_input_type.pack())
             .build();
 
         tx_builder = tx_builder
@@ -406,6 +544,7 @@ fn test_simple_udt() {
         vec![100],
         vec![100],
         vec![],
+        TestScheme::None,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -426,6 +565,7 @@ fn test_simple_udt_failed() {
         vec![100],
         vec![200],
         vec![],
+        TestScheme::None,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -449,6 +589,7 @@ fn test_xudt_extension_returns_success() {
         vec![100],
         vec![100],
         vec![&EXTENSION_SCRIPT_0],
+        TestScheme::None,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -477,6 +618,7 @@ fn test_xudt_extension_multi_return_success() {
         vec![100],
         vec![100],
         bin_vec,
+        TestScheme::None,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -498,6 +640,7 @@ fn test_xudt_extension_returns_failed() {
         vec![100],
         vec![100],
         vec![&EXTENSION_SCRIPT_1],
+        TestScheme::None,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -529,6 +672,7 @@ fn test_xudt_extension_multi_return_failed() {
         vec![100],
         vec![100],
         bin_vec,
+        TestScheme::None,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -538,5 +682,108 @@ fn test_xudt_extension_multi_return_failed() {
     assert_error_eq!(
         verify_result.unwrap_err(),
         ScriptError::ValidationFailure(1),
+    );
+}
+
+#[test]
+fn test_rce_on_wl() {
+    let mut rng = thread_rng();
+    let mut data_loader = DummyDataLoader::new();
+    let special_rce_hash = Bytes::from(RCE_HASH.as_ref());
+    let bin_vec: Vec<&Bytes> = vec![&special_rce_hash];
+
+    let tx = gen_tx(
+        &mut data_loader,
+        Bytes::from(vec![0u8; 32]),
+        1,
+        1,
+        vec![100],
+        vec![100],
+        bin_vec,
+        TestScheme::OnWhiteList,
+        &mut rng,
+    );
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    verify_result.expect("pass verification");
+}
+
+#[test]
+fn test_rce_not_on_wl() {
+    let mut rng = thread_rng();
+    let mut data_loader = DummyDataLoader::new();
+    let special_rce_hash = Bytes::from(RCE_HASH.as_ref());
+    let bin_vec: Vec<&Bytes> = vec![&special_rce_hash];
+
+    let tx = gen_tx(
+        &mut data_loader,
+        Bytes::from(vec![0u8; 32]),
+        1,
+        1,
+        vec![100],
+        vec![100],
+        bin_vec,
+        TestScheme::NotOnWhiteList,
+        &mut rng,
+    );
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    verify_result.expect("pass verification");
+}
+
+#[test]
+fn test_rce_not_on_bl() {
+    let mut rng = thread_rng();
+    let mut data_loader = DummyDataLoader::new();
+    let special_rce_hash = Bytes::from(RCE_HASH.as_ref());
+    let bin_vec: Vec<&Bytes> = vec![&special_rce_hash];
+
+    let tx = gen_tx(
+        &mut data_loader,
+        Bytes::from(vec![0u8; 32]),
+        1,
+        1,
+        vec![100],
+        vec![100],
+        bin_vec,
+        TestScheme::NotOnBlackList,
+        &mut rng,
+    );
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    verify_result.expect("pass verification");
+}
+
+#[test]
+fn test_rce_on_bl() {
+    let mut rng = thread_rng();
+    let mut data_loader = DummyDataLoader::new();
+    let special_rce_hash = Bytes::from(RCE_HASH.as_ref());
+    let bin_vec: Vec<&Bytes> = vec![&special_rce_hash];
+
+    let tx = gen_tx(
+        &mut data_loader,
+        Bytes::from(vec![0u8; 32]),
+        1,
+        1,
+        vec![100],
+        vec![100],
+        bin_vec,
+        TestScheme::OnBlackList,
+        &mut rng,
+    );
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    assert_error_eq!(
+        verify_result.unwrap_err(),
+        ScriptError::ValidationFailure(57), // ERROR_ON_BLACK_LIST
     );
 }

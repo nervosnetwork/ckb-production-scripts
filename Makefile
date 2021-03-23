@@ -55,6 +55,7 @@ ${PROTOCOL_SCHEMA}:
 
 fmt:
 	clang-format -i -style=Google $(wildcard c/always_success.c c/anyone_can_pay.c c/smt.h c/rce.h c/xudt_rce.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
+	rustfmt src/tests/xudt_rce.rs
 	git diff --exit-code $(wildcard c/always_success.c c/anyone_can_pay.c c/smt.h c/rce.h c/xudt_rce.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
 
 
