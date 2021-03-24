@@ -257,20 +257,17 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
         on_white_list = true;
         // don't break when verify successfully: it's possible to be on
         // emergency halt afterward.
-      } else {
-        //  *** not all hashes on white list
-        on_white_list = false;
-      };
+      }
+      //  else *** not all hashes on white list
     } else {
       // black list
       err = smt_verify(root_hash, &bl_states, proof.ptr, proof.size);
-      if (err == 0) {
-        //  *** all hashes *not* on black list
-        on_black_list = false;
-      } else {
-        //  *** any one of hashes on black list
+      if (err != 0) {
+        // *** any one of hashes on black list
         on_black_list = true;
       }
+      //  else *** all hashes *not* on black list
+
       // don't break when verify failed: it's possible to be on white list
       // afterward.
     }

@@ -71,7 +71,7 @@ uint8_t WHITE_LIST_HASH_ROOT[32] = {151, 81,  37,  242, 189, 99,  62,  175,
                                     1,   58,  224, 21,  51,  99,  72,  182};
 uint8_t WHITE_LIST_PROOF[] = {76, 76, 72, 4};
 
-void set_rce_black_list_data() {
+void set_rce_not_on_black_list_data() {
   int err = 0;
   set_basic_data();
   uint16_t root_rcrule =
@@ -85,13 +85,13 @@ void set_rce_black_list_data() {
                             "internal extension script, no path");
 }
 
-void set_rce_not_on_black_list_data() {
+void set_rce_on_black_list_data() {
   int err = 0;
   set_basic_data();
-  uint16_t root_rcrule =
-      rce_add_rcrule(BLACK_LIST_HASH_ROOT, 0x0);  // black list
+  uint8_t hash[32] = {
+      0};  // invalid hash, so the verify result is false: it's on black list.
+  uint16_t root_rcrule = rce_add_rcrule(hash, 0x0);  // on black list
   rce_begin_proof();
-  BLACK_LIST_PROOF[0] ^= 0x01;
   rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF));
   rce_end_proof();
 
@@ -196,6 +196,24 @@ exit:
   return;
 }
 
+UTEST(smt, verify_not_on_bl) {
+  uint8_t key1[32] = {11};
+  uint8_t value1[32] = {0};
+  uint8_t key2[32] = {22};
+  uint8_t value2[32] = {0};
+
+  smt_pair_t entries[8];
+  smt_state_t changes;
+  smt_state_init(&changes, entries, 32);
+  smt_state_insert(&changes, key1, value1);
+  smt_state_insert(&changes, key2, value2);
+  smt_state_normalize(&changes);
+
+  int err = smt_verify(BLACK_LIST_HASH_ROOT, &changes, BLACK_LIST_PROOF,
+                       sizeof(BLACK_LIST_PROOF));
+  ASSERT_EQ(0, err);
+}
+
 UTEST(rce, black_list) {
   int err = 0;
   xudt_begin_data();
@@ -211,7 +229,7 @@ UTEST(rce, black_list) {
                             "internal extension script, no path");
   xudt_end_data();
   err = simulator_main();
-  ASSERT_EQ(err, ERROR_ON_BLACK_LIST);
+  ASSERT_EQ(0, err);
 exit:
   return;
 }
@@ -219,7 +237,7 @@ exit:
 UTEST(xudt, simple_udt) {
   int err = 0;
   xudt_begin_data();
-  set_rce_black_list_data();
+  set_rce_not_on_black_list_data();
   xudt_add_input_amount(999);
   xudt_add_output_amount(1000);
   xudt_end_data();
@@ -284,7 +302,7 @@ exit:
 UTEST(xudt, extension_script_returns_non_zero) {
   int err = 0;
   xudt_begin_data();
-  set_rce_not_on_black_list_data();
+  set_rce_on_black_list_data();
   uint8_t extension_hash[BLAKE2B_BLOCK_SIZE] = {0x66};
   uint8_t args[32] = {0};
   xudt_add_extension_script(
@@ -292,7 +310,7 @@ UTEST(xudt, extension_script_returns_non_zero) {
       "tests/xudt_rce/simulator-build-debug/libextension_script_1.dylib");
   xudt_end_data();
   err = simulator_main();
-  ASSERT_EQ(err, 1);
+  ASSERT_EQ(ERROR_ON_BLACK_LIST, err);
 
 exit:
   return;
@@ -305,7 +323,8 @@ UTEST(rce, use_rc_cell_vec) {
   set_basic_data();
   uint16_t rcrulevec[MAX_RCRULE_IN_CELL] = {0};
   for (int i = 0; i < MAX_RCRULE_IN_CELL; i++) {
-    rcrulevec[i] = rce_add_rcrule(BLACK_LIST_HASH_ROOT, 0x0);  // black list
+    rcrulevec[i] =
+        rce_add_rcrule(BLACK_LIST_HASH_ROOT, 0x0);  // not on black list
   }
   RCHashType root_rcrule = rce_add_rccellvec(rcrulevec, MAX_RCRULE_IN_CELL);
   rce_begin_proof();
@@ -320,7 +339,7 @@ UTEST(rce, use_rc_cell_vec) {
   xudt_end_data();
 
   err = simulator_main();
-  ASSERT_EQ(err, 0);
+  ASSERT_EQ(0, err);
 exit:
   return;
 }
@@ -349,6 +368,7 @@ UTEST(smt, verify_not_existing) {
 
   ASSERT_EQ(0, smt_verify(root_hash, &changes, proof, sizeof(proof)));
 }
+
 // this is the case from
 // https://github.com/nervosnetwork/ckb-simple-account-layer/blob/1970c0382271837ff46fdc276c5b63bccb4324db/c/tests/main.c#L136
 // the names are changed accordingly.

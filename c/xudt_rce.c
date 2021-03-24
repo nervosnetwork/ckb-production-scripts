@@ -116,14 +116,14 @@ typedef int (*ValidateFuncType)(int is_owner_mode, size_t extension_index,
                                 const uint8_t* args, size_t args_len);
 
 typedef enum XUDTFlags {
-  XUDTFlags_Plain = 0,
-  XUDTFlags_InArgs = 1,
-  XUDTFlags_InWitness = 2,
+  XUDTFlagsPlain = 0,
+  XUDTFlagsInArgs = 1,
+  XUDTFlagsInWitness = 2,
 } XUDTFlags;
 
 typedef enum XUDTValidateFuncCategory {
-  XVFC_Normal = 0,  // normal extension script
-  XVFC_RCE = 1,     // Regulation Compliance Extension
+  CateNormal = 0,  // normal extension script
+  CateRce = 1,     // Regulation Compliance Extension
 } XUDTValidateFuncCategory;
 
 uint8_t RCE_HASH[32] = {1};
@@ -137,7 +137,7 @@ int load_validate_func(uint8_t* code_buff, uint32_t* code_used,
   size_t consumed_size = 0;
 
   if (memcmp(RCE_HASH, hash, 32) == 0 && hash_type == 1) {
-    *cat = XVFC_RCE;
+    *cat = CateRce;
     *func = rce_validate;
     return 0;
   }
@@ -153,7 +153,7 @@ int load_validate_func(uint8_t* code_buff, uint32_t* code_used,
   *func = (ValidateFuncType)ckb_dlsym(handle, EXPORTED_FUNC_NAME);
   CHECK2(*func != NULL, ERROR_CANT_FIND_SYMBOL);
 
-  *cat = XVFC_Normal;
+  *cat = CateNormal;
   err = 0;
 exit:
   return err;
@@ -338,14 +338,14 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
   if (args_bytes_seg.size < (FLAGS_SIZE + BLAKE2B_BLOCK_SIZE)) {
     *var_data = NULL;
     *var_len = 0;
-    *flags = XUDTFlags_Plain;
+    *flags = XUDTFlagsPlain;
   } else {
     uint32_t* flag_ptr = (uint32_t*)(args_bytes_seg.ptr + BLAKE2B_BLOCK_SIZE);
-    if (*flag_ptr == XUDTFlags_Plain) {
-      *flags = XUDTFlags_Plain;
-    } else if (*flag_ptr == XUDTFlags_InArgs) {
+    if (*flag_ptr == XUDTFlagsPlain) {
+      *flags = XUDTFlagsPlain;
+    } else if (*flag_ptr == XUDTFlagsInArgs) {
       uint32_t real_size = 0;
-      *flags = XUDTFlags_InArgs;
+      *flags = XUDTFlagsInArgs;
       *var_len = args_bytes_seg.size - BLAKE2B_BLOCK_SIZE - FLAGS_SIZE;
       *var_data = args_bytes_seg.ptr + BLAKE2B_BLOCK_SIZE + FLAGS_SIZE;
 
@@ -353,8 +353,8 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
       CHECK(err);
       // note, it's different than "flag = 2"
       CHECK2(real_size == *var_len, ERROR_INVALID_ARGS_FORMAT);
-    } else if (*flag_ptr == XUDTFlags_InWitness) {
-      *flags = XUDTFlags_InWitness;
+    } else if (*flag_ptr == XUDTFlagsInWitness) {
+      *flags = XUDTFlagsInWitness;
       uint32_t hash_size =
           args_bytes_seg.size - BLAKE2B_BLOCK_SIZE - FLAGS_SIZE;
       CHECK2(hash_size == BLAKE160_SIZE, ERROR_INVALID_FLAG);
@@ -516,7 +516,7 @@ int main() {
   int owner_mode = 0;
   uint8_t* raw_extension_data = NULL;
   uint32_t raw_extension_len = 0;
-  XUDTFlags flags = XUDTFlags_Plain;
+  XUDTFlags flags = XUDTFlagsPlain;
   uint8_t
       input_lock_script_hash[MAX_LOCK_SCRIPT_HASH_COUNT * BLAKE2B_BLOCKBYTES];
   uint32_t input_lock_script_hash_count = 0;
@@ -524,7 +524,7 @@ int main() {
                    input_lock_script_hash, &input_lock_script_hash_count);
   CHECK(err);
   CHECK2(owner_mode == 1 || owner_mode == 0, ERROR_INVALID_ARGS_FORMAT);
-  if (flags != XUDTFlags_Plain) {
+  if (flags != XUDTFlagsPlain) {
     CHECK2(raw_extension_data != NULL, ERROR_INVALID_ARGS_FORMAT);
     CHECK2(raw_extension_len > 0, ERROR_INVALID_ARGS_FORMAT);
   }
@@ -533,7 +533,7 @@ int main() {
     goto exit;
   }
 
-  if (flags == XUDTFlags_Plain) {
+  if (flags == XUDTFlagsPlain) {
     err = 0;
     goto exit;
   }
@@ -556,12 +556,12 @@ int main() {
     mol_seg_t args = MolReader_Script_get_args(&res.seg);
 
     uint8_t hash_type2 = *((uint8_t*)hash_type.ptr);
-    XUDTValidateFuncCategory cat = XVFC_Normal;
+    XUDTValidateFuncCategory cat = CateNormal;
     err = load_validate_func(code_buff, &code_used, code_hash.ptr, hash_type2,
                              &func, &cat);
     CHECK(err);
     // RCE is with high priority, must be checked
-    if (cat != XVFC_RCE) {
+    if (cat != CateRce) {
       int err2 = is_extension_script_validated(res.seg, input_lock_script_hash,
                                                input_lock_script_hash_count);
       if (err2 == 0) {

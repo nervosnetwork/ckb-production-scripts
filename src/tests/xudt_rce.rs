@@ -1,11 +1,14 @@
 #![allow(unused_imports)]
 
 // stdlib or 3rd part lib
+use lazy_static::lazy_static;
 use std::collections::HashMap;
 
 // ckb lib
+use blake2b_rs::{Blake2b, Blake2bBuilder};
 use ckb_crypto::secp::Privkey;
 use ckb_error::assert_error_eq;
+use ckb_hash::blake2b_256;
 use ckb_script::DataLoader;
 use ckb_script::{ScriptError, TransactionScriptsVerifier};
 use ckb_types::packed::{Byte, Byte32};
@@ -20,27 +23,24 @@ use ckb_types::{
         self, CellDep, CellInput, CellOutput, OutPoint, Script, WitnessArgs, WitnessArgsBuilder,
     },
     prelude::*,
-    H256,
 };
-use lazy_static::lazy_static;
 use rand::rngs::ThreadRng;
 use rand::{thread_rng, Rng};
 use sparse_merkle_tree::{
-    blake2b::Blake2bHasher, default_store::DefaultStore, error::Error, MerkleProof,
-    SparseMerkleTree, H256 as SmtH256,
+    blake2b::Blake2bHasher, default_store::DefaultStore, error::Error, traits::Hasher, MerkleProof,
+    SparseMerkleTree, H256,
 };
 
 // internal lib
 use super::{
-    blockchain::Script as ExtensionScript, build_resolved_tx,
+    blockchain::Script as ExtensionScript,
+    build_resolved_tx,
+    xudt_rce_mol::RCCellVecBuilder,
     xudt_rce_mol::ScriptVec as ExtensionScriptVec,
-    xudt_rce_mol::ScriptVecBuilder as ExtensionScriptVecBuilder, DummyDataLoader, MAX_CYCLES,
+    xudt_rce_mol::ScriptVecBuilder as ExtensionScriptVecBuilder,
+    xudt_rce_mol::{RCData, RCDataBuilder, RCRuleBuilder},
+    DummyDataLoader, MAX_CYCLES,
 };
-
-use crate::tests::xudt_rce_mol::{RCData, RCDataBuilder, RCRuleBuilder};
-use blake2b_rs::{Blake2b, Blake2bBuilder};
-use ckb_hash::blake2b_256;
-use sparse_merkle_tree::traits::Hasher;
 
 const BLAKE2B_KEY: &[u8] = &[];
 const BLAKE2B_LEN: usize = 32;
@@ -59,10 +59,10 @@ impl Default for CKBBlake2bHasher {
 }
 
 impl Hasher for CKBBlake2bHasher {
-    fn write_h256(&mut self, h: &SmtH256) {
+    fn write_h256(&mut self, h: &H256) {
         self.0.update(h.as_slice());
     }
-    fn finish(self) -> SmtH256 {
+    fn finish(self) -> H256 {
         let mut hash = [0u8; 32];
         self.0.finalize(&mut hash);
         hash.into()
@@ -83,20 +83,24 @@ lazy_static! {
     pub static ref EXTENSION_SCRIPT_1: Bytes =
         Bytes::from(include_bytes!("../../build/extension_script_1").as_ref());
     pub static ref EXTENSION_SCRIPT_RCE: Bytes = Bytes::from(RCE_HASH.as_ref());
-    pub static ref SMT_EXISTING: SmtH256 = [
+    pub static ref SMT_EXISTING: H256 = [
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0
     ]
     .into();
-    pub static ref SMT_NOT_EXISTING: SmtH256 = [
+    pub static ref SMT_NOT_EXISTING: H256 = [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0
     ]
     .into();
 }
 
-const WHITE_LIST: u8 = 0x2;
-const BLACK_LIST: u8 = 0x0;
+// on(1): white list
+// off(0): black list
+const WHITE_BLACK_LIST_MASK: u8 = 0x2;
+// on(1): emergency halt mode
+// off(0): not int emergency halt mode
+const EMERGENCY_HALT_MODE_MASK: u8 = 0x1;
 
 pub fn gen_random_out_point(rng: &mut ThreadRng) -> OutPoint {
     let hash = {
@@ -211,9 +215,9 @@ fn build_args(lock: &[u8], xudt_args: &Bytes) -> Bytes {
     res
 }
 
-type SMT = SparseMerkleTree<CKBBlake2bHasher, SmtH256, DefaultStore<SmtH256>>;
+type SMT = SparseMerkleTree<CKBBlake2bHasher, H256, DefaultStore<H256>>;
 
-fn new_smt(pairs: Vec<(SmtH256, SmtH256)>) -> SMT {
+fn new_smt(pairs: Vec<(H256, H256)>) -> SMT {
     let mut smt = SMT::default();
     for (key, value) in pairs {
         smt.update(key, value).unwrap();
@@ -222,19 +226,19 @@ fn new_smt(pairs: Vec<(SmtH256, SmtH256)>) -> SMT {
 }
 
 // return smt root and proof
-fn build_smt_on_bl(hashes: &Vec<[u8; 32]>, on: bool) -> (SmtH256, Vec<u8>) {
-    let test_pairs: Vec<(SmtH256, SmtH256)> = hashes
+fn build_smt_on_bl(hashes: &Vec<[u8; 32]>, on: bool) -> (H256, Vec<u8>) {
+    let test_pairs: Vec<(H256, H256)> = hashes
         .clone()
         .into_iter()
         .map(|hash| (hash.into(), SMT_NOT_EXISTING.clone()))
         .collect();
     // this is the hash on black list, but "hashes" are not on that.
-    let key_on_bl1: SmtH256 = [
+    let key_on_bl1: H256 = [
         111, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0,
     ]
     .into();
-    let key_on_bl2: SmtH256 = [
+    let key_on_bl2: H256 = [
         222, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0,
     ]
@@ -272,20 +276,20 @@ fn build_smt_on_bl(hashes: &Vec<[u8; 32]>, on: bool) -> (SmtH256, Vec<u8>) {
 }
 
 // return smt root and proof
-fn build_smt_on_wl(hashes: &Vec<[u8; 32]>, on: bool) -> (SmtH256, Vec<u8>) {
-    let existing_pairs: Vec<(SmtH256, SmtH256)> = hashes
+fn build_smt_on_wl(hashes: &Vec<[u8; 32]>, on: bool) -> (H256, Vec<u8>) {
+    let existing_pairs: Vec<(H256, H256)> = hashes
         .clone()
         .into_iter()
         .map(|hash| (hash.into(), SMT_EXISTING.clone()))
         .collect();
 
     // this is the hash on white list, and "hashes" are on that.
-    let key_on_wl1: SmtH256 = [
+    let key_on_wl1: H256 = [
         111, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0,
     ]
     .into();
-    let key_on_wl2: SmtH256 = [
+    let key_on_wl2: H256 = [
         222, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0,
     ]
@@ -319,28 +323,44 @@ fn build_smt_on_wl(hashes: &Vec<[u8; 32]>, on: bool) -> (SmtH256, Vec<u8>) {
     return (root.clone(), compiled_proof.into());
 }
 
-fn build_rc_rule(smt_root: &[u8; 32], is_black: bool) -> ckb_types::bytes::Bytes {
+fn build_rc_rule(
+    smt_root: &[u8; 32],
+    is_black: bool,
+    is_emergency: bool,
+) -> ckb_types::bytes::Bytes {
     use super::blockchain::*;
     use super::xudt_rce_mol::*;
     use molecule::prelude::*;
 
-    let flags = if is_black {
-        Byte::new(BLACK_LIST)
-    } else {
-        Byte::new(WHITE_LIST)
-    };
+    let mut flags: u8 = 0;
+
+    if !is_black {
+        flags ^= WHITE_BLACK_LIST_MASK;
+    }
+    if is_emergency {
+        flags ^= EMERGENCY_HALT_MODE_MASK;
+    }
     let smt_root = molecule::bytes::Bytes::from(smt_root.as_ref());
     let sr = Byte32::new_unchecked(smt_root);
-    let rcrule = RCRuleBuilder::default().flags(flags).smt_root(sr).build();
+    let rcrule = RCRuleBuilder::default()
+        .flags(Byte::new(flags))
+        .smt_root(sr)
+        .build();
     let res = RCDataBuilder::default()
         .set(RCDataUnion::RCRule(rcrule))
         .build();
     res.as_slice().into()
 }
 
-fn make_blockchain_bytes(input: &[u8]) -> super::blockchain::Bytes {
+fn make_new_bytes(input: &[u8]) -> super::blockchain::Bytes {
     use molecule::prelude::*;
     super::blockchain::BytesBuilder::default()
+        .set(input.into_iter().map(|v| Byte::new(v.clone())).collect())
+        .build()
+}
+
+fn make_old_bytes(input: &[u8]) -> ckb_types::packed::Bytes {
+    ckb_types::packed::BytesBuilder::default()
         .set(input.into_iter().map(|v| Byte::new(v.clone())).collect())
         .build()
 }
@@ -366,7 +386,7 @@ fn build_extension_data(
 
     for i in 0..count {
         if i == rce_index {
-            bytes_vec_builder = bytes_vec_builder.push(make_blockchain_bytes(proofs.as_slice()));
+            bytes_vec_builder = bytes_vec_builder.push(make_new_bytes(proofs.as_slice()));
         } else {
             bytes_vec_builder = bytes_vec_builder.push(super::blockchain::Bytes::default());
         }
@@ -385,6 +405,12 @@ pub enum TestScheme {
     NotOnBlackList,
     BothOn,
     EmergencyHaltMode,
+}
+
+pub enum XudtFlags {
+    Plain = 0,
+    InArgs = 1,
+    InWitness = 2,
 }
 
 pub fn gen_tx(
@@ -415,28 +441,10 @@ pub fn gen_tx(
     tx_builder = tx0;
     let always_success_script_hash = blake2b_256(always_success_script.as_slice());
 
-    let mut is_black_list = false;
-    let (smt_root, proof) = match scheme {
-        TestScheme::OnWhiteList => {
-            is_black_list = false;
-            build_smt_on_wl(&vec![always_success_script_hash], true)
-        }
-        TestScheme::NotOnWhiteList => {
-            is_black_list = false;
-            build_smt_on_wl(&vec![always_success_script_hash], false)
-        }
-        TestScheme::OnBlackList => {
-            is_black_list = true;
-            build_smt_on_bl(&vec![always_success_script_hash], true)
-        }
-        TestScheme::NotOnBlackList => {
-            is_black_list = true;
-            build_smt_on_bl(&vec![always_success_script_hash], false)
-        }
-        _ => (SmtH256::default(), Vec::<u8>::default()),
-    };
+    let (proofs, rc_datas) = generate_proofs(scheme, &vec![always_success_script_hash]);
 
-    let rce_cell_content = build_rc_rule(&smt_root.into(), is_black_list);
+    let (rce_cell_root_hash, b0) = generate_rce_cell(dummy, tx_builder, rc_datas, rng);
+    tx_builder = b0;
 
     let mut total_count = 0;
     let mut rce_index = 0;
@@ -446,20 +454,8 @@ pub fn gen_tx(
         let mut extension_scripts: Vec<Script> = vec![];
         for e_script in extension_scripts_bin {
             if e_script == EXTENSION_SCRIPT_RCE.as_ref() {
-                let mut random_args: [u8; 32] = Default::default();
-                rng.fill(&mut random_args[..]);
-                // let's first build the RCE cell which contains the RCData(RCRule/RCCellVec).
-                let (b0, rce_script) = build_script(
-                    dummy,
-                    tx_builder,
-                    true,
-                    &rce_cell_content,
-                    Bytes::from(random_args.as_ref()),
-                );
-                tx_builder = b0;
-                let rce_cell_hash = rce_script.code_hash();
                 // then create a script with args pointed to that RCE cell
-                let e_script = build_rce_script(&rce_cell_hash.as_bytes());
+                let e_script = build_rce_script(&rce_cell_root_hash.as_bytes());
                 extension_scripts.push(e_script);
                 rce_index = total_count;
             } else {
@@ -471,7 +467,7 @@ pub fn gen_tx(
             total_count += 1;
         }
         // xUDT args on "args" field
-        let xudt_args = build_xudt_args(1, &extension_scripts);
+        let xudt_args = build_xudt_args(XudtFlags::InArgs as u32, &extension_scripts);
         args = build_args(&[0u8; 32][..], &xudt_args);
     }
 
@@ -510,7 +506,7 @@ pub fn gen_tx(
         );
 
         // fill witness
-        let witness_input_type = build_extension_data(total_count, rce_index, vec![proof.clone()]);
+        let witness_input_type = build_extension_data(total_count, rce_index, proofs.clone());
         let witness_args = WitnessArgsBuilder::default()
             .type_(witness_input_type.pack())
             .build();
@@ -521,6 +517,121 @@ pub fn gen_tx(
     }
 
     tx_builder.build()
+}
+//
+// fn build_rce_cell_vec(hash_set: Vec<Byte32>) {
+// }
+
+// first generate N RCE cells with each contained one RCRule
+// then collect all these RCE cell hash and create the final RCE cell.
+fn generate_rce_cell(
+    dummy: &mut DummyDataLoader,
+    mut tx_builder: TransactionBuilder,
+    rc_data: Vec<Bytes>,
+    rng: &mut ThreadRng,
+) -> (Byte32, TransactionBuilder) {
+    use super::blockchain::Byte32;
+    use super::xudt_rce_mol::RCDataUnion;
+    use molecule::prelude::*;
+
+    let mut cell_vec_builder = RCCellVecBuilder::default();
+
+    for rc_rule in rc_data {
+        let mut random_args: [u8; 32] = Default::default();
+        rng.fill(&mut random_args[..]);
+        // let's first build the RCE cell which contains the RCData(RCRule/RCCellVec).
+        let (b0, rce_script) = build_script(
+            dummy,
+            tx_builder,
+            true,
+            &rc_rule,
+            ckb_types::bytes::Bytes::from(random_args.as_ref()),
+        );
+        tx_builder = b0;
+        // rce_script is in "old" blockchain types
+        let hash = rce_script.code_hash();
+
+        cell_vec_builder =
+            cell_vec_builder.push(Byte32::from_slice(hash.as_slice()).expect("Byte32::from_slice"));
+    }
+
+    let cell_vec = cell_vec_builder.build();
+
+    let rce_cell_content = RCDataBuilder::default()
+        .set(RCDataUnion::RCCellVec(cell_vec))
+        .build();
+
+    let mut random_args: [u8; 32] = Default::default();
+    rng.fill(&mut random_args[..]);
+
+    let bin = rce_cell_content.as_slice();
+
+    // let's first build the RCE cell which contains the RCData(RCRule/RCCellVec).
+    let (b0, rce_script) = build_script(
+        dummy,
+        tx_builder,
+        true,
+        &ckb_types::bytes::Bytes::from(bin),
+        ckb_types::bytes::Bytes::from(random_args.as_ref()),
+    );
+    tx_builder = b0;
+
+    (rce_script.code_hash(), tx_builder)
+}
+
+fn generate_proofs(scheme: TestScheme, script_hash: &Vec<[u8; 32]>) -> (Vec<Vec<u8>>, Vec<Bytes>) {
+    let mut proofs = Vec::<Vec<u8>>::default();
+    let mut rc_data = Vec::<Bytes>::default();
+
+    match scheme {
+        TestScheme::BothOn => {
+            let (proof1, rc_data1) = generate_single_proof(TestScheme::OnWhiteList, script_hash);
+            let (proof2, rc_data2) = generate_single_proof(TestScheme::OnBlackList, script_hash);
+            proofs.push(proof1);
+            rc_data.push(rc_data1);
+            proofs.push(proof2);
+            rc_data.push(rc_data2);
+        }
+        _ => {
+            let (proof1, rc_data1) = generate_single_proof(scheme, script_hash);
+            proofs.push(proof1);
+            rc_data.push(rc_data1);
+        }
+    }
+
+    (proofs, rc_data)
+}
+
+fn generate_single_proof(scheme: TestScheme, script_hash: &Vec<[u8; 32]>) -> (Vec<u8>, Bytes) {
+    let hash = script_hash.clone();
+    let mut is_black_list = false;
+    let mut is_emergency_halt = false;
+    let (smt_root, proof) = match scheme {
+        TestScheme::OnWhiteList => {
+            is_black_list = false;
+            build_smt_on_wl(&hash, true)
+        }
+        TestScheme::NotOnWhiteList => {
+            is_black_list = false;
+            build_smt_on_wl(&hash, false)
+        }
+        TestScheme::OnBlackList => {
+            is_black_list = true;
+            build_smt_on_bl(&hash, true)
+        }
+        TestScheme::NotOnBlackList => {
+            is_black_list = true;
+            build_smt_on_bl(&hash, false)
+        }
+        TestScheme::EmergencyHaltMode => {
+            is_emergency_halt = true;
+            (H256::default(), Vec::<u8>::default())
+        }
+        _ => (H256::default(), Vec::<u8>::default()),
+    };
+
+    let rc_data = build_rc_rule(&smt_root.into(), is_black_list, is_emergency_halt);
+    (proof, rc_data)
 }
 
 fn debug_printer(script: &Byte32, msg: &str) {
@@ -786,4 +897,57 @@ fn test_rce_on_bl() {
         verify_result.unwrap_err(),
         ScriptError::ValidationFailure(57), // ERROR_ON_BLACK_LIST
     );
+}
+
+#[test]
+fn test_rce_emergency_halt_mode() {
+    let mut rng = thread_rng();
+    let mut data_loader = DummyDataLoader::new();
+    let special_rce_hash = Bytes::from(RCE_HASH.as_ref());
+    let bin_vec: Vec<&Bytes> = vec![&special_rce_hash];
+
+    let tx = gen_tx(
+        &mut data_loader,
+        Bytes::from(vec![0u8; 32]),
+        1,
+        1,
+        vec![100],
+        vec![100],
+        bin_vec,
+        TestScheme::EmergencyHaltMode,
+        &mut rng,
+    );
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    assert_error_eq!(
+        verify_result.unwrap_err(),
+        ScriptError::ValidationFailure(54), // ERROR_RCE_EMERGENCY_HATL
+    );
+}
+
+#[test]
+fn test_rce_both_on_wl_bl() {
+    let mut rng = thread_rng();
+    let mut data_loader = DummyDataLoader::new();
+    let special_rce_hash = Bytes::from(RCE_HASH.as_ref());
+    let bin_vec: Vec<&Bytes> = vec![&special_rce_hash];
+
+    let tx = gen_tx(
+        &mut data_loader,
+        Bytes::from(vec![0u8; 32]),
+        1,
+        1,
+        vec![100],
+        vec![100],
+        bin_vec,
+        TestScheme::BothOn,
+        &mut rng,
+    );
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    verify_result.expect("pass verification");
 }
