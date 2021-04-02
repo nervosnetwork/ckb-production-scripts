@@ -15,8 +15,6 @@ int ckb_exit(signed char);
 #include "blake2b.h"
 #include "blockchain-api2.h"
 #include "ckb_consts.h"
-#include "xudt_rce_mol.h"
-#include "xudt_rce_mol2.h"
 
 #if defined(CKB_USE_SIM)
 #include <stdio.h>
@@ -32,58 +30,6 @@ int ckb_exit(signed char);
 #define xudt_printf(x, ...) (void)0
 #endif
 
-enum ErrorCode {
-  // 0 is the only success code. We can use 0 directly.
-
-  // inherit from simple_udt
-  ERROR_ARGUMENTS_LEN = -1,
-  ERROR_ENCODING = -2,
-  ERROR_SYSCALL = -3,
-  ERROR_SCRIPT_TOO_LONG = -21,
-  ERROR_OVERFLOWING = -51,
-  ERROR_AMOUNT = -52,
-
-  // error code is starting from 40, to avoid conflict with
-  // common error code in other scripts.
-  ERROR_CANT_LOAD_LIB = 40,
-  ERROR_CANT_FIND_SYMBOL,
-  ERROR_INVALID_RCE_ARGS,
-  ERROR_NOT_ENOUGH_BUFF,
-  ERROR_INVALID_FLAG,
-  ERROR_INVALID_ARGS_FORMAT,
-  ERROR_INVALID_WITNESS_FORMAT,
-  ERROR_INVALID_MOL_FORMAT,
-  ERROR_BLAKE2B_ERROR,
-  ERROR_HASH_MISMATCHED,
-  ERROR_RCRULES_TOO_DEEP,
-  ERROR_TOO_MANY_RCRULES,
-  ERROR_RCRULES_PROOFS_MISMATCHED,
-  ERROR_SMT_VERIFY_FAILED,
-  ERROR_RCE_EMERGENCY_HATL,
-  ERROR_NOT_VALIDATED,
-  ERROR_TOO_MANY_LOCK,
-  ERROR_ON_BLACK_LIST,
-};
-
-#define CHECK2(cond, code) \
-  do {                     \
-    if (!(cond)) {         \
-      err = code;          \
-      ASSERT(0);           \
-      goto exit;           \
-    }                      \
-  } while (0)
-
-#define CHECK(code)  \
-  do {               \
-    if (code != 0) { \
-      err = code;    \
-      ASSERT(0);     \
-      goto exit;     \
-    }                \
-  } while (0)
-
-#define BLAKE2B_BLOCK_SIZE 32
 #define BLAKE160_SIZE 20
 #define SCRIPT_SIZE 32768
 #define RAW_EXTENSION_SIZE 32768
