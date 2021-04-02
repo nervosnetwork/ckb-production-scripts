@@ -28,10 +28,15 @@ Which means, one item in "structure" XudtWitnessInput might be SmtProofVec
 vector SmtProof <byte>;
 vector SmtProofVec <SmtProof>;
 
+/*
+High 4 bits of values : old_value
+Low 4 bits of values: new_value
+The can be either 0(SMT_VALUE_NOT_EXISTING) or 1(SMT_VALUE_EXISTING).
+Other values like 2, 3, .. 0xF is not allowed.
+*/
 struct SmtUpdateItem {
     key:       Byte32,
-    value:     Byte32,
-    old_value: Byte32,
+    values:    byte,
 }
 
 vector SmtUpdateVec <SmtUpdateItem>;

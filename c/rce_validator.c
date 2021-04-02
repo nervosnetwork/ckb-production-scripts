@@ -190,19 +190,33 @@ int main() {
       }
 
       mol2_cursor_t key_cursor = item.t->key(&item);
-      mol2_cursor_t value_cursor = item.t->value(&item);
-      mol2_cursor_t old_value_cursor = item.t->old_value(&item);
+      uint8_t values = item.t->values(&item);
 
       uint8_t key[SMT_KEY_BYTES];
-      uint8_t value[SMT_VALUE_BYTES];
-      uint8_t old_value[SMT_VALUE_BYTES];
+      uint8_t* old_value;
+      uint8_t* value;
+
+      /*
+        High 4 bits of values : old_value
+        Low 4 bits of values: new_value
+        The can be either 0(SMT_VALUE_NOT_EXISTING) or 1(SMT_VALUE_EXISTING).
+        Other values like 2, 3, .. 0xF is not allowed.
+       */
+      if ((values & 0xF0) == 0x10) {
+        old_value = SMT_VALUE_EXISTING;
+      } else {
+        old_value = SMT_VALUE_NOT_EXISTING;
+        CHECK2((values & 0xF0) == 0, ERROR_INVALID_MOL_FORMAT);
+      }
+      if ((values & 0x0F) == 0x01) {
+        value = SMT_VALUE_EXISTING;
+      } else {
+        value = SMT_VALUE_NOT_EXISTING;
+        CHECK2((values & 0x0F) == 0, ERROR_INVALID_MOL_FORMAT);
+      }
 
       uint32_t read = mol2_read_at(&key_cursor, key, SMT_KEY_BYTES);
       CHECK2(read == SMT_KEY_BYTES, ERROR_INVALID_MOL_FORMAT);
-      read = mol2_read_at(&value_cursor, value, SMT_VALUE_BYTES);
-      CHECK2(read == SMT_VALUE_BYTES, ERROR_INVALID_MOL_FORMAT);
-      read = mol2_read_at(&old_value_cursor, old_value, SMT_VALUE_BYTES);
-      CHECK2(read == SMT_VALUE_BYTES, ERROR_INVALID_MOL_FORMAT);
 
       if (append_only) {
         if (memcmp(value, SMT_VALUE_EXISTING, SMT_VALUE_BYTES) != 0) {

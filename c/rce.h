@@ -38,6 +38,7 @@ enum ErrorCode {
   ERROR_TYPE_FREEZED,
   ERROR_APPEND_ONLY,
   ERROR_EOF,
+  ERROR_TOO_LONG_PROOF,
 };
 
 #define CHECK2(cond, code) \
@@ -66,6 +67,7 @@ int get_extension_data(uint32_t index, uint8_t* buff, uint32_t buff_len,
 #define MAX_LOCK_SCRIPT_HASH_COUNT 2048
 #define MAX_RCRULES_COUNT 8192
 #define MAX_RECURSIVE_DEPTH 16
+#define MAX_TEMP_PROOF_LENGTH 32768
 
 // RC stands for Regulation Compliance
 typedef struct RCRule {
@@ -108,6 +110,37 @@ static uint32_t rce_read_from_cell_data(uintptr_t* arg, uint8_t* ptr,
     return 0;
   }
   return output_len;
+}
+
+int make_cursor_from_witness(WitnessArgsType* witness);
+
+static int rce_get_proofs(uint32_t index, SmtProofVecType* res) {
+  int err = 0;
+  WitnessArgsType witness;
+
+  err = make_cursor_from_witness(&witness);
+  CHECK(err);
+
+  BytesOptType input = witness.t->input_type(&witness);
+  CHECK2(!input.t->is_none(&input), ERROR_INVALID_MOL_FORMAT);
+
+  mol2_cursor_t bytes = input.t->unwrap(&input);
+  // convert Bytes to XudtWitnessInputType
+  XudtWitnessInputType witness_input = make_XudtWitnessInput(&bytes);
+  BytesVecType extension_data_vec =
+      witness_input.t->extension_data(&witness_input);
+
+  bool existing = false;
+  mol2_cursor_t extension_data =
+      extension_data_vec.t->get(&extension_data_vec, index, &existing);
+  CHECK2(existing, ERROR_INVALID_MOL_FORMAT);
+
+  res->cur = extension_data;
+  res->t = GetSmtProofVecVTable();
+
+  err = 0;
+exit:
+  return err;
 }
 
 static int rce_make_cursor_from_cell_data(uint8_t* data_source,
@@ -263,16 +296,11 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
   err = rce_gather_rcrules_recursively(&rce_state, args, 0);
   CHECK(err);
 
-  uint8_t buff[MAX_EXTENSION_DATA_SIZE];
-  uint32_t out_len = 0;
-  err = get_extension_data(extension_index, buff, MAX_EXTENSION_DATA_SIZE,
-                           &out_len);
+  SmtProofVecType proofs;
+  err = rce_get_proofs(extension_index, &proofs);
   CHECK(err);
 
-  mol_seg_t proofs = {.ptr = buff, .size = out_len};
-  CHECK2(MolReader_SmtProofVec_verify(&proofs, false) == MOL_OK,
-         ERROR_INVALID_MOL_FORMAT);
-  uint32_t proof_len = MolReader_SmtProofVec_length(&proofs);
+  uint32_t proof_len = proofs.t->len(&proofs);
   // count of proof should be same as size of RCRules
   CHECK2(proof_len == rce_state.rcrules_count, ERROR_RCRULES_PROOFS_MISMATCHED);
 
@@ -292,10 +320,13 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
   err = ERROR_SMT_VERIFY_FAILED;
   bool on_white_list = false;
   bool on_black_list = false;
+
+  uint8_t temp_proof[MAX_TEMP_PROOF_LENGTH];
+
   for (index = 0; index < proof_len; index++) {
-    mol_seg_res_t mol_proof = MolReader_SmtProofVec_get(&proofs, index);
-    CHECK(mol_proof.errno);
-    mol_seg_t proof = MolReader_SmtProof_raw_bytes(&mol_proof.seg);
+    bool existing = false;
+    mol2_cursor_t proof = proofs.t->get(&proofs, index, &existing);
+    CHECK2(existing, ERROR_INVALID_MOL_FORMAT);
 
     const RCRule* current_rule = &rce_state.rcrules[index];
 
@@ -306,8 +337,12 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
       // the emergency halt has the highest priority, can return immediately
       goto exit;
     }
+    uint32_t temp_proof_len =
+        mol2_read_at(&proof, temp_proof, MAX_TEMP_PROOF_LENGTH);
+    CHECK2(temp_proof_len <= MAX_TEMP_PROOF_LENGTH, ERROR_TOO_LONG_PROOF);
+
     if (rce_is_white_list(current_rule->flags)) {
-      err = smt_verify(root_hash, &wl_states, proof.ptr, proof.size);
+      err = smt_verify(root_hash, &wl_states, temp_proof, temp_proof_len);
       // For all RCRules using whitelists, as long as there is one RCRule which
       // satisfies err == 0, we consider validation to be success.
       if (err == 0) {
@@ -319,7 +354,7 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
       //  else *** not all hashes on white list
     } else {
       // black list
-      err = smt_verify(root_hash, &bl_states, proof.ptr, proof.size);
+      err = smt_verify(root_hash, &bl_states, temp_proof, temp_proof_len);
       if (err != 0) {
         // *** any one of hashes on black list
         on_black_list = true;

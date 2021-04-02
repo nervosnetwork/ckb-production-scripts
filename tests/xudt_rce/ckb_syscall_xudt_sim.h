@@ -3,10 +3,11 @@
 #define CKB_C_STDLIB_CKB_SYSCALLS_H_
 #include <stddef.h>
 #include <stdint.h>
-
 #undef ASSERT
 #include <assert.h>
 #define ASSERT assert
+
+#include "xudt_rce_mol.h"
 
 #define countof(s) (sizeof(s) / sizeof(s[0]))
 

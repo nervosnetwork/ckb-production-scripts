@@ -76,8 +76,7 @@ struct SmtUpdateItemVTable;
 struct SmtUpdateItemVTable *GetSmtUpdateItemVTable(void);
 struct SmtUpdateItemType make_SmtUpdateItem(mol2_cursor_t *cur);
 mol2_cursor_t SmtUpdateItem_get_key_impl(struct SmtUpdateItemType *);
-mol2_cursor_t SmtUpdateItem_get_value_impl(struct SmtUpdateItemType *);
-mol2_cursor_t SmtUpdateItem_get_old_value_impl(struct SmtUpdateItemType *);
+uint8_t SmtUpdateItem_get_values_impl(struct SmtUpdateItemType *);
 struct SmtUpdateVecType;
 struct SmtUpdateVecVTable;
 struct SmtUpdateVecVTable *GetSmtUpdateVecVTable(void);
@@ -175,8 +174,7 @@ typedef struct SmtProofVecType {
 
 typedef struct SmtUpdateItemVTable {
   mol2_cursor_t (*key)(struct SmtUpdateItemType *);
-  mol2_cursor_t (*value)(struct SmtUpdateItemType *);
-  mol2_cursor_t (*old_value)(struct SmtUpdateItemType *);
+  uint8_t (*values)(struct SmtUpdateItemType *);
 } SmtUpdateItemVTable;
 typedef struct SmtUpdateItemType {
   mol2_cursor_t cur;
@@ -459,8 +457,7 @@ struct SmtUpdateItemVTable *GetSmtUpdateItemVTable(void) {
   static int inited = 0;
   if (inited) return &s_vtable;
   s_vtable.key = SmtUpdateItem_get_key_impl;
-  s_vtable.value = SmtUpdateItem_get_value_impl;
-  s_vtable.old_value = SmtUpdateItem_get_old_value_impl;
+  s_vtable.values = SmtUpdateItem_get_values_impl;
   return &s_vtable;
 }
 mol2_cursor_t SmtUpdateItem_get_key_impl(SmtUpdateItemType *this) {
@@ -469,16 +466,10 @@ mol2_cursor_t SmtUpdateItem_get_key_impl(SmtUpdateItemType *this) {
   ret = convert_to_array(&ret2);
   return ret;
 }
-mol2_cursor_t SmtUpdateItem_get_value_impl(SmtUpdateItemType *this) {
-  mol2_cursor_t ret;
-  mol2_cursor_t ret2 = mol2_slice_by_offset(&this->cur, 32, 32);
-  ret = convert_to_array(&ret2);
-  return ret;
-}
-mol2_cursor_t SmtUpdateItem_get_old_value_impl(SmtUpdateItemType *this) {
-  mol2_cursor_t ret;
-  mol2_cursor_t ret2 = mol2_slice_by_offset(&this->cur, 64, 32);
-  ret = convert_to_array(&ret2);
+uint8_t SmtUpdateItem_get_values_impl(SmtUpdateItemType *this) {
+  uint8_t ret;
+  mol2_cursor_t ret2 = mol2_slice_by_offset(&this->cur, 32, 1);
+  ret = convert_to_Uint8(&ret2);
   return ret;
 }
 struct SmtUpdateVecType make_SmtUpdateVec(mol2_cursor_t *cur) {
@@ -501,7 +492,7 @@ uint32_t SmtUpdateVec_len_impl(SmtUpdateVecType *this) {
 SmtUpdateItemType SmtUpdateVec_get_impl(SmtUpdateVecType *this, uint32_t index,
                                         bool *existing) {
   SmtUpdateItemType ret = {0};
-  mol2_cursor_res_t res = mol2_fixvec_slice_by_index(&this->cur, 96, index);
+  mol2_cursor_res_t res = mol2_fixvec_slice_by_index(&this->cur, 33, index);
   if (res.errno != MOL2_OK) {
     *existing = false;
     return ret;

@@ -32,7 +32,7 @@ int ckb_exit(signed char);
 
 #define BLAKE160_SIZE 20
 #define SCRIPT_SIZE 32768
-#define RAW_EXTENSION_SIZE 32768
+#define RAW_EXTENSION_SIZE 65536
 #define EXPORTED_FUNC_NAME "validate"
 #define MAX_CODE_SIZE (1024 * 1024)
 #define FLAGS_SIZE 4
