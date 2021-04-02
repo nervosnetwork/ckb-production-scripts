@@ -113,6 +113,8 @@ int main() {
     DEBUG("Current script is too large!");
     return ERROR_ARGUMENTS_LEN;
   }
+  bool append_only = (flags & FLAG_APPEND_ONLY) != 0;
+
   uint8_t input_hash[SMT_KEY_BYTES];
   memset(input_hash, 0, SMT_KEY_BYTES);
   bool has_input = false, input_is_rule = false;
@@ -215,6 +217,12 @@ int main() {
 
       uint32_t read = mol2_read_at(&key_cursor, key, SMT_KEY_BYTES);
       CHECK2(read == SMT_KEY_BYTES, ERROR_INVALID_MOL_FORMAT);
+
+      if (append_only) {
+        if (memcmp(value, SMT_VALUE_EXISTING, SMT_VALUE_BYTES) != 0) {
+          return ERROR_APPEND_ONLY;
+        }
+      }
 
       err = smt_state_insert(&states, key, value);
       CHECK(err);
