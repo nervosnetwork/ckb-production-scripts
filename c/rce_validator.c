@@ -113,8 +113,6 @@ int main() {
     DEBUG("Current script is too large!");
     return ERROR_ARGUMENTS_LEN;
   }
-  bool append_only = (flags & FLAG_APPEND_ONLY) != 0;
-
   uint8_t input_hash[SMT_KEY_BYTES];
   memset(input_hash, 0, SMT_KEY_BYTES);
   bool has_input = false, input_is_rule = false;
@@ -199,8 +197,8 @@ int main() {
       /*
         High 4 bits of values : old_value
         Low 4 bits of values: new_value
-        The can be either 0(SMT_VALUE_NOT_EXISTING) or 1(SMT_VALUE_EXISTING).
-        Other values like 2, 3, .. 0xF is not allowed.
+        They can be either 0(SMT_VALUE_NOT_EXISTING) or 1(SMT_VALUE_EXISTING).
+        Other values like 2, 3, .. 0xF are not allowed.
        */
       if ((values & 0xF0) == 0x10) {
         old_value = SMT_VALUE_EXISTING;
@@ -218,19 +216,10 @@ int main() {
       uint32_t read = mol2_read_at(&key_cursor, key, SMT_KEY_BYTES);
       CHECK2(read == SMT_KEY_BYTES, ERROR_INVALID_MOL_FORMAT);
 
-      if (append_only) {
-        if (memcmp(value, SMT_VALUE_EXISTING, SMT_VALUE_BYTES) != 0) {
-          return ERROR_APPEND_ONLY;
-        }
-      } else {
-        if ((memcmp(value, SMT_VALUE_EXISTING, SMT_VALUE_BYTES) != 0) &&
-            (memcmp(value, SMT_VALUE_NOT_EXISTING, SMT_VALUE_BYTES) != 0)) {
-          return ERROR_INVALID_MOL_FORMAT;
-        }
-      }
-
-      CHECK(smt_state_insert(&states, key, value));
-      CHECK(smt_state_insert(&old_states, key, old_value));
+      err = smt_state_insert(&states, key, value);
+      CHECK(err);
+      err = smt_state_insert(&old_states, key, old_value);
+      CHECK(err);
     }
 
     mol2_cursor_t proof_cursor = smt_update.t->proof(&smt_update);

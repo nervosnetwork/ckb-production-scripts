@@ -31,7 +31,7 @@ enum ErrorCode {
   ERROR_TOO_MANY_RCRULES,
   ERROR_RCRULES_PROOFS_MISMATCHED,
   ERROR_SMT_VERIFY_FAILED,
-  ERROR_RCE_EMERGENCY_HATL,
+  ERROR_RCE_EMERGENCY_HALT,
   ERROR_NOT_VALIDATED,
   ERROR_TOO_MANY_LOCK,
   ERROR_ON_BLACK_LIST,
@@ -50,13 +50,14 @@ enum ErrorCode {
     }                      \
   } while (0)
 
-#define CHECK(code)  \
-  do {               \
-    if (code != 0) { \
-      err = code;    \
-      ASSERT(0);     \
-      goto exit;     \
-    }                \
+#define CHECK(_code)    \
+  do {                  \
+    int code = (_code); \
+    if (code != 0) {    \
+      err = code;       \
+      ASSERT(0);        \
+      goto exit;        \
+    }                   \
   } while (0)
 
 int get_extension_data(uint32_t index, uint8_t* buff, uint32_t buff_len,
@@ -333,7 +334,7 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
     const uint8_t* root_hash = current_rule->smt_root;
     // "Current RCRule must not be in Emergency Halt mode."
     if (rce_is_emergency_halt_mode(current_rule->flags)) {
-      err = ERROR_RCE_EMERGENCY_HATL;
+      err = ERROR_RCE_EMERGENCY_HALT;
       // the emergency halt has the highest priority, can return immediately
       goto exit;
     }

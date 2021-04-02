@@ -264,7 +264,7 @@ UTEST(xudt, emergency_halt_mode) {
                             "internal extension script, no path");
   xudt_end_data();
   err = simulator_main();
-  ASSERT_EQ(err, ERROR_RCE_EMERGENCY_HATL);
+  ASSERT_EQ(err, ERROR_RCE_EMERGENCY_HALT);
 exit:
   return;
 }
