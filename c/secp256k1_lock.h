@@ -50,34 +50,70 @@ int extract_witness_lock(uint8_t *witness, uint64_t len,
 }
 
 /*
+ * Load secp256k1 first witness and check the signature
+ *
+ * This function return CKB_SUCCESS if the witness is a valid WitnessArgs
+ * and the length of WitnessArgs#lock field is exactly the SIGNATURE_SIZE
+ *
  * Arguments:
- * pubkey blake160 hash, blake2b hash of pubkey first 20 bytes, used to
- * shield the real pubkey.
+ * * witness bytes, a buffer to receive the first witness bytes of the input
+ * cell group
+ * * witness len, a pointer to receive the first witness length
  *
  * Witness:
  * WitnessArgs with a signature in lock field used to present ownership.
  */
-int verify_secp256k1_blake160_sighash_all(
-    unsigned char pubkey_hash[BLAKE160_SIZE]) {
+int load_secp256k1_first_witness_and_check_signature(
+    unsigned char witness_bytes[MAX_WITNESS_SIZE], uint64_t *witness_len) {
   int ret;
-  uint64_t len = 0;
-  unsigned char temp[TEMP_SIZE];
-  unsigned char lock_bytes[SIGNATURE_SIZE];
-
   /* Load witness of first input */
-  uint64_t witness_len = MAX_WITNESS_SIZE;
-  ret = ckb_load_witness(temp, &witness_len, 0, 0, CKB_SOURCE_GROUP_INPUT);
+  *witness_len = MAX_WITNESS_SIZE;
+  ret = ckb_load_witness(witness_bytes, witness_len, 0, 0,
+                         CKB_SOURCE_GROUP_INPUT);
   if (ret != CKB_SUCCESS) {
     return ERROR_SYSCALL;
   }
 
-  if (witness_len > MAX_WITNESS_SIZE) {
+  if (*witness_len > MAX_WITNESS_SIZE) {
     return ERROR_WITNESS_SIZE;
   }
 
   /* load signature */
+  mol_seg_t witness_lock_seg;
+  ret = extract_witness_lock(witness_bytes, *witness_len, &witness_lock_seg);
+  if (ret != 0) {
+    return ERROR_ENCODING;
+  }
+
+  if (witness_lock_seg.size != SIGNATURE_SIZE) {
+    return ERROR_ARGUMENTS_LEN;
+  }
+  return CKB_SUCCESS;
+}
+
+/*
+ * Arguments:
+ * * pubkey blake160 hash, blake2b hash of pubkey first 20 bytes, used to
+ * shield the real pubkey.
+ * * first witness bytes, the first witness bytes of the input cell group
+ * * first witness len, length of first witness bytes
+ */
+int verify_secp256k1_blake160_sighash_all_with_witness(
+    unsigned char pubkey_hash[BLAKE160_SIZE],
+    unsigned char first_witness_bytes[MAX_WITNESS_SIZE],
+    uint64_t first_witness_len) {
+  int ret;
+  unsigned char temp[MAX_WITNESS_SIZE];
+  unsigned char lock_bytes[SIGNATURE_SIZE];
+
+  /* copy first witness to temp, we keep the first_witness_bytes untouched in
+   * this function */
+  uint64_t len = first_witness_len;
+  memcpy(temp, first_witness_bytes, len);
+
+  /* load signature */
   mol_seg_t lock_bytes_seg;
-  ret = extract_witness_lock(temp, witness_len, &lock_bytes_seg);
+  ret = extract_witness_lock(temp, first_witness_len, &lock_bytes_seg);
   if (ret != 0) {
     return ERROR_ENCODING;
   }
@@ -106,8 +142,8 @@ int verify_secp256k1_blake160_sighash_all(
 
   /* Clear lock field to zero, then digest the first witness */
   memset((void *)lock_bytes_seg.ptr, 0, lock_bytes_seg.size);
-  blake2b_update(&blake2b_ctx, (char *)&witness_len, sizeof(uint64_t));
-  blake2b_update(&blake2b_ctx, temp, witness_len);
+  blake2b_update(&blake2b_ctx, (char *)&first_witness_len, sizeof(uint64_t));
+  blake2b_update(&blake2b_ctx, temp, first_witness_len);
 
   /* Digest same group witnesses */
   size_t i = 1;

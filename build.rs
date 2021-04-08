@@ -19,7 +19,7 @@ const BINARIES: &[(&str, &str)] = &[
     ),
     (
         "anyone_can_pay",
-        "7c174c7bb1aa0fe7943d6ac98b7e82163282f973b00c414754f5838942b8162b",
+        "cd69ba816f7471e59110058aa37387c362ed9a240cd178f7bb1ecee386cb31e6",
     ),
     (
         "simple_udt",
