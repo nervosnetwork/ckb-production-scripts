@@ -14,12 +14,12 @@ add_definitions(-DCKB_DECLARATION_ONLY)
 add_definitions(-DCKB_USE_SIM)
 
 include_directories(tests/validate_signature_rsa)
-include_directories(deps/ckb-c-stdlib-simulator-only/simulator)
-include_directories(deps/ckb-c-stdlib-simulator-only)
+include_directories(deps/ckb-c-stdlib-20210413/simulator)
+include_directories(deps/ckb-c-stdlib-20210413)
 # include_directories(deps/ckb-c-stdlib/libc)
 # on simulator, we don't use own "libc"
 include_directories(deps)
-include_directories(deps/ckb-c-stdlib-simulator-only/molecule)
+include_directories(deps/ckb-c-stdlib-20210413/molecule)
 include_directories(c)
 include_directories(build)
 include_directories(deps/secp256k1/src)
@@ -96,10 +96,10 @@ add_library(mbedtls
 
 add_executable(validate_signature_rsa tests/validate_signature_rsa/validate_signature_rsa_sim.c c/validate_signature_rsa.h)
 target_compile_definitions(validate_signature_rsa PUBLIC -D_FILE_OFFSET_BITS=64 -DCKB_DECLARATION_ONLY)
-target_include_directories(validate_signature_rsa PUBLIC deps/ckb-c-stdlib-simulator-only/libc)
+target_include_directories(validate_signature_rsa PUBLIC deps/ckb-c-stdlib-20210413/libc)
 target_link_libraries(validate_signature_rsa mbedtls)
 
 
 add_executable(dlopen_sim tests/validate_signature_rsa/dlopen_sim.c)
 target_compile_definitions(dlopen_sim PUBLIC -D_FILE_OFFSET_BITS=64 -DCKB_DECLARATION_ONLY)
-#target_include_directories(dlopen_sim PUBLIC deps/ckb-c-stdlib-simulator-only/libc)
+#target_include_directories(dlopen_sim PUBLIC deps/ckb-c-stdlib-20210413/libc)
