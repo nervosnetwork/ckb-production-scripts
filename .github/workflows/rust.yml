@@ -13,5 +13,7 @@ jobs:
       run: git submodule update --init
     - name: Build contract
       run: make all-via-docker
+    - name: Run simulator tests
+      run: bash tests/validate_signature_rsa/run.sh
     - name: Run tests
       run: cargo test
