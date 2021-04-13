@@ -76,20 +76,21 @@ struct SmtUpdateItemVTable;
 struct SmtUpdateItemVTable *GetSmtUpdateItemVTable(void);
 struct SmtUpdateItemType make_SmtUpdateItem(mol2_cursor_t *cur);
 mol2_cursor_t SmtUpdateItem_get_key_impl(struct SmtUpdateItemType *);
-uint8_t SmtUpdateItem_get_values_impl(struct SmtUpdateItemType *);
-struct SmtUpdateVecType;
-struct SmtUpdateVecVTable;
-struct SmtUpdateVecVTable *GetSmtUpdateVecVTable(void);
-struct SmtUpdateVecType make_SmtUpdateVec(mol2_cursor_t *cur);
-uint32_t SmtUpdateVec_len_impl(struct SmtUpdateVecType *);
-struct SmtUpdateItemType SmtUpdateVec_get_impl(struct SmtUpdateVecType *,
-                                               uint32_t, bool *);
-struct SmtUpdateType;
-struct SmtUpdateVTable;
-struct SmtUpdateVTable *GetSmtUpdateVTable(void);
-struct SmtUpdateType make_SmtUpdate(mol2_cursor_t *cur);
-struct SmtUpdateVecType SmtUpdate_get_update_impl(struct SmtUpdateType *);
-mol2_cursor_t SmtUpdate_get_proof_impl(struct SmtUpdateType *);
+uint8_t SmtUpdateItem_get_packed_values_impl(struct SmtUpdateItemType *);
+struct SmtUpdateItemVecType;
+struct SmtUpdateItemVecVTable;
+struct SmtUpdateItemVecVTable *GetSmtUpdateItemVecVTable(void);
+struct SmtUpdateItemVecType make_SmtUpdateItemVec(mol2_cursor_t *cur);
+uint32_t SmtUpdateItemVec_len_impl(struct SmtUpdateItemVecType *);
+struct SmtUpdateItemType SmtUpdateItemVec_get_impl(
+    struct SmtUpdateItemVecType *, uint32_t, bool *);
+struct SmtUpdateActionType;
+struct SmtUpdateActionVTable;
+struct SmtUpdateActionVTable *GetSmtUpdateActionVTable(void);
+struct SmtUpdateActionType make_SmtUpdateAction(mol2_cursor_t *cur);
+struct SmtUpdateItemVecType SmtUpdateAction_get_updates_impl(
+    struct SmtUpdateActionType *);
+mol2_cursor_t SmtUpdateAction_get_proof_impl(struct SmtUpdateActionType *);
 struct XudtDataType;
 struct XudtDataVTable;
 struct XudtDataVTable *GetXudtDataVTable(void);
@@ -174,30 +175,31 @@ typedef struct SmtProofVecType {
 
 typedef struct SmtUpdateItemVTable {
   mol2_cursor_t (*key)(struct SmtUpdateItemType *);
-  uint8_t (*values)(struct SmtUpdateItemType *);
+  uint8_t (*packed_values)(struct SmtUpdateItemType *);
 } SmtUpdateItemVTable;
 typedef struct SmtUpdateItemType {
   mol2_cursor_t cur;
   SmtUpdateItemVTable *t;
 } SmtUpdateItemType;
 
-typedef struct SmtUpdateVecVTable {
-  uint32_t (*len)(struct SmtUpdateVecType *);
-  struct SmtUpdateItemType (*get)(struct SmtUpdateVecType *, uint32_t, bool *);
-} SmtUpdateVecVTable;
-typedef struct SmtUpdateVecType {
+typedef struct SmtUpdateItemVecVTable {
+  uint32_t (*len)(struct SmtUpdateItemVecType *);
+  struct SmtUpdateItemType (*get)(struct SmtUpdateItemVecType *, uint32_t,
+                                  bool *);
+} SmtUpdateItemVecVTable;
+typedef struct SmtUpdateItemVecType {
   mol2_cursor_t cur;
-  SmtUpdateVecVTable *t;
-} SmtUpdateVecType;
+  SmtUpdateItemVecVTable *t;
+} SmtUpdateItemVecType;
 
-typedef struct SmtUpdateVTable {
-  struct SmtUpdateVecType (*update)(struct SmtUpdateType *);
-  mol2_cursor_t (*proof)(struct SmtUpdateType *);
-} SmtUpdateVTable;
-typedef struct SmtUpdateType {
+typedef struct SmtUpdateActionVTable {
+  struct SmtUpdateItemVecType (*updates)(struct SmtUpdateActionType *);
+  mol2_cursor_t (*proof)(struct SmtUpdateActionType *);
+} SmtUpdateActionVTable;
+typedef struct SmtUpdateActionType {
   mol2_cursor_t cur;
-  SmtUpdateVTable *t;
-} SmtUpdateType;
+  SmtUpdateActionVTable *t;
+} SmtUpdateActionType;
 
 typedef struct XudtDataVTable {
   mol2_cursor_t (*lock)(struct XudtDataType *);
@@ -457,7 +459,7 @@ struct SmtUpdateItemVTable *GetSmtUpdateItemVTable(void) {
   static int inited = 0;
   if (inited) return &s_vtable;
   s_vtable.key = SmtUpdateItem_get_key_impl;
-  s_vtable.values = SmtUpdateItem_get_values_impl;
+  s_vtable.packed_values = SmtUpdateItem_get_packed_values_impl;
   return &s_vtable;
 }
 mol2_cursor_t SmtUpdateItem_get_key_impl(SmtUpdateItemType *this) {
@@ -466,31 +468,31 @@ mol2_cursor_t SmtUpdateItem_get_key_impl(SmtUpdateItemType *this) {
   ret = convert_to_array(&ret2);
   return ret;
 }
-uint8_t SmtUpdateItem_get_values_impl(SmtUpdateItemType *this) {
+uint8_t SmtUpdateItem_get_packed_values_impl(SmtUpdateItemType *this) {
   uint8_t ret;
   mol2_cursor_t ret2 = mol2_slice_by_offset(&this->cur, 32, 1);
   ret = convert_to_Uint8(&ret2);
   return ret;
 }
-struct SmtUpdateVecType make_SmtUpdateVec(mol2_cursor_t *cur) {
-  SmtUpdateVecType ret;
+struct SmtUpdateItemVecType make_SmtUpdateItemVec(mol2_cursor_t *cur) {
+  SmtUpdateItemVecType ret;
   ret.cur = *cur;
-  ret.t = GetSmtUpdateVecVTable();
+  ret.t = GetSmtUpdateItemVecVTable();
   return ret;
 }
-struct SmtUpdateVecVTable *GetSmtUpdateVecVTable(void) {
-  static SmtUpdateVecVTable s_vtable;
+struct SmtUpdateItemVecVTable *GetSmtUpdateItemVecVTable(void) {
+  static SmtUpdateItemVecVTable s_vtable;
   static int inited = 0;
   if (inited) return &s_vtable;
-  s_vtable.len = SmtUpdateVec_len_impl;
-  s_vtable.get = SmtUpdateVec_get_impl;
+  s_vtable.len = SmtUpdateItemVec_len_impl;
+  s_vtable.get = SmtUpdateItemVec_get_impl;
   return &s_vtable;
 }
-uint32_t SmtUpdateVec_len_impl(SmtUpdateVecType *this) {
+uint32_t SmtUpdateItemVec_len_impl(SmtUpdateItemVecType *this) {
   return mol2_fixvec_length(&this->cur);
 }
-SmtUpdateItemType SmtUpdateVec_get_impl(SmtUpdateVecType *this, uint32_t index,
-                                        bool *existing) {
+SmtUpdateItemType SmtUpdateItemVec_get_impl(SmtUpdateItemVecType *this,
+                                            uint32_t index, bool *existing) {
   SmtUpdateItemType ret = {0};
   mol2_cursor_res_t res = mol2_fixvec_slice_by_index(&this->cur, 33, index);
   if (res.errno != MOL2_OK) {
@@ -503,28 +505,29 @@ SmtUpdateItemType SmtUpdateVec_get_impl(SmtUpdateVecType *this, uint32_t index,
   ret.t = GetSmtUpdateItemVTable();
   return ret;
 }
-struct SmtUpdateType make_SmtUpdate(mol2_cursor_t *cur) {
-  SmtUpdateType ret;
+struct SmtUpdateActionType make_SmtUpdateAction(mol2_cursor_t *cur) {
+  SmtUpdateActionType ret;
   ret.cur = *cur;
-  ret.t = GetSmtUpdateVTable();
+  ret.t = GetSmtUpdateActionVTable();
   return ret;
 }
-struct SmtUpdateVTable *GetSmtUpdateVTable(void) {
-  static SmtUpdateVTable s_vtable;
+struct SmtUpdateActionVTable *GetSmtUpdateActionVTable(void) {
+  static SmtUpdateActionVTable s_vtable;
   static int inited = 0;
   if (inited) return &s_vtable;
-  s_vtable.update = SmtUpdate_get_update_impl;
-  s_vtable.proof = SmtUpdate_get_proof_impl;
+  s_vtable.updates = SmtUpdateAction_get_updates_impl;
+  s_vtable.proof = SmtUpdateAction_get_proof_impl;
   return &s_vtable;
 }
-SmtUpdateVecType SmtUpdate_get_update_impl(SmtUpdateType *this) {
-  SmtUpdateVecType ret;
+SmtUpdateItemVecType SmtUpdateAction_get_updates_impl(
+    SmtUpdateActionType *this) {
+  SmtUpdateItemVecType ret;
   mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 0);
   ret.cur = cur;
-  ret.t = GetSmtUpdateVecVTable();
+  ret.t = GetSmtUpdateItemVecVTable();
   return ret;
 }
-mol2_cursor_t SmtUpdate_get_proof_impl(SmtUpdateType *this) {
+mol2_cursor_t SmtUpdateAction_get_proof_impl(SmtUpdateActionType *this) {
   mol2_cursor_t ret;
   mol2_cursor_t re2 = mol2_table_slice_by_index(&this->cur, 1);
   ret = convert_to_rawbytes(&re2);

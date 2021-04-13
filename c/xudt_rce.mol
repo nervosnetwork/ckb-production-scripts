@@ -36,14 +36,14 @@ Other values like 2, 3, .. 0xF is not allowed.
 */
 struct SmtUpdateItem {
     key:       Byte32,
-    values:    byte,
+    packed_values:    byte,
 }
 
-vector SmtUpdateVec <SmtUpdateItem>;
+vector SmtUpdateItemVec <SmtUpdateItem>;
 
 /* Update white/black list SMT */
-table SmtUpdate {
-    update: SmtUpdateVec,
+table SmtUpdateAction {
+    updates: SmtUpdateItemVec,
     proof:  SmtProof,
 }
 

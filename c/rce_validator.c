@@ -172,8 +172,8 @@ int main() {
     CHECK2(!output.t->is_none(&output), ERROR_INVALID_MOL_FORMAT);
     mol2_cursor_t bytes = output.t->unwrap(&output);
     // Bytes stored here are in fact SmtUpdate type
-    SmtUpdateType smt_update = make_SmtUpdate(&bytes);
-    SmtUpdateVecType smt_items = smt_update.t->update(&smt_update);
+    SmtUpdateActionType smt_update_ation = make_SmtUpdateAction(&bytes);
+    SmtUpdateItemVecType smt_items = smt_update_ation.t->updates(&smt_update_ation);
 
     smt_pair_t entries[MAX_UPDATES_PER_TX];
     smt_pair_t old_entries[MAX_UPDATES_PER_TX];
@@ -190,7 +190,7 @@ int main() {
       }
 
       mol2_cursor_t key_cursor = item.t->key(&item);
-      uint8_t values = item.t->values(&item);
+      uint8_t values = item.t->packed_values(&item);
 
       uint8_t key[SMT_KEY_BYTES];
       uint8_t* old_value;
@@ -230,7 +230,7 @@ int main() {
       CHECK(err);
     }
 
-    mol2_cursor_t proof_cursor = smt_update.t->proof(&smt_update);
+    mol2_cursor_t proof_cursor = smt_update_ation.t->proof(&smt_update_ation);
     if (proof_cursor.size > MAX_PROOF_LENGTH) {
       return ERROR_INVALID_MOL_FORMAT;
     }
