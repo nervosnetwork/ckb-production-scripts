@@ -16,16 +16,16 @@ LLVM_COV=llvm-cov
 
 CORPUS_DIR=corpus
 
-FUZZER_FLAGS=-g -O1 -fsanitize=fuzzer,address,undefined -I ../../deps/ckb-c-stdlib-simulator-only -Wno-incompatible-pointer-types
+FUZZER_FLAGS=-g -O1 -fsanitize=fuzzer,address,undefined -I ../../deps/ckb-c-stdlib-20210413 -Wno-incompatible-pointer-types
 
 COVERAGE_DIR=coverage
-COVERAGE_FLAGS=-fprofile-instr-generate -fcoverage-mapping -I ../../deps/ckb-c-stdlib-simulator-only -Wno-incompatible-pointer-types
+COVERAGE_FLAGS=-fprofile-instr-generate -fcoverage-mapping -I ../../deps/ckb-c-stdlib-20210413 -Wno-incompatible-pointer-types
 
 ifeq ($(OS),MacOS)
 	COVERAGE_FLAGS+=-Wl,-U,_LLVMFuzzerCustomMutator -Wl,-U,_LLVMFuzzerInitialize
 endif
 
-EXTERNAL_HEADERS=../../deps/ckb-c-stdlib-simulator-only/ckb_dlfcn.h ../../deps/ckb-c-stdlib-simulator-only/ckb_consts.h ../../deps/ckb-c-stdlib-simulator-only/ckb_syscall_apis.h
+EXTERNAL_HEADERS=../../deps/ckb-c-stdlib-20210413/ckb_dlfcn.h ../../deps/ckb-c-stdlib-20210413/ckb_consts.h ../../deps/ckb-c-stdlib-20210413/ckb_syscall_apis.h
 
 all: fuzzer coverage
 

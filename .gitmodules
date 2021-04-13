@@ -7,6 +7,6 @@
 [submodule "deps/mbedtls"]
 	path = deps/mbedtls
 	url = https://github.com/nervosnetwork/mbedtls.git
-[submodule "deps/ckb-c-stdlib-simulator-only"]
-	path = deps/ckb-c-stdlib-simulator-only
+[submodule "deps/ckb-c-stdlib-20210413"]
+	path = deps/ckb-c-stdlib-20210413
 	url = https://github.com/nervosnetwork/ckb-c-stdlib.git
