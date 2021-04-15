@@ -92,26 +92,34 @@ static int make_witness_cursor(uint8_t* buffer, uint32_t cache_size,
 }
 
 int main() {
+  // Load Script args first.
+  //
+  // | Script Args   | Type ID | Flags |
+  // | ------------- |---------| ------|
+  // | Length(Byte)  | 32      | 1     |
+
+  uint8_t current_script[32768];
+  uint64_t len = 32768;
+  int err = ckb_checked_load_script(current_script, &len, 0);
+  CHECK(err);
+  CHECK2(len <= 32768, ERROR_SCRIPT_TOO_LONG);
+  mol_seg_t script_seg;
+  script_seg.ptr = (uint8_t*)current_script;
+  script_seg.size = len;
+  mol_errno mol_err = MolReader_Script_verify(&script_seg, false);
+  CHECK2(mol_err == MOL_OK, ERROR_ENCODING);
+  mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
+  mol_seg_t args_bytes_seg = MolReader_Bytes_raw_bytes(&args_seg);
+  CHECK2(args_bytes_seg.size == 33, ERROR_ARGUMENTS_LEN);
+
   uint8_t type_id[32];
-  int err = ckb_load_type_id_from_script_args(0, type_id);
-  if (err != CKB_SUCCESS) {
-    return err;
-  }
+  uint8_t flags;
+  memcpy(type_id, &args_bytes_seg.ptr[0], 32);
+  flags = args_bytes_seg.ptr[32];
+
   err = ckb_validate_type_id(type_id);
   if (err != CKB_SUCCESS) {
     return err;
-  }
-
-  uint8_t flags = 0;
-  uint64_t len = 1;
-  err = ckb_load_script(&flags, &len, 32);
-  if (err != CKB_SUCCESS) {
-    DEBUG("Cannot load current script!");
-    return err;
-  }
-  if (len > 1) {
-    DEBUG("Current script is too large!");
-    return ERROR_ARGUMENTS_LEN;
   }
   bool append_only = (flags & FLAG_APPEND_ONLY) != 0;
 
