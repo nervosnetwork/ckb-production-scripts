@@ -25,6 +25,8 @@ int ckb_exit(signed char);
 #define MAX_UPDATES_PER_TX 1024
 #define MAX_PROOF_LENGTH (33 * MAX_UPDATES_PER_TX)
 
+#define SCRIPT_SIZE 32768
+
 static uint32_t read_from_cell_data(uintptr_t* arg, uint8_t* ptr, uint32_t len,
                                     uint32_t offset) {
   int err;
@@ -98,11 +100,11 @@ int main() {
   // | ------------- |---------| ------|
   // | Length(Byte)  | 32      | 1     |
 
-  uint8_t current_script[32768];
-  uint64_t len = 32768;
+  uint8_t current_script[SCRIPT_SIZE];
+  uint64_t len = SCRIPT_SIZE;
   int err = ckb_checked_load_script(current_script, &len, 0);
   CHECK(err);
-  CHECK2(len <= 32768, ERROR_SCRIPT_TOO_LONG);
+  CHECK2(len <= SCRIPT_SIZE, ERROR_SCRIPT_TOO_LONG);
   mol_seg_t script_seg;
   script_seg.ptr = (uint8_t*)current_script;
   script_seg.size = len;
