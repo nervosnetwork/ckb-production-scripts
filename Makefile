@@ -108,6 +108,12 @@ clean:
 	cd deps/secp256k1 && [ -f "Makefile" ] && make clean
 	cargo clean
 
+install-tools:
+	if [ ! -x "$$(command -v "${MOLC}")" ] \
+			|| [ "$$(${MOLC} --version | awk '{ print $$2 }' | tr -d ' ')" != "${MOLC_VERSION}" ]; then \
+		cargo install --force --version "${MOLC_VERSION}" "${MOLC}"; \
+	fi
+
 dist: clean all
 
 .PHONY: all all-via-docker dist clean package-clean package publish
