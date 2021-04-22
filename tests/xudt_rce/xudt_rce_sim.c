@@ -719,4 +719,57 @@ UTEST(smt, update) {
   ASSERT_EQ(0, memcmp(root_hash, expected_hash, 32));
 }
 
+// naive implementation, get element at "index" , not counting "zero" element.
+uint8_t get_from_table(uint8_t* table, int len, int index) {
+  int true_index = -1;
+  for (int i = 0; i < len; i++) {
+    if (table[i] != 0) {
+      true_index++;
+    }
+    if (true_index == index) {
+      return table[i];
+    }
+  }
+  ASSERT(false);
+  return 0xFF;
+}
+
+bool test_state_normalize_random() {
+  uint8_t table[8] = {0};
+  smt_pair_t entries[8];
+  smt_state_t changes;
+  smt_state_init(&changes, entries, countof(entries));
+  char msg_to_print[32768] = {0};
+  int msg_start = 0;
+  for (int i = 0; i < countof(entries); i++) {
+    int key = rand() % 8;
+    table[key] += 1;
+
+    uint8_t key32[32] = {key};
+    uint8_t value32[32] = {table[key]};
+    int used = sprintf(msg_to_print+msg_start, "pushed key = %d, value = %d\n", key, table[key]);
+    msg_start += used;
+    smt_state_insert(&changes, key32, value32);
+  }
+  smt_state_normalize(&changes);
+  for (int i = 0; i < changes.len; i++) {
+    uint8_t expected = get_from_table(table, countof(entries), i);
+    if (changes.pairs[i].value[0] != expected) {
+      printf("%s\n", msg_to_print);
+      printf("changes.pairs[%d].key[0] = %d, changes.pairs[%d].value[0] = %d\n", i, changes.pairs[i].key[0],
+             i, changes.pairs[i].value[0]);
+      printf("expected = %d\n", expected);
+      return false;
+    }
+  }
+  return true;
+}
+
+UTEST(smt,test_state_normalize) {
+  for (int i = 0; i < 10000; i++) {
+    bool result = test_state_normalize_random();
+    ASSERT_TRUE(result);
+  }
+}
+
 UTEST_MAIN();
