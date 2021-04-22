@@ -41,7 +41,7 @@ UTEST(rce_validator, bl_append_key) {
   g_sim_rcdata_count[1] += 1;
 
   uint8_t update_key[32];
-  uint8_t update_packed_value = 0b00000001;
+  uint8_t update_packed_value = (0 << 4) | 1;
   uint8_t update_proof_bytes[countof(smt_one_not_k2_proof)];
   memcpy(update_key, k2, 32);
   memcpy(update_proof_bytes, smt_one_not_k2_proof,
@@ -114,7 +114,7 @@ UTEST(rce_validator, bl_append_key_with_freeze_type) {
   g_sim_rcdata_count[1] += 1;
 
   uint8_t update_key[32];
-  uint8_t update_packed_value = 0b00000001;
+  uint8_t update_packed_value = (0 << 4) | 1;
   uint8_t update_proof_bytes[countof(smt_one_not_k2_proof)];
   memcpy(update_key, k2, 32);
   memcpy(update_proof_bytes, smt_one_not_k2_proof,
@@ -186,7 +186,7 @@ UTEST(rce_validator, bl_remove_key) {
   g_sim_rcdata_count[1] += 1;
 
   uint8_t update_key[32];
-  uint8_t update_packed_value = 0b00010000;
+  uint8_t update_packed_value = (1 << 4) | 0;
   uint8_t update_proof_bytes[countof(smt_tow_has_k2_proof)];
   memcpy(update_key, k2, 32);
   memcpy(update_proof_bytes, smt_tow_has_k2_proof,
@@ -260,7 +260,7 @@ UTEST(rce_validator, bl_remove_key_but_append_only) {
   g_sim_rcdata_count[1] += 1;
 
   uint8_t update_key[32];
-  uint8_t update_packed_value = 0b00010000;
+  uint8_t update_packed_value = (1 << 4) | 0;
   uint8_t update_proof_bytes[countof(smt_tow_has_k2_proof)];
   memcpy(update_key, k2, 32);
   memcpy(update_proof_bytes, smt_tow_has_k2_proof,
@@ -327,7 +327,7 @@ UTEST(rce_validator, no_input) {
   g_sim_rcdata_count[1] += 1;
 
   uint8_t update_key[32];
-  uint8_t update_packed_value = 0b00000001;
+  uint8_t update_packed_value = (0 << 4) | 1;
   uint8_t update_proof_bytes[countof(smt_ooo_not_k1_proof)];
   memcpy(update_key, k1, 32);
   memcpy(update_proof_bytes, smt_ooo_not_k1_proof,
@@ -399,7 +399,7 @@ UTEST(rce_validator, rccellvec_to_rccell) {
   g_sim_rcdata_count[1] += 1;
 
   uint8_t update_key[32];
-  uint8_t update_packed_value = 0b00000001;
+  uint8_t update_packed_value = (0 << 4) | 1;
   uint8_t update_proof_bytes[countof(smt_ooo_not_k1_proof)];
   memcpy(update_key, k1, 32);
   memcpy(update_proof_bytes, smt_ooo_not_k1_proof,
@@ -472,7 +472,7 @@ UTEST(rce_validator, rccellvec_to_rcrule_with_freeze_type) {
   g_sim_rcdata_count[1] += 1;
 
   uint8_t update_key[32];
-  uint8_t update_packed_value = 0b00000001;
+  uint8_t update_packed_value = (0 << 4) | 1;
   uint8_t update_proof_bytes[countof(smt_one_not_k2_proof)];
   memcpy(update_key, k2, 32);
   memcpy(update_proof_bytes, smt_one_not_k2_proof,
@@ -545,7 +545,7 @@ UTEST(rce_validator, rcrule_to_rccellvec_with_freeze_type) {
   g_sim_rcdata_count[1] += 1;
 
   uint8_t update_key[32];
-  uint8_t update_packed_value = 0b00010000;
+  uint8_t update_packed_value = (1 << 4) | 0;
   uint8_t update_proof_bytes[countof(smt_one_has_k1_proof)];
   memcpy(update_key, k1, 32);
   memcpy(update_proof_bytes, smt_one_has_k1_proof,
@@ -617,7 +617,7 @@ UTEST(rce_validator, bl_update_to_wl) {
   g_sim_rcdata_count[1] += 1;
 
   uint8_t update_key[32];
-  uint8_t update_packed_value = 0b00000001;
+  uint8_t update_packed_value = (0 << 4) | 1;
   uint8_t update_proof_bytes[countof(smt_one_not_k2_proof)];
   memcpy(update_key, k2, 32);
   memcpy(update_proof_bytes, smt_one_not_k2_proof,
