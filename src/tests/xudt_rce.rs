@@ -843,7 +843,10 @@ fn test_rce_not_on_wl() {
     let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    verify_result.expect("pass verification");
+    assert_error_eq!(
+        verify_result.unwrap_err(),
+        ScriptError::ValidationFailure(59), // ERROR_NOT_ON_WHITE_LIST
+    );
 }
 
 #[test]
@@ -895,7 +898,7 @@ fn test_rce_on_bl() {
     let verify_result = verifier.verify(MAX_CYCLES);
     assert_error_eq!(
         verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(57), // ERROR_ON_BLACK_LIST
+        ScriptError::ValidationFailure(58), // ERROR_ON_BLACK_LIST2
     );
 }
 
@@ -949,5 +952,8 @@ fn test_rce_both_on_wl_bl() {
     let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    verify_result.expect("pass verification");
+    assert_error_eq!(
+        verify_result.unwrap_err(),
+        ScriptError::ValidationFailure(57), // ERROR_ON_BLACK_LIST
+    );
 }

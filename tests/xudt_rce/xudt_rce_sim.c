@@ -229,7 +229,7 @@ UTEST(rce, not_on_white_list) {
   xudt_end_data();
 
   err = simulator_main();
-  ASSERT_EQ(err, 0);
+  ASSERT_EQ(err, ERROR_NOT_ON_WHITE_LIST);
 exit:
   return;
 }
@@ -348,7 +348,7 @@ UTEST(xudt, extension_script_returns_non_zero) {
       "tests/xudt_rce/simulator-build-debug/libextension_script_1.dylib");
   xudt_end_data();
   err = simulator_main();
-  ASSERT_EQ(ERROR_ON_BLACK_LIST, err);
+  ASSERT_EQ(ERROR_ON_BLACK_LIST2, err);
 
 exit:
   return;
@@ -747,7 +747,8 @@ bool test_state_normalize_random() {
 
     uint8_t key32[32] = {key};
     uint8_t value32[32] = {table[key]};
-    int used = sprintf(msg_to_print+msg_start, "pushed key = %d, value = %d\n", key, table[key]);
+    int used = sprintf(msg_to_print + msg_start,
+                       "pushed key = %d, value = %d\n", key, table[key]);
     msg_start += used;
     smt_state_insert(&changes, key32, value32);
   }
@@ -756,8 +757,8 @@ bool test_state_normalize_random() {
     uint8_t expected = get_from_table(table, countof(entries), i);
     if (changes.pairs[i].value[0] != expected) {
       printf("%s\n", msg_to_print);
-      printf("changes.pairs[%d].key[0] = %d, changes.pairs[%d].value[0] = %d\n", i, changes.pairs[i].key[0],
-             i, changes.pairs[i].value[0]);
+      printf("changes.pairs[%d].key[0] = %d, changes.pairs[%d].value[0] = %d\n",
+             i, changes.pairs[i].key[0], i, changes.pairs[i].value[0]);
       printf("expected = %d\n", expected);
       return false;
     }
@@ -765,7 +766,7 @@ bool test_state_normalize_random() {
   return true;
 }
 
-UTEST(smt,test_state_normalize) {
+UTEST(smt, test_state_normalize) {
   for (int i = 0; i < 10000; i++) {
     bool result = test_state_normalize_random();
     ASSERT_TRUE(result);

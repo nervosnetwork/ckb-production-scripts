@@ -35,6 +35,8 @@ enum ErrorCode {
   ERROR_NOT_VALIDATED,
   ERROR_TOO_MANY_LOCK,
   ERROR_ON_BLACK_LIST,
+  ERROR_ON_BLACK_LIST2,
+  ERROR_NOT_ON_WHITE_LIST,
   ERROR_TYPE_FREEZED,
   ERROR_APPEND_ONLY,
   ERROR_EOF,
@@ -297,7 +299,6 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
   CHECK2(args != NULL, ERROR_INVALID_RCE_ARGS);
   if (is_owner_mode) return 0;
 
-  rce_state.rcrules_count = 0;
   err = rce_gather_rcrules_recursively(&rce_state, args, 0);
   CHECK(err);
 
@@ -324,6 +325,7 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
 
   err = ERROR_SMT_VERIFY_FAILED;
   bool on_white_list = false;
+  bool has_white_list = false;
   bool on_black_list = false;
 
   uint8_t temp_proof[MAX_TEMP_PROOF_LENGTH];
@@ -347,6 +349,7 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
     CHECK2(temp_proof_len <= MAX_TEMP_PROOF_LENGTH, ERROR_TOO_LONG_PROOF);
 
     if (rce_is_white_list(current_rule->flags)) {
+      has_white_list = true;
       err = smt_verify(root_hash, &wl_states, temp_proof, temp_proof_len);
       // For all RCRules using whitelists, as long as there is one RCRule which
       // satisfies err == 0, we consider validation to be success.
@@ -370,11 +373,19 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
       // afterward.
     }
   }
-  if (on_white_list) {
-    err = 0;
+  if (has_white_list) {
+    if (on_white_list) {
+      if (on_black_list) {
+        err = ERROR_ON_BLACK_LIST;
+      } else {
+        err = 0;
+      }
+    } else {
+      err = ERROR_NOT_ON_WHITE_LIST;
+    }
   } else {
     if (on_black_list) {
-      err = ERROR_ON_BLACK_LIST;
+      err = ERROR_ON_BLACK_LIST2;
     } else {
       err = 0;
     }

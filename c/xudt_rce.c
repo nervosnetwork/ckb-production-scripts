@@ -472,10 +472,6 @@ int main() {
                    input_lock_script_hashes, &input_lock_script_hash_count);
   CHECK(err);
   CHECK2(owner_mode == 1 || owner_mode == 0, ERROR_INVALID_ARGS_FORMAT);
-  if (owner_mode) {
-    err = 0;
-    goto exit;
-  }
 
   if (flags != XUDTFlagsPlain) {
     CHECK2(raw_extension_data != NULL, ERROR_INVALID_ARGS_FORMAT);
