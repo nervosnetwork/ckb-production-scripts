@@ -230,6 +230,12 @@ int ckb_load_witness(void* addr, uint64_t* len, size_t offset, size_t index,
   mol_seg_res_t xwi_res = MolBuilder_XudtWitnessInput_build(xwi_builder);
   ASSERT(xwi_res.errno == MOL_OK);
 
+  // here we fill a "big" lock to generate a big "witness"
+  // to test functions like read_from_witness
+  uint8_t dummy_lock[4096] = {0};
+  mol_seg_t lock = build_bytes(dummy_lock, sizeof(dummy_lock));
+  MolBuilder_WitnessArgs_set_lock(&w, lock.ptr, lock.size);
+
   mol_seg_t seg = build_bytes(xwi_res.seg.ptr, xwi_res.seg.size);
   MolBuilder_WitnessArgs_set_input_type(&w, seg.ptr, seg.size);
   free(seg.ptr);
@@ -249,11 +255,10 @@ int ckb_load_witness(void* addr, uint64_t* len, size_t offset, size_t index,
   uint32_t remaining = res.seg.size - offset;
   if (remaining > *len) {
     memcpy(addr, res.seg.ptr + offset, *len);
-    // keep "len" unchanged
   } else {
     memcpy(addr, res.seg.ptr + offset, remaining);
-    *len = remaining;
   }
+  *len = remaining;
 
   free(res.seg.ptr);
   free(xwi_res.seg.ptr);
@@ -443,11 +448,10 @@ int ckb_load_cell_data(void* addr, uint64_t* len, size_t offset, size_t index,
     uint32_t remaining = seg.size - offset;
     if (remaining > *len) {
       memcpy(addr, seg.ptr + offset, *len);
-      // keep "len" unchanged
     } else {
       memcpy(addr, seg.ptr + offset, remaining);
-      *len = remaining;
     }
+    *len = remaining;
 
     free(seg.ptr);
   } else {
@@ -564,7 +568,7 @@ typedef struct LibMappingEntry {
   char path[MAX_PATH_SIZE];
 } LibMappingEntry;
 
-#define MAX_LIB_MAPPING_COUNT 64
+#define MAX_LIB_MAPPING_COUNT 1024
 LibMappingEntry g_lib_mapping[MAX_LIB_MAPPING_COUNT];
 int g_lib_size = 0;
 
@@ -645,12 +649,8 @@ int ckb_dlopen2(const uint8_t* dep_cell_hash, uint8_t hash_type,
   ASSERT(err == 0);
 
   *handle = dlopen(path, RTLD_NOW);
-  *consumed_size = ROUNDUP(get_file_size(path), RISCV_PGSIZE);
+  *consumed_size = 0;
 
-  if (*consumed_size >= aligned_size) {
-    ASSERT(false);
-    return -1;
-  }
   if (*handle == NULL) {
     printf("Error occurs in dlopen: %s\n", dlerror());
     ASSERT(false);

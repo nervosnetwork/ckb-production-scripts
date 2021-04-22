@@ -152,6 +152,44 @@ exit:
   ASSERT_EQ(err, 0);
 }
 
+UTEST(xudt_many_scripts, main) {
+  int err = 0;
+
+  // prepare basic data
+  xudt_begin_data();
+  set_basic_data();
+
+  uint8_t hash0[BLAKE2B_BLOCK_SIZE] = {0};
+  uint8_t hash1[BLAKE2B_BLOCK_SIZE] = {1};
+  uint8_t extension_hash[BLAKE2B_BLOCK_SIZE] = {0x66};
+  uint8_t args[32] = {0};
+  xudt_set_owner_mode(hash0, hash1);
+
+  for (int i = 0; i < 512; i++) {
+    xudt_add_extension_script(
+        extension_hash, 1, args, sizeof(args),
+        "tests/xudt_rce/simulator-build-debug/libextension_script_0.dylib");
+  }
+
+  xudt_end_data();
+
+  // when flags = 1, The extension script data is on args:
+  // it's too small to hold all these data
+  xudt_set_flags(1);
+  err = simulator_main();
+  ASSERT_EQ(err, -1);
+
+  // flags = 2
+  xudt_set_flags(2);
+  err = simulator_main();
+  ASSERT_EQ(err, 0);
+  CHECK(err);
+
+  err = 0;
+exit:
+  ASSERT_EQ(err, 0);
+}
+
 UTEST(rce, white_list) {
   int err = 0;
   xudt_begin_data();
@@ -269,7 +307,7 @@ exit:
   return;
 }
 
-UTEST(xudt, extension_script_is_realdy_validated) {
+UTEST(xudt, extension_script_is_validated) {
   int err = 0;
 
   xudt_begin_data();

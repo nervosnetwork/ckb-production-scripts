@@ -121,13 +121,18 @@ static uint32_t read_from_witness(uintptr_t arg[], uint8_t* ptr, uint32_t len,
                                   uint32_t offset) {
   int err;
   uint64_t output_len = len;
-  err = ckb_checked_load_witness(ptr, &output_len, offset, arg[0], arg[1]);
+  err = ckb_load_witness(ptr, &output_len, offset, arg[0], arg[1]);
   if (err != 0) {
     return 0;
   }
-  return output_len;
+  if (output_len > len) {
+    return len;
+  } else {
+    return output_len;
+  }
 }
 
+uint8_t g_witness_data_source[DEFAULT_DATA_SOURCE_LENGTH];
 // due to the "static" data (s_witness_data_source), the "WitnessArgsType" is a
 // singleton. note: mol2_data_source_t consumes a lot of memory due to the
 // "cache" field (default 2K)
@@ -137,16 +142,13 @@ int make_cursor_from_witness(WitnessArgsType* witness) {
   err = ckb_load_witness(NULL, &witness_len, 0, 0, CKB_SOURCE_GROUP_INPUT);
   CHECK(err);
   CHECK2(witness_len > 0, ERROR_INVALID_MOL_FORMAT);
-  CHECK2(witness_len <= RAW_EXTENSION_SIZE, ERROR_INVALID_MOL_FORMAT);
 
   mol2_cursor_t cur;
 
   cur.offset = 0;
   cur.size = witness_len;
 
-  static uint8_t s_witness_data_source[DEFAULT_DATA_SOURCE_LENGTH];
-
-  mol2_data_source_t* ptr = (mol2_data_source_t*)s_witness_data_source;
+  mol2_data_source_t* ptr = (mol2_data_source_t*)g_witness_data_source;
 
   ptr->read = read_from_witness;
   ptr->total_size = witness_len;
@@ -464,12 +466,17 @@ int main() {
   uint32_t raw_extension_len = 0;
   XUDTFlags flags = XUDTFlagsPlain;
   uint8_t
-      input_lock_script_hash[MAX_LOCK_SCRIPT_HASH_COUNT * BLAKE2B_BLOCKBYTES];
+      input_lock_script_hashes[MAX_LOCK_SCRIPT_HASH_COUNT * BLAKE2B_BLOCK_SIZE];
   uint32_t input_lock_script_hash_count = 0;
   err = parse_args(&owner_mode, &flags, &raw_extension_data, &raw_extension_len,
-                   input_lock_script_hash, &input_lock_script_hash_count);
+                   input_lock_script_hashes, &input_lock_script_hash_count);
   CHECK(err);
   CHECK2(owner_mode == 1 || owner_mode == 0, ERROR_INVALID_ARGS_FORMAT);
+  if (owner_mode) {
+    err = 0;
+    goto exit;
+  }
+
   if (flags != XUDTFlagsPlain) {
     CHECK2(raw_extension_data != NULL, ERROR_INVALID_ARGS_FORMAT);
     CHECK2(raw_extension_len > 0, ERROR_INVALID_ARGS_FORMAT);
@@ -508,8 +515,8 @@ int main() {
     CHECK(err);
     // RCE is with high priority, must be checked
     if (cat != CateRce) {
-      int err2 = is_extension_script_validated(res.seg, input_lock_script_hash,
-                                               input_lock_script_hash_count);
+      int err2 = is_extension_script_validated(
+          res.seg, input_lock_script_hashes, input_lock_script_hash_count);
       if (err2 == 0) {
         continue;
       }

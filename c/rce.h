@@ -106,11 +106,15 @@ static uint32_t rce_read_from_cell_data(uintptr_t* arg, uint8_t* ptr,
                                         uint32_t len, uint32_t offset) {
   int err;
   uint64_t output_len = len;
-  err = ckb_checked_load_cell_data(ptr, &output_len, offset, arg[0], arg[1]);
+  err = ckb_load_cell_data(ptr, &output_len, offset, arg[0], arg[1]);
   if (err != 0) {
     return 0;
   }
-  return output_len;
+  if (output_len > len) {
+    return len;
+  } else {
+    return output_len;
+  }
 }
 
 int make_cursor_from_witness(WitnessArgsType* witness);
