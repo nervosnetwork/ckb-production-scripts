@@ -29,6 +29,11 @@ target_compile_definitions(xudt_rce_simulator PUBLIC -D_FILE_OFFSET_BITS=64 -DCK
 target_include_directories(xudt_rce_simulator PUBLIC deps/ckb-c-stdlib-simulator-only2/libc)
 target_link_libraries(xudt_rce_simulator dl)
 
+add_executable(xudt_rce_validator_simulator ../../tests/xudt_rce/xudt_rce_validator_sim.c)
+target_compile_definitions(xudt_rce_validator_simulator PUBLIC -D_FILE_OFFSET_BITS=64 -DCKB_DECLARATION_ONLY -DCKB_TYPE_ID_DECLARATION_ONLY)
+target_include_directories(xudt_rce_validator_simulator PUBLIC deps/ckb-c-stdlib-simulator-only2/libc)
+target_link_libraries(xudt_rce_validator_simulator dl)
+
 add_library(extension_script_0 SHARED ../../tests/xudt_rce/extension_script_0.c)
 add_library(extension_script_1 SHARED ../../tests/xudt_rce/extension_script_1.c)
 

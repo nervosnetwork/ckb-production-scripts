@@ -76,6 +76,8 @@ lazy_static! {
     ];
     pub static ref XUDT_RCE_BIN: Bytes =
         Bytes::from(include_bytes!("../../build/xudt_rce").as_ref());
+    pub static ref RCE_VALIDATOR_BIN: Bytes =
+        Bytes::from(include_bytes!("../../build/rce_validator").as_ref());
     pub static ref ALWAYS_SUCCESS_BIN: Bytes =
         Bytes::from(include_bytes!("../../build/always_success").as_ref());
     pub static ref EXTENSION_SCRIPT_0: Bytes =

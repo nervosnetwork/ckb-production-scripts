@@ -2081,8 +2081,7 @@ impl ::core::fmt::Display for SmtUpdateItem {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{} {{ ", Self::NAME)?;
         write!(f, "{}: {}", "key", self.key())?;
-        write!(f, ", {}: {}", "value", self.value())?;
-        write!(f, ", {}: {}", "old_value", self.old_value())?;
+        write!(f, ", {}: {}", "packed_values", self.packed_values())?;
         write!(f, " }}")
     }
 }
@@ -2090,25 +2089,20 @@ impl ::core::default::Default for SmtUpdateItem {
     fn default() -> Self {
         let v: Vec<u8> = vec![
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0,
         ];
         SmtUpdateItem::new_unchecked(v.into())
     }
 }
 impl SmtUpdateItem {
-    pub const TOTAL_SIZE: usize = 96;
-    pub const FIELD_SIZES: [usize; 3] = [32, 32, 32];
-    pub const FIELD_COUNT: usize = 3;
+    pub const TOTAL_SIZE: usize = 33;
+    pub const FIELD_SIZES: [usize; 2] = [32, 1];
+    pub const FIELD_COUNT: usize = 2;
     pub fn key(&self) -> Byte32 {
         Byte32::new_unchecked(self.0.slice(0..32))
     }
-    pub fn value(&self) -> Byte32 {
-        Byte32::new_unchecked(self.0.slice(32..64))
-    }
-    pub fn old_value(&self) -> Byte32 {
-        Byte32::new_unchecked(self.0.slice(64..96))
+    pub fn packed_values(&self) -> Byte {
+        Byte::new_unchecked(self.0.slice(32..33))
     }
     pub fn as_reader<'r>(&'r self) -> SmtUpdateItemReader<'r> {
         SmtUpdateItemReader::new_unchecked(self.as_slice())
@@ -2138,8 +2132,7 @@ impl molecule::prelude::Entity for SmtUpdateItem {
     fn as_builder(self) -> Self::Builder {
         Self::new_builder()
             .key(self.key())
-            .value(self.value())
-            .old_value(self.old_value())
+            .packed_values(self.packed_values())
     }
 }
 #[derive(Clone, Copy)]
@@ -2162,23 +2155,19 @@ impl<'r> ::core::fmt::Display for SmtUpdateItemReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{} {{ ", Self::NAME)?;
         write!(f, "{}: {}", "key", self.key())?;
-        write!(f, ", {}: {}", "value", self.value())?;
-        write!(f, ", {}: {}", "old_value", self.old_value())?;
+        write!(f, ", {}: {}", "packed_values", self.packed_values())?;
         write!(f, " }}")
     }
 }
 impl<'r> SmtUpdateItemReader<'r> {
-    pub const TOTAL_SIZE: usize = 96;
-    pub const FIELD_SIZES: [usize; 3] = [32, 32, 32];
-    pub const FIELD_COUNT: usize = 3;
+    pub const TOTAL_SIZE: usize = 33;
+    pub const FIELD_SIZES: [usize; 2] = [32, 1];
+    pub const FIELD_COUNT: usize = 2;
     pub fn key(&self) -> Byte32Reader<'r> {
         Byte32Reader::new_unchecked(&self.as_slice()[0..32])
     }
-    pub fn value(&self) -> Byte32Reader<'r> {
-        Byte32Reader::new_unchecked(&self.as_slice()[32..64])
-    }
-    pub fn old_value(&self) -> Byte32Reader<'r> {
-        Byte32Reader::new_unchecked(&self.as_slice()[64..96])
+    pub fn packed_values(&self) -> ByteReader<'r> {
+        ByteReader::new_unchecked(&self.as_slice()[32..33])
     }
 }
 impl<'r> molecule::prelude::Reader<'r> for SmtUpdateItemReader<'r> {
@@ -2205,23 +2194,18 @@ impl<'r> molecule::prelude::Reader<'r> for SmtUpdateItemReader<'r> {
 #[derive(Debug, Default)]
 pub struct SmtUpdateItemBuilder {
     pub(crate) key: Byte32,
-    pub(crate) value: Byte32,
-    pub(crate) old_value: Byte32,
+    pub(crate) packed_values: Byte,
 }
 impl SmtUpdateItemBuilder {
-    pub const TOTAL_SIZE: usize = 96;
-    pub const FIELD_SIZES: [usize; 3] = [32, 32, 32];
-    pub const FIELD_COUNT: usize = 3;
+    pub const TOTAL_SIZE: usize = 33;
+    pub const FIELD_SIZES: [usize; 2] = [32, 1];
+    pub const FIELD_COUNT: usize = 2;
     pub fn key(mut self, v: Byte32) -> Self {
         self.key = v;
         self
     }
-    pub fn value(mut self, v: Byte32) -> Self {
-        self.value = v;
-        self
-    }
-    pub fn old_value(mut self, v: Byte32) -> Self {
-        self.old_value = v;
+    pub fn packed_values(mut self, v: Byte) -> Self {
+        self.packed_values = v;
         self
     }
 }
@@ -2233,8 +2217,7 @@ impl molecule::prelude::Builder for SmtUpdateItemBuilder {
     }
     fn write<W: ::molecule::io::Write>(&self, writer: &mut W) -> ::molecule::io::Result<()> {
         writer.write_all(self.key.as_slice())?;
-        writer.write_all(self.value.as_slice())?;
-        writer.write_all(self.old_value.as_slice())?;
+        writer.write_all(self.packed_values.as_slice())?;
         Ok(())
     }
     fn build(&self) -> Self::Entity {
@@ -2245,8 +2228,8 @@ impl molecule::prelude::Builder for SmtUpdateItemBuilder {
     }
 }
 #[derive(Clone)]
-pub struct SmtUpdateVec(molecule::bytes::Bytes);
-impl ::core::fmt::LowerHex for SmtUpdateVec {
+pub struct SmtUpdateItemVec(molecule::bytes::Bytes);
+impl ::core::fmt::LowerHex for SmtUpdateItemVec {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         use molecule::hex_string;
         if f.alternate() {
@@ -2255,12 +2238,12 @@ impl ::core::fmt::LowerHex for SmtUpdateVec {
         write!(f, "{}", hex_string(self.as_slice()))
     }
 }
-impl ::core::fmt::Debug for SmtUpdateVec {
+impl ::core::fmt::Debug for SmtUpdateItemVec {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{}({:#x})", Self::NAME, self)
     }
 }
-impl ::core::fmt::Display for SmtUpdateVec {
+impl ::core::fmt::Display for SmtUpdateItemVec {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{} [", Self::NAME)?;
         for i in 0..self.len() {
@@ -2273,14 +2256,14 @@ impl ::core::fmt::Display for SmtUpdateVec {
         write!(f, "]")
     }
 }
-impl ::core::default::Default for SmtUpdateVec {
+impl ::core::default::Default for SmtUpdateItemVec {
     fn default() -> Self {
         let v: Vec<u8> = vec![0, 0, 0, 0];
-        SmtUpdateVec::new_unchecked(v.into())
+        SmtUpdateItemVec::new_unchecked(v.into())
     }
 }
-impl SmtUpdateVec {
-    pub const ITEM_SIZE: usize = 96;
+impl SmtUpdateItemVec {
+    pub const ITEM_SIZE: usize = 33;
     pub fn total_size(&self) -> usize {
         molecule::NUMBER_SIZE * (self.item_count() + 1)
     }
@@ -2305,15 +2288,15 @@ impl SmtUpdateVec {
         let end = start + Self::ITEM_SIZE;
         SmtUpdateItem::new_unchecked(self.0.slice(start..end))
     }
-    pub fn as_reader<'r>(&'r self) -> SmtUpdateVecReader<'r> {
-        SmtUpdateVecReader::new_unchecked(self.as_slice())
+    pub fn as_reader<'r>(&'r self) -> SmtUpdateItemVecReader<'r> {
+        SmtUpdateItemVecReader::new_unchecked(self.as_slice())
     }
 }
-impl molecule::prelude::Entity for SmtUpdateVec {
-    type Builder = SmtUpdateVecBuilder;
-    const NAME: &'static str = "SmtUpdateVec";
+impl molecule::prelude::Entity for SmtUpdateItemVec {
+    type Builder = SmtUpdateItemVecBuilder;
+    const NAME: &'static str = "SmtUpdateItemVec";
     fn new_unchecked(data: molecule::bytes::Bytes) -> Self {
-        SmtUpdateVec(data)
+        SmtUpdateItemVec(data)
     }
     fn as_bytes(&self) -> molecule::bytes::Bytes {
         self.0.clone()
@@ -2322,10 +2305,10 @@ impl molecule::prelude::Entity for SmtUpdateVec {
         &self.0[..]
     }
     fn from_slice(slice: &[u8]) -> molecule::error::VerificationResult<Self> {
-        SmtUpdateVecReader::from_slice(slice).map(|reader| reader.to_entity())
+        SmtUpdateItemVecReader::from_slice(slice).map(|reader| reader.to_entity())
     }
     fn from_compatible_slice(slice: &[u8]) -> molecule::error::VerificationResult<Self> {
-        SmtUpdateVecReader::from_compatible_slice(slice).map(|reader| reader.to_entity())
+        SmtUpdateItemVecReader::from_compatible_slice(slice).map(|reader| reader.to_entity())
     }
     fn new_builder() -> Self::Builder {
         ::core::default::Default::default()
@@ -2335,8 +2318,8 @@ impl molecule::prelude::Entity for SmtUpdateVec {
     }
 }
 #[derive(Clone, Copy)]
-pub struct SmtUpdateVecReader<'r>(&'r [u8]);
-impl<'r> ::core::fmt::LowerHex for SmtUpdateVecReader<'r> {
+pub struct SmtUpdateItemVecReader<'r>(&'r [u8]);
+impl<'r> ::core::fmt::LowerHex for SmtUpdateItemVecReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         use molecule::hex_string;
         if f.alternate() {
@@ -2345,12 +2328,12 @@ impl<'r> ::core::fmt::LowerHex for SmtUpdateVecReader<'r> {
         write!(f, "{}", hex_string(self.as_slice()))
     }
 }
-impl<'r> ::core::fmt::Debug for SmtUpdateVecReader<'r> {
+impl<'r> ::core::fmt::Debug for SmtUpdateItemVecReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{}({:#x})", Self::NAME, self)
     }
 }
-impl<'r> ::core::fmt::Display for SmtUpdateVecReader<'r> {
+impl<'r> ::core::fmt::Display for SmtUpdateItemVecReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{} [", Self::NAME)?;
         for i in 0..self.len() {
@@ -2363,8 +2346,8 @@ impl<'r> ::core::fmt::Display for SmtUpdateVecReader<'r> {
         write!(f, "]")
     }
 }
-impl<'r> SmtUpdateVecReader<'r> {
-    pub const ITEM_SIZE: usize = 96;
+impl<'r> SmtUpdateItemVecReader<'r> {
+    pub const ITEM_SIZE: usize = 33;
     pub fn total_size(&self) -> usize {
         molecule::NUMBER_SIZE * (self.item_count() + 1)
     }
@@ -2390,14 +2373,14 @@ impl<'r> SmtUpdateVecReader<'r> {
         SmtUpdateItemReader::new_unchecked(&self.as_slice()[start..end])
     }
 }
-impl<'r> molecule::prelude::Reader<'r> for SmtUpdateVecReader<'r> {
-    type Entity = SmtUpdateVec;
-    const NAME: &'static str = "SmtUpdateVecReader";
+impl<'r> molecule::prelude::Reader<'r> for SmtUpdateItemVecReader<'r> {
+    type Entity = SmtUpdateItemVec;
+    const NAME: &'static str = "SmtUpdateItemVecReader";
     fn to_entity(&self) -> Self::Entity {
         Self::Entity::new_unchecked(self.as_slice().to_owned().into())
     }
     fn new_unchecked(slice: &'r [u8]) -> Self {
-        SmtUpdateVecReader(slice)
+        SmtUpdateItemVecReader(slice)
     }
     fn as_slice(&self) -> &'r [u8] {
         self.0
@@ -2423,9 +2406,9 @@ impl<'r> molecule::prelude::Reader<'r> for SmtUpdateVecReader<'r> {
     }
 }
 #[derive(Debug, Default)]
-pub struct SmtUpdateVecBuilder(pub(crate) Vec<SmtUpdateItem>);
-impl SmtUpdateVecBuilder {
-    pub const ITEM_SIZE: usize = 96;
+pub struct SmtUpdateItemVecBuilder(pub(crate) Vec<SmtUpdateItem>);
+impl SmtUpdateItemVecBuilder {
+    pub const ITEM_SIZE: usize = 33;
     pub fn set(mut self, v: Vec<SmtUpdateItem>) -> Self {
         self.0 = v;
         self
@@ -2441,9 +2424,9 @@ impl SmtUpdateVecBuilder {
         self
     }
 }
-impl molecule::prelude::Builder for SmtUpdateVecBuilder {
-    type Entity = SmtUpdateVec;
-    const NAME: &'static str = "SmtUpdateVecBuilder";
+impl molecule::prelude::Builder for SmtUpdateItemVecBuilder {
+    type Entity = SmtUpdateItemVec;
+    const NAME: &'static str = "SmtUpdateItemVecBuilder";
     fn expected_length(&self) -> usize {
         molecule::NUMBER_SIZE + Self::ITEM_SIZE * self.0.len()
     }
@@ -2458,11 +2441,11 @@ impl molecule::prelude::Builder for SmtUpdateVecBuilder {
         let mut inner = Vec::with_capacity(self.expected_length());
         self.write(&mut inner)
             .unwrap_or_else(|_| panic!("{} build should be ok", Self::NAME));
-        SmtUpdateVec::new_unchecked(inner.into())
+        SmtUpdateItemVec::new_unchecked(inner.into())
     }
 }
-pub struct SmtUpdateVecIterator(SmtUpdateVec, usize, usize);
-impl ::core::iter::Iterator for SmtUpdateVecIterator {
+pub struct SmtUpdateItemVecIterator(SmtUpdateItemVec, usize, usize);
+impl ::core::iter::Iterator for SmtUpdateItemVecIterator {
     type Item = SmtUpdateItem;
     fn next(&mut self) -> Option<Self::Item> {
         if self.1 >= self.2 {
@@ -2474,26 +2457,26 @@ impl ::core::iter::Iterator for SmtUpdateVecIterator {
         }
     }
 }
-impl ::core::iter::ExactSizeIterator for SmtUpdateVecIterator {
+impl ::core::iter::ExactSizeIterator for SmtUpdateItemVecIterator {
     fn len(&self) -> usize {
         self.2 - self.1
     }
 }
-impl ::core::iter::IntoIterator for SmtUpdateVec {
+impl ::core::iter::IntoIterator for SmtUpdateItemVec {
     type Item = SmtUpdateItem;
-    type IntoIter = SmtUpdateVecIterator;
+    type IntoIter = SmtUpdateItemVecIterator;
     fn into_iter(self) -> Self::IntoIter {
         let len = self.len();
-        SmtUpdateVecIterator(self, 0, len)
+        SmtUpdateItemVecIterator(self, 0, len)
     }
 }
-impl<'r> SmtUpdateVecReader<'r> {
-    pub fn iter<'t>(&'t self) -> SmtUpdateVecReaderIterator<'t, 'r> {
-        SmtUpdateVecReaderIterator(&self, 0, self.len())
+impl<'r> SmtUpdateItemVecReader<'r> {
+    pub fn iter<'t>(&'t self) -> SmtUpdateItemVecReaderIterator<'t, 'r> {
+        SmtUpdateItemVecReaderIterator(&self, 0, self.len())
     }
 }
-pub struct SmtUpdateVecReaderIterator<'t, 'r>(&'t SmtUpdateVecReader<'r>, usize, usize);
-impl<'t: 'r, 'r> ::core::iter::Iterator for SmtUpdateVecReaderIterator<'t, 'r> {
+pub struct SmtUpdateItemVecReaderIterator<'t, 'r>(&'t SmtUpdateItemVecReader<'r>, usize, usize);
+impl<'t: 'r, 'r> ::core::iter::Iterator for SmtUpdateItemVecReaderIterator<'t, 'r> {
     type Item = SmtUpdateItemReader<'t>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.1 >= self.2 {
@@ -2505,14 +2488,14 @@ impl<'t: 'r, 'r> ::core::iter::Iterator for SmtUpdateVecReaderIterator<'t, 'r> {
         }
     }
 }
-impl<'t: 'r, 'r> ::core::iter::ExactSizeIterator for SmtUpdateVecReaderIterator<'t, 'r> {
+impl<'t: 'r, 'r> ::core::iter::ExactSizeIterator for SmtUpdateItemVecReaderIterator<'t, 'r> {
     fn len(&self) -> usize {
         self.2 - self.1
     }
 }
 #[derive(Clone)]
-pub struct SmtUpdate(molecule::bytes::Bytes);
-impl ::core::fmt::LowerHex for SmtUpdate {
+pub struct SmtUpdateAction(molecule::bytes::Bytes);
+impl ::core::fmt::LowerHex for SmtUpdateAction {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         use molecule::hex_string;
         if f.alternate() {
@@ -2521,15 +2504,15 @@ impl ::core::fmt::LowerHex for SmtUpdate {
         write!(f, "{}", hex_string(self.as_slice()))
     }
 }
-impl ::core::fmt::Debug for SmtUpdate {
+impl ::core::fmt::Debug for SmtUpdateAction {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{}({:#x})", Self::NAME, self)
     }
 }
-impl ::core::fmt::Display for SmtUpdate {
+impl ::core::fmt::Display for SmtUpdateAction {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{} {{ ", Self::NAME)?;
-        write!(f, "{}: {}", "update", self.update())?;
+        write!(f, "{}: {}", "updates", self.updates())?;
         write!(f, ", {}: {}", "proof", self.proof())?;
         let extra_count = self.count_extra_fields();
         if extra_count != 0 {
@@ -2538,15 +2521,15 @@ impl ::core::fmt::Display for SmtUpdate {
         write!(f, " }}")
     }
 }
-impl ::core::default::Default for SmtUpdate {
+impl ::core::default::Default for SmtUpdateAction {
     fn default() -> Self {
         let v: Vec<u8> = vec![
             20, 0, 0, 0, 12, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         ];
-        SmtUpdate::new_unchecked(v.into())
+        SmtUpdateAction::new_unchecked(v.into())
     }
 }
-impl SmtUpdate {
+impl SmtUpdateAction {
     pub const FIELD_COUNT: usize = 2;
     pub fn total_size(&self) -> usize {
         molecule::unpack_number(self.as_slice()) as usize
@@ -2564,11 +2547,11 @@ impl SmtUpdate {
     pub fn has_extra_fields(&self) -> bool {
         Self::FIELD_COUNT != self.field_count()
     }
-    pub fn update(&self) -> SmtUpdateVec {
+    pub fn updates(&self) -> SmtUpdateItemVec {
         let slice = self.as_slice();
         let start = molecule::unpack_number(&slice[4..]) as usize;
         let end = molecule::unpack_number(&slice[8..]) as usize;
-        SmtUpdateVec::new_unchecked(self.0.slice(start..end))
+        SmtUpdateItemVec::new_unchecked(self.0.slice(start..end))
     }
     pub fn proof(&self) -> SmtProof {
         let slice = self.as_slice();
@@ -2580,15 +2563,15 @@ impl SmtUpdate {
             SmtProof::new_unchecked(self.0.slice(start..))
         }
     }
-    pub fn as_reader<'r>(&'r self) -> SmtUpdateReader<'r> {
-        SmtUpdateReader::new_unchecked(self.as_slice())
+    pub fn as_reader<'r>(&'r self) -> SmtUpdateActionReader<'r> {
+        SmtUpdateActionReader::new_unchecked(self.as_slice())
     }
 }
-impl molecule::prelude::Entity for SmtUpdate {
-    type Builder = SmtUpdateBuilder;
-    const NAME: &'static str = "SmtUpdate";
+impl molecule::prelude::Entity for SmtUpdateAction {
+    type Builder = SmtUpdateActionBuilder;
+    const NAME: &'static str = "SmtUpdateAction";
     fn new_unchecked(data: molecule::bytes::Bytes) -> Self {
-        SmtUpdate(data)
+        SmtUpdateAction(data)
     }
     fn as_bytes(&self) -> molecule::bytes::Bytes {
         self.0.clone()
@@ -2597,23 +2580,23 @@ impl molecule::prelude::Entity for SmtUpdate {
         &self.0[..]
     }
     fn from_slice(slice: &[u8]) -> molecule::error::VerificationResult<Self> {
-        SmtUpdateReader::from_slice(slice).map(|reader| reader.to_entity())
+        SmtUpdateActionReader::from_slice(slice).map(|reader| reader.to_entity())
     }
     fn from_compatible_slice(slice: &[u8]) -> molecule::error::VerificationResult<Self> {
-        SmtUpdateReader::from_compatible_slice(slice).map(|reader| reader.to_entity())
+        SmtUpdateActionReader::from_compatible_slice(slice).map(|reader| reader.to_entity())
     }
     fn new_builder() -> Self::Builder {
         ::core::default::Default::default()
     }
     fn as_builder(self) -> Self::Builder {
         Self::new_builder()
-            .update(self.update())
+            .updates(self.updates())
             .proof(self.proof())
     }
 }
 #[derive(Clone, Copy)]
-pub struct SmtUpdateReader<'r>(&'r [u8]);
-impl<'r> ::core::fmt::LowerHex for SmtUpdateReader<'r> {
+pub struct SmtUpdateActionReader<'r>(&'r [u8]);
+impl<'r> ::core::fmt::LowerHex for SmtUpdateActionReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         use molecule::hex_string;
         if f.alternate() {
@@ -2622,15 +2605,15 @@ impl<'r> ::core::fmt::LowerHex for SmtUpdateReader<'r> {
         write!(f, "{}", hex_string(self.as_slice()))
     }
 }
-impl<'r> ::core::fmt::Debug for SmtUpdateReader<'r> {
+impl<'r> ::core::fmt::Debug for SmtUpdateActionReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{}({:#x})", Self::NAME, self)
     }
 }
-impl<'r> ::core::fmt::Display for SmtUpdateReader<'r> {
+impl<'r> ::core::fmt::Display for SmtUpdateActionReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{} {{ ", Self::NAME)?;
-        write!(f, "{}: {}", "update", self.update())?;
+        write!(f, "{}: {}", "updates", self.updates())?;
         write!(f, ", {}: {}", "proof", self.proof())?;
         let extra_count = self.count_extra_fields();
         if extra_count != 0 {
@@ -2639,7 +2622,7 @@ impl<'r> ::core::fmt::Display for SmtUpdateReader<'r> {
         write!(f, " }}")
     }
 }
-impl<'r> SmtUpdateReader<'r> {
+impl<'r> SmtUpdateActionReader<'r> {
     pub const FIELD_COUNT: usize = 2;
     pub fn total_size(&self) -> usize {
         molecule::unpack_number(self.as_slice()) as usize
@@ -2657,11 +2640,11 @@ impl<'r> SmtUpdateReader<'r> {
     pub fn has_extra_fields(&self) -> bool {
         Self::FIELD_COUNT != self.field_count()
     }
-    pub fn update(&self) -> SmtUpdateVecReader<'r> {
+    pub fn updates(&self) -> SmtUpdateItemVecReader<'r> {
         let slice = self.as_slice();
         let start = molecule::unpack_number(&slice[4..]) as usize;
         let end = molecule::unpack_number(&slice[8..]) as usize;
-        SmtUpdateVecReader::new_unchecked(&self.as_slice()[start..end])
+        SmtUpdateItemVecReader::new_unchecked(&self.as_slice()[start..end])
     }
     pub fn proof(&self) -> SmtProofReader<'r> {
         let slice = self.as_slice();
@@ -2674,14 +2657,14 @@ impl<'r> SmtUpdateReader<'r> {
         }
     }
 }
-impl<'r> molecule::prelude::Reader<'r> for SmtUpdateReader<'r> {
-    type Entity = SmtUpdate;
-    const NAME: &'static str = "SmtUpdateReader";
+impl<'r> molecule::prelude::Reader<'r> for SmtUpdateActionReader<'r> {
+    type Entity = SmtUpdateAction;
+    const NAME: &'static str = "SmtUpdateActionReader";
     fn to_entity(&self) -> Self::Entity {
         Self::Entity::new_unchecked(self.as_slice().to_owned().into())
     }
     fn new_unchecked(slice: &'r [u8]) -> Self {
-        SmtUpdateReader(slice)
+        SmtUpdateActionReader(slice)
     }
     fn as_slice(&self) -> &'r [u8] {
         self.0
@@ -2723,20 +2706,20 @@ impl<'r> molecule::prelude::Reader<'r> for SmtUpdateReader<'r> {
         if offsets.windows(2).any(|i| i[0] > i[1]) {
             return ve!(Self, OffsetsNotMatch);
         }
-        SmtUpdateVecReader::verify(&slice[offsets[0]..offsets[1]], compatible)?;
+        SmtUpdateItemVecReader::verify(&slice[offsets[0]..offsets[1]], compatible)?;
         SmtProofReader::verify(&slice[offsets[1]..offsets[2]], compatible)?;
         Ok(())
     }
 }
 #[derive(Debug, Default)]
-pub struct SmtUpdateBuilder {
-    pub(crate) update: SmtUpdateVec,
+pub struct SmtUpdateActionBuilder {
+    pub(crate) updates: SmtUpdateItemVec,
     pub(crate) proof: SmtProof,
 }
-impl SmtUpdateBuilder {
+impl SmtUpdateActionBuilder {
     pub const FIELD_COUNT: usize = 2;
-    pub fn update(mut self, v: SmtUpdateVec) -> Self {
-        self.update = v;
+    pub fn updates(mut self, v: SmtUpdateItemVec) -> Self {
+        self.updates = v;
         self
     }
     pub fn proof(mut self, v: SmtProof) -> Self {
@@ -2744,26 +2727,26 @@ impl SmtUpdateBuilder {
         self
     }
 }
-impl molecule::prelude::Builder for SmtUpdateBuilder {
-    type Entity = SmtUpdate;
-    const NAME: &'static str = "SmtUpdateBuilder";
+impl molecule::prelude::Builder for SmtUpdateActionBuilder {
+    type Entity = SmtUpdateAction;
+    const NAME: &'static str = "SmtUpdateActionBuilder";
     fn expected_length(&self) -> usize {
         molecule::NUMBER_SIZE * (Self::FIELD_COUNT + 1)
-            + self.update.as_slice().len()
+            + self.updates.as_slice().len()
             + self.proof.as_slice().len()
     }
     fn write<W: ::molecule::io::Write>(&self, writer: &mut W) -> ::molecule::io::Result<()> {
         let mut total_size = molecule::NUMBER_SIZE * (Self::FIELD_COUNT + 1);
         let mut offsets = Vec::with_capacity(Self::FIELD_COUNT);
         offsets.push(total_size);
-        total_size += self.update.as_slice().len();
+        total_size += self.updates.as_slice().len();
         offsets.push(total_size);
         total_size += self.proof.as_slice().len();
         writer.write_all(&molecule::pack_number(total_size as molecule::Number))?;
         for offset in offsets.into_iter() {
             writer.write_all(&molecule::pack_number(offset as molecule::Number))?;
         }
-        writer.write_all(self.update.as_slice())?;
+        writer.write_all(self.updates.as_slice())?;
         writer.write_all(self.proof.as_slice())?;
         Ok(())
     }
@@ -2771,7 +2754,7 @@ impl molecule::prelude::Builder for SmtUpdateBuilder {
         let mut inner = Vec::with_capacity(self.expected_length());
         self.write(&mut inner)
             .unwrap_or_else(|_| panic!("{} build should be ok", Self::NAME));
-        SmtUpdate::new_unchecked(inner.into())
+        SmtUpdateAction::new_unchecked(inner.into())
     }
 }
 #[derive(Clone)]

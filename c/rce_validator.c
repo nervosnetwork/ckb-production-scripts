@@ -13,8 +13,14 @@ int ckb_exit(signed char);
 #include <stdbool.h>
 #include <string.h>
 
+#include "ckb_consts.h"
+
 #include "blockchain-api2.h"
+#if defined(CKB_USE_SIM)
+#include "ckb_syscall_rce_validator_sim.h"
+#else
 #include "ckb_syscalls.h"
+#endif
 #include "ckb_type_id.h"
 #include "rce.h"
 
@@ -24,35 +30,45 @@ int ckb_exit(signed char);
 #define CACHE_SIZE 256
 #define MAX_UPDATES_PER_TX 1024
 #define MAX_PROOF_LENGTH (33 * MAX_UPDATES_PER_TX)
+#define SCRIPT_SIZE 32768
 
-static uint32_t read_from_cell_data(uintptr_t* arg, uint8_t* ptr, uint32_t len,
+static uint32_t read_from_cell_data(uintptr_t *arg, uint8_t *ptr, uint32_t len,
                                     uint32_t offset) {
   int err;
   uint64_t output_len = len;
-  err = ckb_checked_load_cell_data(ptr, &output_len, offset, arg[0], arg[1]);
+  err = ckb_load_cell_data(ptr, &output_len, offset, arg[0], arg[1]);
   if (err != 0) {
     DEBUG("Error reading cell data!");
     ckb_exit(ERROR_EOF);
   }
-  return output_len;
+  return output_len < len ? output_len : len;
 }
 
-static int _make_cursor(uint8_t* buffer, uint32_t cache_size, size_t index,
-                        size_t source, mol2_cursor_t* cursor,
-                        mol2_source_t read) {
-  mol2_data_source_t* ptr = (mol2_data_source_t*)buffer;
+static uint32_t read_from_witness(uintptr_t *arg, uint8_t *ptr, uint32_t len,
+                                  uint32_t offset) {
+  int err;
+  uint64_t output_len = len;
+  err = ckb_load_witness(ptr, &output_len, offset, arg[0], arg[1]);
+  if (err != 0) {
+    DEBUG("Error reading witness!");
+    ckb_exit(ERROR_EOF);
+  }
+  return output_len < len ? output_len : len;
+}
+
+static int make_data_cursor(uint8_t *buffer, uint32_t cache_size, size_t index,
+                            size_t source, mol2_cursor_t *cursor) {
+  mol2_data_source_t *ptr = (mol2_data_source_t *)buffer;
 
   uint64_t len = cache_size;
   int err = ckb_load_cell_data(ptr->cache, &len, 0, index, source);
   CHECK(err);
   CHECK2(len > 0, ERROR_INVALID_MOL_FORMAT);
 
-  ptr->read = read;
+  ptr->read = read_from_cell_data;
   ptr->total_size = len;
-  // pass index and source as args
   ptr->args[0] = (uintptr_t)index;
   ptr->args[1] = (uintptr_t)source;
-
   ptr->cache_size = (len > cache_size) ? cache_size : len;
   ptr->start_point = 0;
   ptr->max_cache_size = cache_size;
@@ -66,52 +82,66 @@ exit:
   return err;
 }
 
-static int make_data_cursor(uint8_t* buffer, uint32_t cache_size, size_t index,
-                            size_t source, mol2_cursor_t* cursor) {
-  return _make_cursor(buffer, cache_size, index, source, cursor,
-                      read_from_cell_data);
-}
-
-static uint32_t read_from_witness(uintptr_t* arg, uint8_t* ptr, uint32_t len,
-                                  uint32_t offset) {
-  int err;
-  uint64_t output_len = len;
-  err = ckb_checked_load_witness(ptr, &output_len, offset, arg[0], arg[1]);
-  if (err != 0) {
-    DEBUG("Error reading witness!");
-    ckb_exit(ERROR_EOF);
-  }
-  return output_len;
-}
-
-static int make_witness_cursor(uint8_t* buffer, uint32_t cache_size,
+static int make_witness_cursor(uint8_t *buffer, uint32_t cache_size,
                                size_t index, size_t source,
-                               mol2_cursor_t* cursor) {
-  return _make_cursor(buffer, cache_size, index, source, cursor,
-                      read_from_witness);
+                               mol2_cursor_t *cursor) {
+  mol2_data_source_t *ptr = (mol2_data_source_t *)buffer;
+
+  uint64_t len = cache_size;
+  int err = ckb_load_witness(ptr->cache, &len, 0, index, source);
+  CHECK(err);
+  CHECK2(len > 0, ERROR_INVALID_MOL_FORMAT);
+
+  ptr->read = read_from_witness;
+  ptr->total_size = len;
+  ptr->args[0] = (uintptr_t)index;
+  ptr->args[1] = (uintptr_t)source;
+  ptr->cache_size = (len > cache_size) ? cache_size : len;
+  ptr->start_point = 0;
+  ptr->max_cache_size = cache_size;
+
+  cursor->offset = 0;
+  cursor->size = len;
+  cursor->data_source = ptr;
+
+  err = CKB_SUCCESS;
+exit:
+  return err;
 }
 
+#ifdef CKB_USE_SIM
+int simulator_main() {
+#else
 int main() {
+#endif
+  // Load Script args first.
+  //
+  // | Script Args   | Type ID | Flags |
+  // | ------------- |---------| ------|
+  // | Length(Byte)  | 32      | 1     |
+
+  uint8_t current_script[SCRIPT_SIZE];
+  uint64_t len = SCRIPT_SIZE;
+  int err = ckb_checked_load_script(current_script, &len, 0);
+  CHECK(err);
+  CHECK2(len <= SCRIPT_SIZE, ERROR_SCRIPT_TOO_LONG);
+  mol_seg_t script_seg;
+  script_seg.ptr = (uint8_t *)current_script;
+  script_seg.size = len;
+  mol_errno mol_err = MolReader_Script_verify(&script_seg, false);
+  CHECK2(mol_err == MOL_OK, ERROR_ENCODING);
+  mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
+  mol_seg_t args_bytes_seg = MolReader_Bytes_raw_bytes(&args_seg);
+  CHECK2(args_bytes_seg.size == 33, ERROR_ARGUMENTS_LEN);
+
   uint8_t type_id[32];
-  int err = ckb_load_type_id_from_script_args(0, type_id);
-  if (err != CKB_SUCCESS) {
-    return err;
-  }
+  uint8_t flags;
+  memcpy(type_id, &args_bytes_seg.ptr[0], 32);
+  flags = args_bytes_seg.ptr[32];
+
   err = ckb_validate_type_id(type_id);
   if (err != CKB_SUCCESS) {
     return err;
-  }
-
-  uint8_t flags = 0;
-  uint64_t len = 1;
-  err = ckb_load_script(&flags, &len, 32);
-  if (err != CKB_SUCCESS) {
-    DEBUG("Cannot load current script!");
-    return err;
-  }
-  if (len > 1) {
-    DEBUG("Current script is too large!");
-    return ERROR_ARGUMENTS_LEN;
   }
   bool append_only = (flags & FLAG_APPEND_ONLY) != 0;
 
@@ -164,16 +194,17 @@ int main() {
     uint8_t witness_buffer[MOL2_DATA_SOURCE_LEN(CACHE_SIZE)];
     mol2_cursor_t witness_data;
     err = make_witness_cursor(witness_buffer, CACHE_SIZE, 0,
-                              CKB_SOURCE_GROUP_OUTPUT, &witness_data);
+                              CKB_SOURCE_GROUP_INPUT, &witness_data);
     CHECK(err);
 
     WitnessArgsType witness_args = make_WitnessArgs(&witness_data);
-    BytesOptType output = witness_args.t->output_type(&witness_args);
-    CHECK2(!output.t->is_none(&output), ERROR_INVALID_MOL_FORMAT);
-    mol2_cursor_t bytes = output.t->unwrap(&output);
+    BytesOptType input = witness_args.t->input_type(&witness_args);
+    CHECK2(!input.t->is_none(&input), ERROR_INVALID_MOL_FORMAT);
+    mol2_cursor_t bytes = input.t->unwrap(&input);
     // Bytes stored here are in fact SmtUpdate type
-    SmtUpdateActionType smt_update_ation = make_SmtUpdateAction(&bytes);
-    SmtUpdateItemVecType smt_items = smt_update_ation.t->updates(&smt_update_ation);
+    SmtUpdateActionType smt_update_action = make_SmtUpdateAction(&bytes);
+    SmtUpdateItemVecType smt_items =
+        smt_update_action.t->updates(&smt_update_action);
 
     smt_pair_t entries[MAX_UPDATES_PER_TX];
     smt_pair_t old_entries[MAX_UPDATES_PER_TX];
@@ -181,7 +212,6 @@ int main() {
     smt_state_t old_states;
     smt_state_init(&states, entries, MAX_UPDATES_PER_TX);
     smt_state_init(&old_states, old_entries, MAX_UPDATES_PER_TX);
-
     for (uint32_t i = 0; i < smt_items.t->len(&smt_items); i++) {
       bool exists = false;
       SmtUpdateItemType item = smt_items.t->get(&smt_items, i, &exists);
@@ -193,8 +223,8 @@ int main() {
       uint8_t values = item.t->packed_values(&item);
 
       uint8_t key[SMT_KEY_BYTES];
-      uint8_t* old_value;
-      uint8_t* value;
+      uint8_t *old_value;
+      uint8_t *value;
 
       /*
         High 4 bits of values : old_value
@@ -230,7 +260,7 @@ int main() {
       CHECK(err);
     }
 
-    mol2_cursor_t proof_cursor = smt_update_ation.t->proof(&smt_update_ation);
+    mol2_cursor_t proof_cursor = smt_update_action.t->proof(&smt_update_action);
     if (proof_cursor.size > MAX_PROOF_LENGTH) {
       return ERROR_INVALID_MOL_FORMAT;
     }

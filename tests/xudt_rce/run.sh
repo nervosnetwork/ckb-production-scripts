@@ -9,4 +9,5 @@ make all
 cd ../../..
 echo "Running tests"
 tests/xudt_rce/${FOLDER}/xudt_rce_simulator
+tests/xudt_rce/${FOLDER}/xudt_rce_validator_simulator
 echo "Done"
