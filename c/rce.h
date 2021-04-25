@@ -329,7 +329,7 @@ inline static bool _mask_has_input(uint8_t mask) { return 0x1 & mask; }
 
 inline static bool _mask_has_output(uint8_t mask) { return 0x2 & mask; }
 
-inline static bool _mask_hash_both(uint8_t mask) { return mask == 3; }
+inline static bool _mask_has_both(uint8_t mask) { return mask == 3; }
 
 int rce_verify_one_rule(RceState* rce_state, smt_state_t* states,
                         smt_state_t* input_states, smt_state_t* output_states,
@@ -345,22 +345,21 @@ int rce_verify_one_rule(RceState* rce_state, smt_state_t* states,
   CHECK2(temp_proof_len < MAX_TEMP_PROOF_LENGTH, ERROR_INVALID_MOL_FORMAT);
 
   if (rce_is_white_list(current_rule->flags)) {
-    rce_set_states_white_list(states);
-    rce_set_states_white_list(input_states);
-    rce_set_states_white_list(output_states);
-
-    if (_mask_hash_both(proof_mask)) {
+    if (_mask_has_both(proof_mask)) {
+      rce_set_states_white_list(states);
       err = smt_verify(root_hash, states, temp_proof, temp_proof_len);
       if (err == 0) {
         rce_state->both_on_wl = true;
       }
     } else {
       if (_mask_has_input(proof_mask)) {
+        rce_set_states_white_list(input_states);
         err = smt_verify(root_hash, input_states, temp_proof, temp_proof_len);
         if (err == 0) {
           rce_state->input_on_wl = true;
         }
       } else if (_mask_has_output(proof_mask)) {
+        rce_set_states_white_list(output_states);
         err = smt_verify(root_hash, output_states, temp_proof, temp_proof_len);
         if (err == 0) {
           rce_state->output_on_wl = true;

@@ -377,8 +377,8 @@ fn build_extension_data(
     let mut builder = SmtProofEntryVecBuilder::default();
     let iter = proofs.iter().zip(proof_masks.iter());
     for (p, m) in iter {
-        let proof_builder = SmtProofBuilder::default();
-        let proof_builder = proof_builder.set(p.into_iter().map(|v| Byte::new(*v)).collect());
+        let proof_builder =
+            SmtProofBuilder::default().set(p.into_iter().map(|v| Byte::new(*v)).collect());
 
         let temp = SmtProofEntryBuilder::default()
             .proof(proof_builder.build())

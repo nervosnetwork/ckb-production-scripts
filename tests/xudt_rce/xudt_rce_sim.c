@@ -231,7 +231,7 @@ UTEST(rce, both_input_and_output_on_white_list) {
                       14, 142, 165, 116, 90,  255, 239, 90, 63,  128, 35};
 
   uint16_t rcrulevec[MAX_RCRULE_IN_CELL] = {0};
-  rcrulevec[0] = rce_add_rcrule(hash_root1, 0x02);
+  rcrulevec[0] = rce_add_rcrule(hash_root1, 0x2);
   rcrulevec[1] = rce_add_rcrule(hash_root2, 0x2);
   RCHashType root_rcrule = rce_add_rccellvec(rcrulevec, 2);
 
@@ -273,7 +273,7 @@ UTEST(rce, only_input_on_white_list) {
                       14, 142, 165, 116, 90,  255, 239, 90, 63,  128, 35};
 
   uint16_t rcrulevec[MAX_RCRULE_IN_CELL] = {0};
-  rcrulevec[0] = rce_add_rcrule(hash_root1, 0x02);
+  rcrulevec[0] = rce_add_rcrule(hash_root1, 0x2);
   rcrulevec[1] = rce_add_rcrule(hash_root2, 0x2);
   RCHashType root_rcrule = rce_add_rccellvec(rcrulevec, 2);
 
