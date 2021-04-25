@@ -81,9 +81,13 @@ typedef struct RCRule {
 typedef struct RceState {
   RCRule rcrules[MAX_RCRULES_COUNT];
   uint32_t rcrules_count;
+  bool has_white_list;
 } RceState;
 
-void rce_init_state(RceState* state) { state->rcrules_count = 0; }
+void rce_init_state(RceState* state) {
+  state->rcrules_count = 0;
+  state->has_white_list = false;
+}
 
 // molecule doesn't provide names
 typedef enum RCDataUnionType {
@@ -213,7 +217,11 @@ int rce_gather_rcrules_recursively(RceState* rce_state,
     CHECK2(rce_state->rcrules_count < MAX_RCRULES_COUNT,
            ERROR_TOO_MANY_RCRULES);
 
-    rce_state->rcrules[rce_state->rcrules_count].flags = rule.t->flags(&rule);
+    uint8_t flags = rule.t->flags(&rule);
+    if (rce_is_white_list(flags)) {
+      rce_state->has_white_list = true;
+    }
+    rce_state->rcrules[rce_state->rcrules_count].flags = flags;
     mol2_cursor_t smt_root = rule.t->smt_root(&rule);
     mol2_read_at(&smt_root,
                  rce_state->rcrules[rce_state->rcrules_count].smt_root,
@@ -325,7 +333,6 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
 
   err = ERROR_SMT_VERIFY_FAILED;
   bool on_white_list = false;
-  bool has_white_list = false;
   bool on_black_list = false;
 
   uint8_t temp_proof[MAX_TEMP_PROOF_LENGTH];
@@ -338,7 +345,6 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
     const RCRule* current_rule = &rce_state.rcrules[index];
 
     const uint8_t* root_hash = current_rule->smt_root;
-    // "Current RCRule must not be in Emergency Halt mode."
     if (rce_is_emergency_halt_mode(current_rule->flags)) {
       err = ERROR_RCE_EMERGENCY_HALT;
       // the emergency halt has the highest priority, can return immediately
@@ -349,31 +355,23 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
     CHECK2(temp_proof_len <= MAX_TEMP_PROOF_LENGTH, ERROR_TOO_LONG_PROOF);
 
     if (rce_is_white_list(current_rule->flags)) {
-      has_white_list = true;
       err = smt_verify(root_hash, &wl_states, temp_proof, temp_proof_len);
-      // For all RCRules using whitelists, as long as there is one RCRule which
-      // satisfies err == 0, we consider validation to be success.
       if (err == 0) {
-        // *** all hashes on white list
+        // all hashes on white list
         on_white_list = true;
-        // don't break when verify successfully: it's possible to be on
-        // emergency halt afterward.
       }
-      //  else *** not all hashes on white list
+      //  else, not all hashes on white list
     } else {
-      // black list
       err = smt_verify(root_hash, &bl_states, temp_proof, temp_proof_len);
       if (err != 0) {
-        // *** any one of hashes on black list
+        // any one of hashes on black list
         on_black_list = true;
+        break;
       }
-      //  else *** all hashes *not* on black list
-
-      // don't break when verify failed: it's possible to be on white list
-      // afterward.
+      // else, all hashes *not* on black list
     }
   }
-  if (has_white_list) {
+  if (rce_state.has_white_list) {
     if (on_white_list) {
       if (on_black_list) {
         err = ERROR_ON_BLACK_LIST;
