@@ -361,28 +361,31 @@ fn make_new_bytes(input: &[u8]) -> super::blockchain::Bytes {
         .build()
 }
 
-fn make_old_bytes(input: &[u8]) -> ckb_types::packed::Bytes {
-    ckb_types::packed::BytesBuilder::default()
-        .set(input.into_iter().map(|v| Byte::new(v.clone())).collect())
-        .build()
-}
-
 fn build_extension_data(
     count: u32,
     rce_index: u32,
     proofs: Vec<Vec<u8>>,
+    proof_masks: Vec<u8>,
 ) -> ckb_types::bytes::Bytes {
     use super::blockchain::*;
     use super::xudt_rce_mol::*;
     use molecule::bytes::Bytes;
     use molecule::prelude::*;
 
-    let mut builder = SmtProofVecBuilder::default();
-    for p in proofs {
-        let temp = SmtProofBuilder::default().set(p.into_iter().map(|v| Byte::new(v)).collect());
+    assert_eq!(proofs.len(), proof_masks.len());
+
+    let mut builder = SmtProofEntryVecBuilder::default();
+    let iter = proofs.iter().zip(proof_masks.iter());
+    for (p, m) in iter {
+        let proof_builder = SmtProofBuilder::default();
+        let proof_builder = proof_builder.set(p.into_iter().map(|v| Byte::new(*v)).collect());
+
+        let temp = SmtProofEntryBuilder::default()
+            .proof(proof_builder.build())
+            .mask(Byte::new(*m));
         builder = builder.push(temp.build());
     }
-    let proofs: SmtProofVec = builder.build();
+    let proofs: SmtProofEntryVec = builder.build();
 
     let mut bytes_vec_builder = BytesVecBuilder::default();
 
@@ -403,6 +406,9 @@ pub enum TestScheme {
     None,
     OnWhiteList,
     NotOnWhiteList,
+    OnlyInputOnWhiteList,
+    OnlyOutputOnWhiteList,
+    BothOnWhiteList,
     OnBlackList,
     NotOnBlackList,
     BothOn,
@@ -410,9 +416,9 @@ pub enum TestScheme {
 }
 
 pub enum XudtFlags {
-    Plain = 0,
+    // Plain = 0,
     InArgs = 1,
-    InWitness = 2,
+    // InWitness = 2,
 }
 
 pub fn gen_tx(
@@ -443,7 +449,8 @@ pub fn gen_tx(
     tx_builder = tx0;
     let always_success_script_hash = blake2b_256(always_success_script.as_slice());
 
-    let (proofs, rc_datas) = generate_proofs(scheme, &vec![always_success_script_hash]);
+    let (proofs, rc_datas, proof_masks) =
+        generate_proofs(scheme, &vec![always_success_script_hash]);
 
     let (rce_cell_root_hash, b0) = generate_rce_cell(dummy, tx_builder, rc_datas, rng);
     tx_builder = b0;
@@ -508,7 +515,8 @@ pub fn gen_tx(
         );
 
         // fill witness
-        let witness_input_type = build_extension_data(total_count, rce_index, proofs.clone());
+        let witness_input_type =
+            build_extension_data(total_count, rce_index, proofs.clone(), proof_masks.clone());
         let witness_args = WitnessArgsBuilder::default()
             .type_(witness_input_type.pack())
             .build();
@@ -581,9 +589,13 @@ fn generate_rce_cell(
     (rce_script.code_hash(), tx_builder)
 }
 
-fn generate_proofs(scheme: TestScheme, script_hash: &Vec<[u8; 32]>) -> (Vec<Vec<u8>>, Vec<Bytes>) {
+fn generate_proofs(
+    scheme: TestScheme,
+    script_hash: &Vec<[u8; 32]>,
+) -> (Vec<Vec<u8>>, Vec<Bytes>, Vec<u8>) {
     let mut proofs = Vec::<Vec<u8>>::default();
     let mut rc_data = Vec::<Bytes>::default();
+    let mut proof_masks = Vec::<u8>::default();
 
     match scheme {
         TestScheme::BothOn => {
@@ -591,17 +603,53 @@ fn generate_proofs(scheme: TestScheme, script_hash: &Vec<[u8; 32]>) -> (Vec<Vec<
             let (proof2, rc_data2) = generate_single_proof(TestScheme::OnBlackList, script_hash);
             proofs.push(proof1);
             rc_data.push(rc_data1);
+            proof_masks.push(3);
             proofs.push(proof2);
             rc_data.push(rc_data2);
+            proof_masks.push(3);
+        }
+        TestScheme::OnlyInputOnWhiteList => {
+            let (proof1, rc_data1) = generate_single_proof(TestScheme::OnWhiteList, script_hash);
+            let (proof2, rc_data2) = generate_single_proof(TestScheme::NotOnWhiteList, script_hash);
+            proofs.push(proof1);
+            rc_data.push(rc_data1);
+            proof_masks.push(1); // input
+
+            proofs.push(proof2);
+            rc_data.push(rc_data2);
+            proof_masks.push(2); // output
+        }
+        TestScheme::OnlyOutputOnWhiteList => {
+            let (proof1, rc_data1) = generate_single_proof(TestScheme::NotOnWhiteList, script_hash);
+            let (proof2, rc_data2) = generate_single_proof(TestScheme::OnWhiteList, script_hash);
+            proofs.push(proof1);
+            rc_data.push(rc_data1);
+            proof_masks.push(1); // input
+
+            proofs.push(proof2);
+            rc_data.push(rc_data2);
+            proof_masks.push(2); // output
+        }
+        TestScheme::BothOnWhiteList => {
+            let (proof1, rc_data1) = generate_single_proof(TestScheme::OnWhiteList, script_hash);
+            let (proof2, rc_data2) = generate_single_proof(TestScheme::OnWhiteList, script_hash);
+            proofs.push(proof1);
+            rc_data.push(rc_data1);
+            proof_masks.push(1); // input
+
+            proofs.push(proof2);
+            rc_data.push(rc_data2);
+            proof_masks.push(2); // output
         }
         _ => {
             let (proof1, rc_data1) = generate_single_proof(scheme, script_hash);
             proofs.push(proof1);
             rc_data.push(rc_data1);
+            proof_masks.push(3);
         }
     }
 
-    (proofs, rc_data)
+    (proofs, rc_data, proof_masks)
 }
 
 fn generate_single_proof(scheme: TestScheme, script_hash: &Vec<[u8; 32]>) -> (Vec<u8>, Bytes) {
@@ -824,6 +872,87 @@ fn test_rce_on_wl() {
 }
 
 #[test]
+fn test_rce_only_input_on_wl() {
+    let mut rng = thread_rng();
+    let mut data_loader = DummyDataLoader::new();
+    let special_rce_hash = Bytes::from(RCE_HASH.as_ref());
+    let bin_vec: Vec<&Bytes> = vec![&special_rce_hash];
+
+    let tx = gen_tx(
+        &mut data_loader,
+        Bytes::from(vec![0u8; 32]),
+        1,
+        1,
+        vec![100],
+        vec![100],
+        bin_vec,
+        TestScheme::OnlyInputOnWhiteList,
+        &mut rng,
+    );
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    assert_error_eq!(
+        verify_result.unwrap_err(),
+        ScriptError::ValidationFailure(59), // ERROR_NOT_ON_WHITE_LIST
+    );
+}
+
+#[test]
+fn test_rce_only_output_on_wl() {
+    let mut rng = thread_rng();
+    let mut data_loader = DummyDataLoader::new();
+    let special_rce_hash = Bytes::from(RCE_HASH.as_ref());
+    let bin_vec: Vec<&Bytes> = vec![&special_rce_hash];
+
+    let tx = gen_tx(
+        &mut data_loader,
+        Bytes::from(vec![0u8; 32]),
+        1,
+        1,
+        vec![100],
+        vec![100],
+        bin_vec,
+        TestScheme::OnlyOutputOnWhiteList,
+        &mut rng,
+    );
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    assert_error_eq!(
+        verify_result.unwrap_err(),
+        ScriptError::ValidationFailure(59), // ERROR_NOT_ON_WHITE_LIST
+    );
+}
+
+#[test]
+fn test_rce_both_on_wl() {
+    let mut rng = thread_rng();
+    let mut data_loader = DummyDataLoader::new();
+    let special_rce_hash = Bytes::from(RCE_HASH.as_ref());
+    let bin_vec: Vec<&Bytes> = vec![&special_rce_hash];
+
+    let tx = gen_tx(
+        &mut data_loader,
+        Bytes::from(vec![0u8; 32]),
+        1,
+        1,
+        vec![100],
+        vec![100],
+        bin_vec,
+        TestScheme::BothOnWhiteList,
+        &mut rng,
+    );
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    verify_result.expect("pass verification");
+}
+
+#[test]
 fn test_rce_not_on_wl() {
     let mut rng = thread_rng();
     let mut data_loader = DummyDataLoader::new();
@@ -900,7 +1029,7 @@ fn test_rce_on_bl() {
     let verify_result = verifier.verify(MAX_CYCLES);
     assert_error_eq!(
         verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(58), // ERROR_ON_BLACK_LIST2
+        ScriptError::ValidationFailure(57), // ERROR_ON_BLACK_LIST
     );
 }
 

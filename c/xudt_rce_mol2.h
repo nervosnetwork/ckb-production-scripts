@@ -65,12 +65,19 @@ struct SmtProofVTable *GetSmtProofVTable(void);
 struct SmtProofType make_SmtProof(mol2_cursor_t *cur);
 uint32_t SmtProof_len_impl(struct SmtProofType *);
 uint8_t SmtProof_get_impl(struct SmtProofType *, uint32_t, bool *);
-struct SmtProofVecType;
-struct SmtProofVecVTable;
-struct SmtProofVecVTable *GetSmtProofVecVTable(void);
-struct SmtProofVecType make_SmtProofVec(mol2_cursor_t *cur);
-uint32_t SmtProofVec_len_impl(struct SmtProofVecType *);
-mol2_cursor_t SmtProofVec_get_impl(struct SmtProofVecType *, uint32_t, bool *);
+struct SmtProofEntryType;
+struct SmtProofEntryVTable;
+struct SmtProofEntryVTable *GetSmtProofEntryVTable(void);
+struct SmtProofEntryType make_SmtProofEntry(mol2_cursor_t *cur);
+uint8_t SmtProofEntry_get_mask_impl(struct SmtProofEntryType *);
+mol2_cursor_t SmtProofEntry_get_proof_impl(struct SmtProofEntryType *);
+struct SmtProofEntryVecType;
+struct SmtProofEntryVecVTable;
+struct SmtProofEntryVecVTable *GetSmtProofEntryVecVTable(void);
+struct SmtProofEntryVecType make_SmtProofEntryVec(mol2_cursor_t *cur);
+uint32_t SmtProofEntryVec_len_impl(struct SmtProofEntryVecType *);
+struct SmtProofEntryType SmtProofEntryVec_get_impl(
+    struct SmtProofEntryVecType *, uint32_t, bool *);
 struct SmtUpdateItemType;
 struct SmtUpdateItemVTable;
 struct SmtUpdateItemVTable *GetSmtUpdateItemVTable(void);
@@ -164,14 +171,24 @@ typedef struct SmtProofType {
   SmtProofVTable *t;
 } SmtProofType;
 
-typedef struct SmtProofVecVTable {
-  uint32_t (*len)(struct SmtProofVecType *);
-  mol2_cursor_t (*get)(struct SmtProofVecType *, uint32_t, bool *);
-} SmtProofVecVTable;
-typedef struct SmtProofVecType {
+typedef struct SmtProofEntryVTable {
+  uint8_t (*mask)(struct SmtProofEntryType *);
+  mol2_cursor_t (*proof)(struct SmtProofEntryType *);
+} SmtProofEntryVTable;
+typedef struct SmtProofEntryType {
   mol2_cursor_t cur;
-  SmtProofVecVTable *t;
-} SmtProofVecType;
+  SmtProofEntryVTable *t;
+} SmtProofEntryType;
+
+typedef struct SmtProofEntryVecVTable {
+  uint32_t (*len)(struct SmtProofEntryVecType *);
+  struct SmtProofEntryType (*get)(struct SmtProofEntryVecType *, uint32_t,
+                                  bool *);
+} SmtProofEntryVecVTable;
+typedef struct SmtProofEntryVecType {
+  mol2_cursor_t cur;
+  SmtProofEntryVecVTable *t;
+} SmtProofEntryVecType;
 
 typedef struct SmtUpdateItemVTable {
   mol2_cursor_t (*key)(struct SmtUpdateItemType *);
@@ -419,26 +436,52 @@ uint8_t SmtProof_get_impl(SmtProofType *this, uint32_t index, bool *existing) {
   ret = convert_to_Uint8(&res.cur);
   return ret;
 }
-struct SmtProofVecType make_SmtProofVec(mol2_cursor_t *cur) {
-  SmtProofVecType ret;
+struct SmtProofEntryType make_SmtProofEntry(mol2_cursor_t *cur) {
+  SmtProofEntryType ret;
   ret.cur = *cur;
-  ret.t = GetSmtProofVecVTable();
+  ret.t = GetSmtProofEntryVTable();
   return ret;
 }
-struct SmtProofVecVTable *GetSmtProofVecVTable(void) {
-  static SmtProofVecVTable s_vtable;
+struct SmtProofEntryVTable *GetSmtProofEntryVTable(void) {
+  static SmtProofEntryVTable s_vtable;
   static int inited = 0;
   if (inited) return &s_vtable;
-  s_vtable.len = SmtProofVec_len_impl;
-  s_vtable.get = SmtProofVec_get_impl;
+  s_vtable.mask = SmtProofEntry_get_mask_impl;
+  s_vtable.proof = SmtProofEntry_get_proof_impl;
   return &s_vtable;
 }
-uint32_t SmtProofVec_len_impl(SmtProofVecType *this) {
+uint8_t SmtProofEntry_get_mask_impl(SmtProofEntryType *this) {
+  uint8_t ret;
+  mol2_cursor_t ret2 = mol2_table_slice_by_index(&this->cur, 0);
+  ret = convert_to_Uint8(&ret2);
+  return ret;
+}
+mol2_cursor_t SmtProofEntry_get_proof_impl(SmtProofEntryType *this) {
+  mol2_cursor_t ret;
+  mol2_cursor_t re2 = mol2_table_slice_by_index(&this->cur, 1);
+  ret = convert_to_rawbytes(&re2);
+  return ret;
+}
+struct SmtProofEntryVecType make_SmtProofEntryVec(mol2_cursor_t *cur) {
+  SmtProofEntryVecType ret;
+  ret.cur = *cur;
+  ret.t = GetSmtProofEntryVecVTable();
+  return ret;
+}
+struct SmtProofEntryVecVTable *GetSmtProofEntryVecVTable(void) {
+  static SmtProofEntryVecVTable s_vtable;
+  static int inited = 0;
+  if (inited) return &s_vtable;
+  s_vtable.len = SmtProofEntryVec_len_impl;
+  s_vtable.get = SmtProofEntryVec_get_impl;
+  return &s_vtable;
+}
+uint32_t SmtProofEntryVec_len_impl(SmtProofEntryVecType *this) {
   return mol2_dynvec_length(&this->cur);
 }
-mol2_cursor_t SmtProofVec_get_impl(SmtProofVecType *this, uint32_t index,
-                                   bool *existing) {
-  mol2_cursor_t ret = {0};
+SmtProofEntryType SmtProofEntryVec_get_impl(SmtProofEntryVecType *this,
+                                            uint32_t index, bool *existing) {
+  SmtProofEntryType ret = {0};
   mol2_cursor_res_t res = mol2_dynvec_slice_by_index(&this->cur, index);
   if (res.errno != MOL2_OK) {
     *existing = false;
@@ -446,7 +489,9 @@ mol2_cursor_t SmtProofVec_get_impl(SmtProofVecType *this, uint32_t index,
   } else {
     *existing = true;
   }
-  return convert_to_rawbytes(&res.cur);
+  ret.cur = res.cur;
+  ret.t = GetSmtProofEntryVTable();
+  return ret;
 }
 struct SmtUpdateItemType make_SmtUpdateItem(mol2_cursor_t *cur) {
   SmtUpdateItemType ret;
