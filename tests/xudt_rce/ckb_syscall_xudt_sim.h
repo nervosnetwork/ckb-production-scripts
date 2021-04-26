@@ -94,16 +94,28 @@ void xudt_add_structure_item(const uint8_t* item, uint32_t len) {
   free(seg.ptr);
 }
 
-void rce_begin_proof() { MolBuilder_SmtProofVec_init(&g_proof_builder); }
+void rce_begin_proof() { MolBuilder_SmtProofEntryVec_init(&g_proof_builder); }
 
-void rce_add_proof(const uint8_t* proof, uint32_t proof_len) {
-  mol_seg_t seg = build_bytes(proof, proof_len);
-  MolBuilder_SmtProofVec_push(&g_proof_builder, seg.ptr, seg.size);
-  free(seg.ptr);
+void rce_add_proof(const uint8_t* proof, uint32_t proof_len, uint8_t mask) {
+  ASSERT(mask >= 0 && mask <= 3);
+
+  mol_builder_t b;
+  mol_seg_t proof_seg = build_bytes(proof, proof_len);
+
+  MolBuilder_SmtProofEntry_init(&b);
+  MolBuilder_SmtProofEntry_set_mask(&b, mask);
+  MolBuilder_SmtProofEntry_set_proof(&b, proof_seg.ptr, proof_seg.size);
+
+  mol_seg_res_t res = MolBuilder_SmtProofEntry_build(b);
+  ASSERT(res.errno == 0);
+
+  MolBuilder_SmtProofEntryVec_push(&g_proof_builder, res.seg.ptr, res.seg.size);
+  free(proof_seg.ptr);
+  free(res.seg.ptr);
 }
 
 void rce_end_proof() {
-  mol_seg_res_t res = MolBuilder_SmtProofVec_build(g_proof_builder);
+  mol_seg_res_t res = MolBuilder_SmtProofEntryVec_build(g_proof_builder);
   ASSERT(res.errno == 0);
 
   xudt_add_structure_item(res.seg.ptr, res.seg.size);

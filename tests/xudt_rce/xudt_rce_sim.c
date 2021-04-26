@@ -77,7 +77,7 @@ void set_rce_not_on_black_list_data() {
   uint16_t root_rcrule =
       rce_add_rcrule(BLACK_LIST_HASH_ROOT, 0x0);  // black list
   rce_begin_proof();
-  rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF));
+  rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF), 0x3);
   rce_end_proof();
   uint8_t args[32] = {0};
   memcpy(args, &root_rcrule, 2);
@@ -92,7 +92,7 @@ void set_rce_on_black_list_data() {
       0};  // invalid hash, so the verify result is false: it's on black list.
   uint16_t root_rcrule = rce_add_rcrule(hash, 0x0);  // on black list
   rce_begin_proof();
-  rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF));
+  rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF), 0x3);
   rce_end_proof();
 
   uint8_t args[32] = {0};
@@ -197,7 +197,7 @@ UTEST(rce, white_list) {
   uint16_t root_rcrule =
       rce_add_rcrule(WHITE_LIST_HASH_ROOT, 0x2);  // white list
   rce_begin_proof();
-  rce_add_proof(WHITE_LIST_PROOF, countof(WHITE_LIST_PROOF));
+  rce_add_proof(WHITE_LIST_PROOF, countof(WHITE_LIST_PROOF), 0x3);
   rce_end_proof();
   uint8_t args[32] = {0};
   memcpy(args, &root_rcrule, 2);
@@ -211,6 +211,89 @@ exit:
   return;
 }
 
+UTEST(rce, both_input_and_output_on_white_list) {
+  int err = 0;
+  xudt_begin_data();
+  set_basic_data();
+
+  uint8_t hash_root1[] = {151, 81,  37,  242, 189, 99, 62,  175, 115, 9,   251,
+                          94,  105, 190, 173, 153, 42, 249, 87,  115, 253, 152,
+                          110, 88,  1,   58,  224, 21, 51,  99,  72,  182};
+  uint8_t proof1[] = {76,  80,  4,   157, 181, 3,   109, 35,  79,  233, 114, 91,
+                      219, 188, 99,  77,  45,  214, 230, 222, 170, 154, 162, 63,
+                      51,  85,  254, 115, 15,  23,  166, 5,   21,  254, 51};
+
+  uint8_t hash_root2[] = {151, 81,  37,  242, 189, 99, 62,  175, 115, 9,   251,
+                          94,  105, 190, 173, 153, 42, 249, 87,  115, 253, 152,
+                          110, 88,  1,   58,  224, 21, 51,  99,  72,  182};
+  uint8_t proof2[] = {76, 80,  4,   96,  186, 33,  226, 13, 35,  104, 150, 165,
+                      4,  223, 103, 18,  193, 40,  37,  99, 107, 99,  12,  175,
+                      14, 142, 165, 116, 90,  255, 239, 90, 63,  128, 35};
+
+  uint16_t rcrulevec[MAX_RCRULE_IN_CELL] = {0};
+  rcrulevec[0] = rce_add_rcrule(hash_root1, 0x2);
+  rcrulevec[1] = rce_add_rcrule(hash_root2, 0x2);
+  RCHashType root_rcrule = rce_add_rccellvec(rcrulevec, 2);
+
+  rce_begin_proof();
+  rce_add_proof(proof1, countof(proof1), 0x1);  // input
+  rce_add_proof(proof2, countof(proof2), 0x2);  // output
+  rce_end_proof();
+
+  uint8_t args[32] = {0};
+  memcpy(args, &root_rcrule, 2);
+  xudt_add_extension_script(RCE_HASH, 1, args, sizeof(args),
+                            "internal extension script, no path");
+  xudt_end_data();
+
+  err = simulator_main();
+  ASSERT_EQ(err, 0);
+exit:
+  return;
+}
+
+UTEST(rce, only_input_on_white_list) {
+  int err = 0;
+  xudt_begin_data();
+  set_basic_data();
+
+  uint8_t hash_root1[] = {151, 81,  37,  242, 189, 99, 62,  175, 115, 9,   251,
+                          94,  105, 190, 173, 153, 42, 249, 87,  115, 253, 152,
+                          110, 88,  1,   58,  224, 21, 51,  99,  72,  182};
+  uint8_t proof1[] = {76,  80,  4,   157, 181, 3,   109, 35,  79,  233, 114, 91,
+                      219, 188, 99,  77,  45,  214, 230, 222, 170, 154, 162, 63,
+                      51,  85,  254, 115, 15,  23,  166, 5,   21,  254, 51};
+
+  uint8_t hash_root2[] = {151, 81,  37,  242, 189, 99, 62,  175, 115, 9,   251,
+                          94,  105, 190, 173, 153, 42, 249, 87,  115, 253, 152,
+                          110, 88,  1,   58,  224, 21, 51,  99,  72,  182};
+  hash_root2[0] = 0;  // make output not on white list
+  uint8_t proof2[] = {76, 80,  4,   96,  186, 33,  226, 13, 35,  104, 150, 165,
+                      4,  223, 103, 18,  193, 40,  37,  99, 107, 99,  12,  175,
+                      14, 142, 165, 116, 90,  255, 239, 90, 63,  128, 35};
+
+  uint16_t rcrulevec[MAX_RCRULE_IN_CELL] = {0};
+  rcrulevec[0] = rce_add_rcrule(hash_root1, 0x2);
+  rcrulevec[1] = rce_add_rcrule(hash_root2, 0x2);
+  RCHashType root_rcrule = rce_add_rccellvec(rcrulevec, 2);
+
+  rce_begin_proof();
+  rce_add_proof(proof1, countof(proof1), 0x1);  // input
+  rce_add_proof(proof2, countof(proof2), 0x2);  // output
+  rce_end_proof();
+
+  uint8_t args[32] = {0};
+  memcpy(args, &root_rcrule, 2);
+  xudt_add_extension_script(RCE_HASH, 1, args, sizeof(args),
+                            "internal extension script, no path");
+  xudt_end_data();
+
+  err = simulator_main();
+  ASSERT_EQ(ERROR_NOT_ON_WHITE_LIST, err);
+exit:
+  return;
+}
+
 UTEST(rce, not_on_white_list) {
   int err = 0;
   xudt_begin_data();
@@ -220,7 +303,7 @@ UTEST(rce, not_on_white_list) {
   uint16_t root_rcrule = rce_add_rcrule(rcrule, 0x2);  // white list
   uint8_t proof[] = {76, 76, 72, 4};
   rce_begin_proof();
-  rce_add_proof(proof, countof(proof));
+  rce_add_proof(proof, countof(proof), 0x3);
   rce_end_proof();
   uint8_t args[32] = {0};
   memcpy(args, &root_rcrule, 2);
@@ -259,7 +342,7 @@ UTEST(rce, black_list) {
   uint16_t root_rcrule =
       rce_add_rcrule(BLACK_LIST_HASH_ROOT, 0x0);  // black list
   rce_begin_proof();
-  rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF));
+  rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF), 0x3);
   rce_end_proof();
   uint8_t args[32] = {0};
   memcpy(args, &root_rcrule, 2);
@@ -294,7 +377,7 @@ UTEST(xudt, emergency_halt_mode) {
   uint16_t root_rcrule = rce_add_rcrule(
       BLACK_LIST_HASH_ROOT, 0x1);  // emergency halt mode, black list
   rce_begin_proof();
-  rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF));
+  rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF), 0x3);
   rce_end_proof();
   uint8_t args[32] = {0};
   memcpy(args, &root_rcrule, 2);
@@ -348,7 +431,7 @@ UTEST(xudt, extension_script_returns_non_zero) {
       "tests/xudt_rce/simulator-build-debug/libextension_script_1.dylib");
   xudt_end_data();
   err = simulator_main();
-  ASSERT_EQ(ERROR_ON_BLACK_LIST2, err);
+  ASSERT_EQ(ERROR_ON_BLACK_LIST, err);
 
 exit:
   return;
@@ -367,7 +450,7 @@ UTEST(rce, use_rc_cell_vec) {
   RCHashType root_rcrule = rce_add_rccellvec(rcrulevec, MAX_RCRULE_IN_CELL);
   rce_begin_proof();
   for (int i = 0; i < MAX_RCRULE_IN_CELL; i++) {
-    rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF));
+    rce_add_proof(BLACK_LIST_PROOF, countof(BLACK_LIST_PROOF), 0x3);
   }
   rce_end_proof();
   uint8_t args[32] = {0};

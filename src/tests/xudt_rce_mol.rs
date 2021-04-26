@@ -1728,8 +1728,8 @@ impl ::core::iter::IntoIterator for SmtProof {
     }
 }
 #[derive(Clone)]
-pub struct SmtProofVec(molecule::bytes::Bytes);
-impl ::core::fmt::LowerHex for SmtProofVec {
+pub struct SmtProofEntry(molecule::bytes::Bytes);
+impl ::core::fmt::LowerHex for SmtProofEntry {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         use molecule::hex_string;
         if f.alternate() {
@@ -1738,12 +1738,272 @@ impl ::core::fmt::LowerHex for SmtProofVec {
         write!(f, "{}", hex_string(self.as_slice()))
     }
 }
-impl ::core::fmt::Debug for SmtProofVec {
+impl ::core::fmt::Debug for SmtProofEntry {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{}({:#x})", Self::NAME, self)
     }
 }
-impl ::core::fmt::Display for SmtProofVec {
+impl ::core::fmt::Display for SmtProofEntry {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+        write!(f, "{} {{ ", Self::NAME)?;
+        write!(f, "{}: {}", "mask", self.mask())?;
+        write!(f, ", {}: {}", "proof", self.proof())?;
+        let extra_count = self.count_extra_fields();
+        if extra_count != 0 {
+            write!(f, ", .. ({} fields)", extra_count)?;
+        }
+        write!(f, " }}")
+    }
+}
+impl ::core::default::Default for SmtProofEntry {
+    fn default() -> Self {
+        let v: Vec<u8> = vec![17, 0, 0, 0, 12, 0, 0, 0, 13, 0, 0, 0, 0, 0, 0, 0, 0];
+        SmtProofEntry::new_unchecked(v.into())
+    }
+}
+impl SmtProofEntry {
+    pub const FIELD_COUNT: usize = 2;
+    pub fn total_size(&self) -> usize {
+        molecule::unpack_number(self.as_slice()) as usize
+    }
+    pub fn field_count(&self) -> usize {
+        if self.total_size() == molecule::NUMBER_SIZE {
+            0
+        } else {
+            (molecule::unpack_number(&self.as_slice()[molecule::NUMBER_SIZE..]) as usize / 4) - 1
+        }
+    }
+    pub fn count_extra_fields(&self) -> usize {
+        self.field_count() - Self::FIELD_COUNT
+    }
+    pub fn has_extra_fields(&self) -> bool {
+        Self::FIELD_COUNT != self.field_count()
+    }
+    pub fn mask(&self) -> Byte {
+        let slice = self.as_slice();
+        let start = molecule::unpack_number(&slice[4..]) as usize;
+        let end = molecule::unpack_number(&slice[8..]) as usize;
+        Byte::new_unchecked(self.0.slice(start..end))
+    }
+    pub fn proof(&self) -> SmtProof {
+        let slice = self.as_slice();
+        let start = molecule::unpack_number(&slice[8..]) as usize;
+        if self.has_extra_fields() {
+            let end = molecule::unpack_number(&slice[12..]) as usize;
+            SmtProof::new_unchecked(self.0.slice(start..end))
+        } else {
+            SmtProof::new_unchecked(self.0.slice(start..))
+        }
+    }
+    pub fn as_reader<'r>(&'r self) -> SmtProofEntryReader<'r> {
+        SmtProofEntryReader::new_unchecked(self.as_slice())
+    }
+}
+impl molecule::prelude::Entity for SmtProofEntry {
+    type Builder = SmtProofEntryBuilder;
+    const NAME: &'static str = "SmtProofEntry";
+    fn new_unchecked(data: molecule::bytes::Bytes) -> Self {
+        SmtProofEntry(data)
+    }
+    fn as_bytes(&self) -> molecule::bytes::Bytes {
+        self.0.clone()
+    }
+    fn as_slice(&self) -> &[u8] {
+        &self.0[..]
+    }
+    fn from_slice(slice: &[u8]) -> molecule::error::VerificationResult<Self> {
+        SmtProofEntryReader::from_slice(slice).map(|reader| reader.to_entity())
+    }
+    fn from_compatible_slice(slice: &[u8]) -> molecule::error::VerificationResult<Self> {
+        SmtProofEntryReader::from_compatible_slice(slice).map(|reader| reader.to_entity())
+    }
+    fn new_builder() -> Self::Builder {
+        ::core::default::Default::default()
+    }
+    fn as_builder(self) -> Self::Builder {
+        Self::new_builder().mask(self.mask()).proof(self.proof())
+    }
+}
+#[derive(Clone, Copy)]
+pub struct SmtProofEntryReader<'r>(&'r [u8]);
+impl<'r> ::core::fmt::LowerHex for SmtProofEntryReader<'r> {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+        use molecule::hex_string;
+        if f.alternate() {
+            write!(f, "0x")?;
+        }
+        write!(f, "{}", hex_string(self.as_slice()))
+    }
+}
+impl<'r> ::core::fmt::Debug for SmtProofEntryReader<'r> {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+        write!(f, "{}({:#x})", Self::NAME, self)
+    }
+}
+impl<'r> ::core::fmt::Display for SmtProofEntryReader<'r> {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+        write!(f, "{} {{ ", Self::NAME)?;
+        write!(f, "{}: {}", "mask", self.mask())?;
+        write!(f, ", {}: {}", "proof", self.proof())?;
+        let extra_count = self.count_extra_fields();
+        if extra_count != 0 {
+            write!(f, ", .. ({} fields)", extra_count)?;
+        }
+        write!(f, " }}")
+    }
+}
+impl<'r> SmtProofEntryReader<'r> {
+    pub const FIELD_COUNT: usize = 2;
+    pub fn total_size(&self) -> usize {
+        molecule::unpack_number(self.as_slice()) as usize
+    }
+    pub fn field_count(&self) -> usize {
+        if self.total_size() == molecule::NUMBER_SIZE {
+            0
+        } else {
+            (molecule::unpack_number(&self.as_slice()[molecule::NUMBER_SIZE..]) as usize / 4) - 1
+        }
+    }
+    pub fn count_extra_fields(&self) -> usize {
+        self.field_count() - Self::FIELD_COUNT
+    }
+    pub fn has_extra_fields(&self) -> bool {
+        Self::FIELD_COUNT != self.field_count()
+    }
+    pub fn mask(&self) -> ByteReader<'r> {
+        let slice = self.as_slice();
+        let start = molecule::unpack_number(&slice[4..]) as usize;
+        let end = molecule::unpack_number(&slice[8..]) as usize;
+        ByteReader::new_unchecked(&self.as_slice()[start..end])
+    }
+    pub fn proof(&self) -> SmtProofReader<'r> {
+        let slice = self.as_slice();
+        let start = molecule::unpack_number(&slice[8..]) as usize;
+        if self.has_extra_fields() {
+            let end = molecule::unpack_number(&slice[12..]) as usize;
+            SmtProofReader::new_unchecked(&self.as_slice()[start..end])
+        } else {
+            SmtProofReader::new_unchecked(&self.as_slice()[start..])
+        }
+    }
+}
+impl<'r> molecule::prelude::Reader<'r> for SmtProofEntryReader<'r> {
+    type Entity = SmtProofEntry;
+    const NAME: &'static str = "SmtProofEntryReader";
+    fn to_entity(&self) -> Self::Entity {
+        Self::Entity::new_unchecked(self.as_slice().to_owned().into())
+    }
+    fn new_unchecked(slice: &'r [u8]) -> Self {
+        SmtProofEntryReader(slice)
+    }
+    fn as_slice(&self) -> &'r [u8] {
+        self.0
+    }
+    fn verify(slice: &[u8], compatible: bool) -> molecule::error::VerificationResult<()> {
+        use molecule::verification_error as ve;
+        let slice_len = slice.len();
+        if slice_len < molecule::NUMBER_SIZE {
+            return ve!(Self, HeaderIsBroken, molecule::NUMBER_SIZE, slice_len);
+        }
+        let total_size = molecule::unpack_number(slice) as usize;
+        if slice_len != total_size {
+            return ve!(Self, TotalSizeNotMatch, total_size, slice_len);
+        }
+        if slice_len == molecule::NUMBER_SIZE && Self::FIELD_COUNT == 0 {
+            return Ok(());
+        }
+        if slice_len < molecule::NUMBER_SIZE * 2 {
+            return ve!(Self, HeaderIsBroken, molecule::NUMBER_SIZE * 2, slice_len);
+        }
+        let offset_first = molecule::unpack_number(&slice[molecule::NUMBER_SIZE..]) as usize;
+        if offset_first % molecule::NUMBER_SIZE != 0 || offset_first < molecule::NUMBER_SIZE * 2 {
+            return ve!(Self, OffsetsNotMatch);
+        }
+        if slice_len < offset_first {
+            return ve!(Self, HeaderIsBroken, offset_first, slice_len);
+        }
+        let field_count = offset_first / molecule::NUMBER_SIZE - 1;
+        if field_count < Self::FIELD_COUNT {
+            return ve!(Self, FieldCountNotMatch, Self::FIELD_COUNT, field_count);
+        } else if !compatible && field_count > Self::FIELD_COUNT {
+            return ve!(Self, FieldCountNotMatch, Self::FIELD_COUNT, field_count);
+        };
+        let mut offsets: Vec<usize> = slice[molecule::NUMBER_SIZE..offset_first]
+            .chunks_exact(molecule::NUMBER_SIZE)
+            .map(|x| molecule::unpack_number(x) as usize)
+            .collect();
+        offsets.push(total_size);
+        if offsets.windows(2).any(|i| i[0] > i[1]) {
+            return ve!(Self, OffsetsNotMatch);
+        }
+        ByteReader::verify(&slice[offsets[0]..offsets[1]], compatible)?;
+        SmtProofReader::verify(&slice[offsets[1]..offsets[2]], compatible)?;
+        Ok(())
+    }
+}
+#[derive(Debug, Default)]
+pub struct SmtProofEntryBuilder {
+    pub(crate) mask: Byte,
+    pub(crate) proof: SmtProof,
+}
+impl SmtProofEntryBuilder {
+    pub const FIELD_COUNT: usize = 2;
+    pub fn mask(mut self, v: Byte) -> Self {
+        self.mask = v;
+        self
+    }
+    pub fn proof(mut self, v: SmtProof) -> Self {
+        self.proof = v;
+        self
+    }
+}
+impl molecule::prelude::Builder for SmtProofEntryBuilder {
+    type Entity = SmtProofEntry;
+    const NAME: &'static str = "SmtProofEntryBuilder";
+    fn expected_length(&self) -> usize {
+        molecule::NUMBER_SIZE * (Self::FIELD_COUNT + 1)
+            + self.mask.as_slice().len()
+            + self.proof.as_slice().len()
+    }
+    fn write<W: ::molecule::io::Write>(&self, writer: &mut W) -> ::molecule::io::Result<()> {
+        let mut total_size = molecule::NUMBER_SIZE * (Self::FIELD_COUNT + 1);
+        let mut offsets = Vec::with_capacity(Self::FIELD_COUNT);
+        offsets.push(total_size);
+        total_size += self.mask.as_slice().len();
+        offsets.push(total_size);
+        total_size += self.proof.as_slice().len();
+        writer.write_all(&molecule::pack_number(total_size as molecule::Number))?;
+        for offset in offsets.into_iter() {
+            writer.write_all(&molecule::pack_number(offset as molecule::Number))?;
+        }
+        writer.write_all(self.mask.as_slice())?;
+        writer.write_all(self.proof.as_slice())?;
+        Ok(())
+    }
+    fn build(&self) -> Self::Entity {
+        let mut inner = Vec::with_capacity(self.expected_length());
+        self.write(&mut inner)
+            .unwrap_or_else(|_| panic!("{} build should be ok", Self::NAME));
+        SmtProofEntry::new_unchecked(inner.into())
+    }
+}
+#[derive(Clone)]
+pub struct SmtProofEntryVec(molecule::bytes::Bytes);
+impl ::core::fmt::LowerHex for SmtProofEntryVec {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+        use molecule::hex_string;
+        if f.alternate() {
+            write!(f, "0x")?;
+        }
+        write!(f, "{}", hex_string(self.as_slice()))
+    }
+}
+impl ::core::fmt::Debug for SmtProofEntryVec {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+        write!(f, "{}({:#x})", Self::NAME, self)
+    }
+}
+impl ::core::fmt::Display for SmtProofEntryVec {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{} [", Self::NAME)?;
         for i in 0..self.len() {
@@ -1756,13 +2016,13 @@ impl ::core::fmt::Display for SmtProofVec {
         write!(f, "]")
     }
 }
-impl ::core::default::Default for SmtProofVec {
+impl ::core::default::Default for SmtProofEntryVec {
     fn default() -> Self {
         let v: Vec<u8> = vec![4, 0, 0, 0];
-        SmtProofVec::new_unchecked(v.into())
+        SmtProofEntryVec::new_unchecked(v.into())
     }
 }
-impl SmtProofVec {
+impl SmtProofEntryVec {
     pub fn total_size(&self) -> usize {
         molecule::unpack_number(self.as_slice()) as usize
     }
@@ -1779,34 +2039,34 @@ impl SmtProofVec {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
-    pub fn get(&self, idx: usize) -> Option<SmtProof> {
+    pub fn get(&self, idx: usize) -> Option<SmtProofEntry> {
         if idx >= self.len() {
             None
         } else {
             Some(self.get_unchecked(idx))
         }
     }
-    pub fn get_unchecked(&self, idx: usize) -> SmtProof {
+    pub fn get_unchecked(&self, idx: usize) -> SmtProofEntry {
         let slice = self.as_slice();
         let start_idx = molecule::NUMBER_SIZE * (1 + idx);
         let start = molecule::unpack_number(&slice[start_idx..]) as usize;
         if idx == self.len() - 1 {
-            SmtProof::new_unchecked(self.0.slice(start..))
+            SmtProofEntry::new_unchecked(self.0.slice(start..))
         } else {
             let end_idx = start_idx + molecule::NUMBER_SIZE;
             let end = molecule::unpack_number(&slice[end_idx..]) as usize;
-            SmtProof::new_unchecked(self.0.slice(start..end))
+            SmtProofEntry::new_unchecked(self.0.slice(start..end))
         }
     }
-    pub fn as_reader<'r>(&'r self) -> SmtProofVecReader<'r> {
-        SmtProofVecReader::new_unchecked(self.as_slice())
+    pub fn as_reader<'r>(&'r self) -> SmtProofEntryVecReader<'r> {
+        SmtProofEntryVecReader::new_unchecked(self.as_slice())
     }
 }
-impl molecule::prelude::Entity for SmtProofVec {
-    type Builder = SmtProofVecBuilder;
-    const NAME: &'static str = "SmtProofVec";
+impl molecule::prelude::Entity for SmtProofEntryVec {
+    type Builder = SmtProofEntryVecBuilder;
+    const NAME: &'static str = "SmtProofEntryVec";
     fn new_unchecked(data: molecule::bytes::Bytes) -> Self {
-        SmtProofVec(data)
+        SmtProofEntryVec(data)
     }
     fn as_bytes(&self) -> molecule::bytes::Bytes {
         self.0.clone()
@@ -1815,10 +2075,10 @@ impl molecule::prelude::Entity for SmtProofVec {
         &self.0[..]
     }
     fn from_slice(slice: &[u8]) -> molecule::error::VerificationResult<Self> {
-        SmtProofVecReader::from_slice(slice).map(|reader| reader.to_entity())
+        SmtProofEntryVecReader::from_slice(slice).map(|reader| reader.to_entity())
     }
     fn from_compatible_slice(slice: &[u8]) -> molecule::error::VerificationResult<Self> {
-        SmtProofVecReader::from_compatible_slice(slice).map(|reader| reader.to_entity())
+        SmtProofEntryVecReader::from_compatible_slice(slice).map(|reader| reader.to_entity())
     }
     fn new_builder() -> Self::Builder {
         ::core::default::Default::default()
@@ -1828,8 +2088,8 @@ impl molecule::prelude::Entity for SmtProofVec {
     }
 }
 #[derive(Clone, Copy)]
-pub struct SmtProofVecReader<'r>(&'r [u8]);
-impl<'r> ::core::fmt::LowerHex for SmtProofVecReader<'r> {
+pub struct SmtProofEntryVecReader<'r>(&'r [u8]);
+impl<'r> ::core::fmt::LowerHex for SmtProofEntryVecReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         use molecule::hex_string;
         if f.alternate() {
@@ -1838,12 +2098,12 @@ impl<'r> ::core::fmt::LowerHex for SmtProofVecReader<'r> {
         write!(f, "{}", hex_string(self.as_slice()))
     }
 }
-impl<'r> ::core::fmt::Debug for SmtProofVecReader<'r> {
+impl<'r> ::core::fmt::Debug for SmtProofEntryVecReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{}({:#x})", Self::NAME, self)
     }
 }
-impl<'r> ::core::fmt::Display for SmtProofVecReader<'r> {
+impl<'r> ::core::fmt::Display for SmtProofEntryVecReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{} [", Self::NAME)?;
         for i in 0..self.len() {
@@ -1856,7 +2116,7 @@ impl<'r> ::core::fmt::Display for SmtProofVecReader<'r> {
         write!(f, "]")
     }
 }
-impl<'r> SmtProofVecReader<'r> {
+impl<'r> SmtProofEntryVecReader<'r> {
     pub fn total_size(&self) -> usize {
         molecule::unpack_number(self.as_slice()) as usize
     }
@@ -1873,34 +2133,34 @@ impl<'r> SmtProofVecReader<'r> {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
-    pub fn get(&self, idx: usize) -> Option<SmtProofReader<'r>> {
+    pub fn get(&self, idx: usize) -> Option<SmtProofEntryReader<'r>> {
         if idx >= self.len() {
             None
         } else {
             Some(self.get_unchecked(idx))
         }
     }
-    pub fn get_unchecked(&self, idx: usize) -> SmtProofReader<'r> {
+    pub fn get_unchecked(&self, idx: usize) -> SmtProofEntryReader<'r> {
         let slice = self.as_slice();
         let start_idx = molecule::NUMBER_SIZE * (1 + idx);
         let start = molecule::unpack_number(&slice[start_idx..]) as usize;
         if idx == self.len() - 1 {
-            SmtProofReader::new_unchecked(&self.as_slice()[start..])
+            SmtProofEntryReader::new_unchecked(&self.as_slice()[start..])
         } else {
             let end_idx = start_idx + molecule::NUMBER_SIZE;
             let end = molecule::unpack_number(&slice[end_idx..]) as usize;
-            SmtProofReader::new_unchecked(&self.as_slice()[start..end])
+            SmtProofEntryReader::new_unchecked(&self.as_slice()[start..end])
         }
     }
 }
-impl<'r> molecule::prelude::Reader<'r> for SmtProofVecReader<'r> {
-    type Entity = SmtProofVec;
-    const NAME: &'static str = "SmtProofVecReader";
+impl<'r> molecule::prelude::Reader<'r> for SmtProofEntryVecReader<'r> {
+    type Entity = SmtProofEntryVec;
+    const NAME: &'static str = "SmtProofEntryVecReader";
     fn to_entity(&self) -> Self::Entity {
         Self::Entity::new_unchecked(self.as_slice().to_owned().into())
     }
     fn new_unchecked(slice: &'r [u8]) -> Self {
-        SmtProofVecReader(slice)
+        SmtProofEntryVecReader(slice)
     }
     fn as_slice(&self) -> &'r [u8] {
         self.0
@@ -1944,32 +2204,32 @@ impl<'r> molecule::prelude::Reader<'r> for SmtProofVecReader<'r> {
         for pair in offsets.windows(2) {
             let start = pair[0];
             let end = pair[1];
-            SmtProofReader::verify(&slice[start..end], compatible)?;
+            SmtProofEntryReader::verify(&slice[start..end], compatible)?;
         }
         Ok(())
     }
 }
 #[derive(Debug, Default)]
-pub struct SmtProofVecBuilder(pub(crate) Vec<SmtProof>);
-impl SmtProofVecBuilder {
-    pub fn set(mut self, v: Vec<SmtProof>) -> Self {
+pub struct SmtProofEntryVecBuilder(pub(crate) Vec<SmtProofEntry>);
+impl SmtProofEntryVecBuilder {
+    pub fn set(mut self, v: Vec<SmtProofEntry>) -> Self {
         self.0 = v;
         self
     }
-    pub fn push(mut self, v: SmtProof) -> Self {
+    pub fn push(mut self, v: SmtProofEntry) -> Self {
         self.0.push(v);
         self
     }
-    pub fn extend<T: ::core::iter::IntoIterator<Item = SmtProof>>(mut self, iter: T) -> Self {
+    pub fn extend<T: ::core::iter::IntoIterator<Item = SmtProofEntry>>(mut self, iter: T) -> Self {
         for elem in iter {
             self.0.push(elem);
         }
         self
     }
 }
-impl molecule::prelude::Builder for SmtProofVecBuilder {
-    type Entity = SmtProofVec;
-    const NAME: &'static str = "SmtProofVecBuilder";
+impl molecule::prelude::Builder for SmtProofEntryVecBuilder {
+    type Entity = SmtProofEntryVec;
+    const NAME: &'static str = "SmtProofEntryVecBuilder";
     fn expected_length(&self) -> usize {
         molecule::NUMBER_SIZE * (self.0.len() + 1)
             + self
@@ -2009,12 +2269,12 @@ impl molecule::prelude::Builder for SmtProofVecBuilder {
         let mut inner = Vec::with_capacity(self.expected_length());
         self.write(&mut inner)
             .unwrap_or_else(|_| panic!("{} build should be ok", Self::NAME));
-        SmtProofVec::new_unchecked(inner.into())
+        SmtProofEntryVec::new_unchecked(inner.into())
     }
 }
-pub struct SmtProofVecIterator(SmtProofVec, usize, usize);
-impl ::core::iter::Iterator for SmtProofVecIterator {
-    type Item = SmtProof;
+pub struct SmtProofEntryVecIterator(SmtProofEntryVec, usize, usize);
+impl ::core::iter::Iterator for SmtProofEntryVecIterator {
+    type Item = SmtProofEntry;
     fn next(&mut self) -> Option<Self::Item> {
         if self.1 >= self.2 {
             None
@@ -2025,27 +2285,27 @@ impl ::core::iter::Iterator for SmtProofVecIterator {
         }
     }
 }
-impl ::core::iter::ExactSizeIterator for SmtProofVecIterator {
+impl ::core::iter::ExactSizeIterator for SmtProofEntryVecIterator {
     fn len(&self) -> usize {
         self.2 - self.1
     }
 }
-impl ::core::iter::IntoIterator for SmtProofVec {
-    type Item = SmtProof;
-    type IntoIter = SmtProofVecIterator;
+impl ::core::iter::IntoIterator for SmtProofEntryVec {
+    type Item = SmtProofEntry;
+    type IntoIter = SmtProofEntryVecIterator;
     fn into_iter(self) -> Self::IntoIter {
         let len = self.len();
-        SmtProofVecIterator(self, 0, len)
+        SmtProofEntryVecIterator(self, 0, len)
     }
 }
-impl<'r> SmtProofVecReader<'r> {
-    pub fn iter<'t>(&'t self) -> SmtProofVecReaderIterator<'t, 'r> {
-        SmtProofVecReaderIterator(&self, 0, self.len())
+impl<'r> SmtProofEntryVecReader<'r> {
+    pub fn iter<'t>(&'t self) -> SmtProofEntryVecReaderIterator<'t, 'r> {
+        SmtProofEntryVecReaderIterator(&self, 0, self.len())
     }
 }
-pub struct SmtProofVecReaderIterator<'t, 'r>(&'t SmtProofVecReader<'r>, usize, usize);
-impl<'t: 'r, 'r> ::core::iter::Iterator for SmtProofVecReaderIterator<'t, 'r> {
-    type Item = SmtProofReader<'t>;
+pub struct SmtProofEntryVecReaderIterator<'t, 'r>(&'t SmtProofEntryVecReader<'r>, usize, usize);
+impl<'t: 'r, 'r> ::core::iter::Iterator for SmtProofEntryVecReaderIterator<'t, 'r> {
+    type Item = SmtProofEntryReader<'t>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.1 >= self.2 {
             None
@@ -2056,7 +2316,7 @@ impl<'t: 'r, 'r> ::core::iter::Iterator for SmtProofVecReaderIterator<'t, 'r> {
         }
     }
 }
-impl<'t: 'r, 'r> ::core::iter::ExactSizeIterator for SmtProofVecReaderIterator<'t, 'r> {
+impl<'t: 'r, 'r> ::core::iter::ExactSizeIterator for SmtProofEntryVecReaderIterator<'t, 'r> {
     fn len(&self) -> usize {
         self.2 - self.1
     }

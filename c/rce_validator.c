@@ -13,9 +13,8 @@ int ckb_exit(signed char);
 #include <stdbool.h>
 #include <string.h>
 
-#include "ckb_consts.h"
-
 #include "blockchain-api2.h"
+#include "ckb_consts.h"
 #if defined(CKB_USE_SIM)
 #include "ckb_syscall_rce_validator_sim.h"
 #else

@@ -57,17 +57,24 @@ fmt:
 	rustfmt src/tests/xudt_rce.rs
 	git diff --exit-code $(wildcard c/rce_validator.c /always_success.c c/anyone_can_pay.c c/smt.h c/rce.h c/xudt_rce.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
 
+mol:
+	rm -f c/xudt_rce_mol.h
+	rm -f c/xudt_rce_mol2.h
+	rm -f src/tests/xudt_rce_mol.rs
+	make c/xudt_rce_mol.h
+	make c/xudt_rce_mol2.h
+	make src/tests/xudt_rce_mol.rs
+
+
+src/tests/xudt_rce_mol.rs: c/xudt_rce.mol
+	${MOLC} --language rust --schema-file $< | rustfmt > $@
 
 c/xudt_rce_mol.h: c/xudt_rce.mol
 	${MOLC} --language c --schema-file $< > $@
 
-JSON_TEMP_FILE=build/blockchain_mol2.json
-
-$(JSON_TEMP_FILE): c/xudt_rce.mol
-	moleculec --language - --schema-file c/xudt_rce.mol --format json > $(JSON_TEMP_FILE)
-
-c/xudt_rce_mol2.h: $(JSON_TEMP_FILE)
-	moleculec-c2 --input $(JSON_TEMP_FILE) | clang-format -style=Google > c/xudt_rce_mol2.h
+c/xudt_rce_mol2.h: c/xudt_rce.mol
+	moleculec --language - --schema-file c/xudt_rce.mol --format json > build/blockchain_mol2.json
+	moleculec-c2 --input build/blockchain_mol2.json | clang-format -style=Google > c/xudt_rce_mol2.h
 
 build/xudt_rce: c/xudt_rce.c c/rce.h
 	$(CC) $(XUDT_RCE_CFLAGS) $(LDFLAGS) -o $@ $<

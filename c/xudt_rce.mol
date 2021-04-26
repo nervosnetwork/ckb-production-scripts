@@ -26,7 +26,22 @@ in "Bytes structure" in witness.
 Which means, one item in "structure" XudtWitnessInput might be SmtProofVec
 */
 vector SmtProof <byte>;
-vector SmtProofVec <SmtProof>;
+
+/*
+mask:
+- first bit: use input as target
+- second bit: use output as target
+if both used, then input and output are combined as target.
+if neither used, the corresponding white list is not used, which is OK.
+
+For black list, it always uses both.
+*/
+table SmtProofEntry {
+    mask: byte,
+    proof: SmtProof,
+}
+
+vector SmtProofEntryVec <SmtProofEntry>;
 
 /*
 High 4 bits of values : old_value

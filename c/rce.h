@@ -27,7 +27,7 @@ enum ErrorCode {
   ERROR_INVALID_MOL_FORMAT,
   ERROR_BLAKE2B_ERROR,
   ERROR_HASH_MISMATCHED,
-  ERROR_RCRULES_TOO_DEEP,
+  ERROR_RCRULES_TOO_DEEP,  // 50
   ERROR_TOO_MANY_RCRULES,
   ERROR_RCRULES_PROOFS_MISMATCHED,
   ERROR_SMT_VERIFY_FAILED,
@@ -37,7 +37,7 @@ enum ErrorCode {
   ERROR_ON_BLACK_LIST,
   ERROR_ON_BLACK_LIST2,
   ERROR_NOT_ON_WHITE_LIST,
-  ERROR_TYPE_FREEZED,
+  ERROR_TYPE_FREEZED,  // 60
   ERROR_APPEND_ONLY,
   ERROR_EOF,
   ERROR_TOO_LONG_PROOF,
@@ -81,12 +81,18 @@ typedef struct RCRule {
 typedef struct RceState {
   RCRule rcrules[MAX_RCRULES_COUNT];
   uint32_t rcrules_count;
-  bool has_white_list;
+  bool has_wl;
+  bool both_on_wl;
+  bool input_on_wl;
+  bool output_on_wl;
 } RceState;
 
 void rce_init_state(RceState* state) {
   state->rcrules_count = 0;
-  state->has_white_list = false;
+  state->has_wl = false;
+  state->both_on_wl = false;
+  state->input_on_wl = false;
+  state->output_on_wl = false;
 }
 
 // molecule doesn't provide names
@@ -103,6 +109,10 @@ typedef enum RCDataUnionType {
 // included in the sparse merkle tree.
 uint8_t SMT_VALUE_NOT_EXISTING[SMT_VALUE_BYTES] = {0};
 uint8_t SMT_VALUE_EXISTING[SMT_VALUE_BYTES] = {1};
+
+uint8_t SMT_VALUE_EMPTY[SMT_VALUE_BYTES] = {0};
+const uint8_t SMT_BL_VALUE = 0;
+const uint8_t SMT_WL_VALUE = 1;
 
 bool rce_is_white_list(uint8_t flags) { return flags & 0x2; }
 
@@ -125,7 +135,7 @@ static uint32_t rce_read_from_cell_data(uintptr_t* arg, uint8_t* ptr,
 
 int make_cursor_from_witness(WitnessArgsType* witness);
 
-static int rce_get_proofs(uint32_t index, SmtProofVecType* res) {
+static int rce_get_proofs(uint32_t index, SmtProofEntryVecType* res) {
   int err = 0;
   WitnessArgsType witness;
 
@@ -147,7 +157,7 @@ static int rce_get_proofs(uint32_t index, SmtProofVecType* res) {
   CHECK2(existing, ERROR_INVALID_MOL_FORMAT);
 
   res->cur = extension_data;
-  res->t = GetSmtProofVecVTable();
+  res->t = GetSmtProofEntryVecVTable();
 
   err = 0;
 exit:
@@ -218,8 +228,14 @@ int rce_gather_rcrules_recursively(RceState* rce_state,
            ERROR_TOO_MANY_RCRULES);
 
     uint8_t flags = rule.t->flags(&rule);
+    if (rce_is_emergency_halt_mode(flags)) {
+      err = ERROR_RCE_EMERGENCY_HALT;
+      // the emergency halt has the highest priority, can return immediately
+      goto exit;
+    }
+
     if (rce_is_white_list(flags)) {
-      rce_state->has_white_list = true;
+      rce_state->has_wl = true;
     }
     rce_state->rcrules[rce_state->rcrules_count].flags = flags;
     mol2_cursor_t smt_root = rule.t->smt_root(&rule);
@@ -254,7 +270,8 @@ exit:
   return err;
 }
 
-int rce_collect_hashes(smt_state_t* bl_states, smt_state_t* wl_states) {
+int rce_collect_hashes(smt_state_t* states, smt_state_t* input_states,
+                       smt_state_t* output_states) {
   int err = 0;
   uint32_t index = 0;
 
@@ -269,10 +286,11 @@ int rce_collect_hashes(smt_state_t* bl_states, smt_state_t* wl_states) {
     if (err == CKB_INDEX_OUT_OF_BOUND) {
       break;
     }
-    err = smt_state_insert(wl_states, lock_script_hash, SMT_VALUE_EXISTING);
+    err = smt_state_insert(states, lock_script_hash, SMT_VALUE_EMPTY);
     CHECK(err);
-    err = smt_state_insert(bl_states, lock_script_hash, SMT_VALUE_NOT_EXISTING);
+    err = smt_state_insert(input_states, lock_script_hash, SMT_VALUE_EMPTY);
     CHECK(err);
+
     index++;
   }
   index = 0;
@@ -283,11 +301,81 @@ int rce_collect_hashes(smt_state_t* bl_states, smt_state_t* wl_states) {
     if (err == CKB_INDEX_OUT_OF_BOUND) {
       break;
     }
-    err = smt_state_insert(wl_states, lock_script_hash, SMT_VALUE_EXISTING);
+    err = smt_state_insert(states, lock_script_hash, SMT_VALUE_EMPTY);
     CHECK(err);
-    err = smt_state_insert(bl_states, lock_script_hash, SMT_VALUE_NOT_EXISTING);
+    err = smt_state_insert(output_states, lock_script_hash, SMT_VALUE_EMPTY);
     CHECK(err);
     index++;
+  }
+
+  err = 0;
+exit:
+  return err;
+}
+
+void rce_set_states_black_list(smt_state_t* states) {
+  for (uint32_t i = 0; i < states->len; i++) {
+    states->pairs[i].value[0] = SMT_BL_VALUE;
+  }
+}
+
+void rce_set_states_white_list(smt_state_t* states) {
+  for (uint32_t i = 0; i < states->len; i++) {
+    states->pairs[i].value[0] = SMT_WL_VALUE;
+  }
+}
+
+inline static bool _mask_has_input(uint8_t mask) { return 0x1 & mask; }
+
+inline static bool _mask_has_output(uint8_t mask) { return 0x2 & mask; }
+
+inline static bool _mask_has_both(uint8_t mask) { return mask == 3; }
+
+int rce_verify_one_rule(RceState* rce_state, smt_state_t* states,
+                        smt_state_t* input_states, smt_state_t* output_states,
+                        uint8_t proof_mask, mol2_cursor_t proof,
+                        const RCRule* current_rule) {
+  int err = 0;
+
+  uint8_t temp_proof[MAX_TEMP_PROOF_LENGTH];
+  const uint8_t* root_hash = current_rule->smt_root;
+
+  uint32_t temp_proof_len =
+      mol2_read_at(&proof, temp_proof, MAX_TEMP_PROOF_LENGTH);
+  CHECK2(temp_proof_len < MAX_TEMP_PROOF_LENGTH, ERROR_INVALID_MOL_FORMAT);
+
+  if (rce_is_white_list(current_rule->flags)) {
+    if (_mask_has_both(proof_mask)) {
+      rce_set_states_white_list(states);
+      err = smt_verify(root_hash, states, temp_proof, temp_proof_len);
+      if (err == 0) {
+        rce_state->both_on_wl = true;
+      }
+    } else {
+      if (_mask_has_input(proof_mask)) {
+        rce_set_states_white_list(input_states);
+        err = smt_verify(root_hash, input_states, temp_proof, temp_proof_len);
+        if (err == 0) {
+          rce_state->input_on_wl = true;
+        }
+      } else if (_mask_has_output(proof_mask)) {
+        rce_set_states_white_list(output_states);
+        err = smt_verify(root_hash, output_states, temp_proof, temp_proof_len);
+        if (err == 0) {
+          rce_state->output_on_wl = true;
+        }
+      } else {
+        // this means mask is 0 which is allowed
+        // because it's not needed to verify all white list
+      }
+    }
+  } else {
+    // The black list always checks both on input and output
+    rce_set_states_black_list(states);
+    err = smt_verify(root_hash, states, temp_proof, temp_proof_len);
+    // return "ERROR_ON_BLACK_LIST" when any one of hashes on black list
+    // it can return immediately
+    CHECK2(err == 0, ERROR_ON_BLACK_LIST);
   }
 
   err = 0;
@@ -310,7 +398,7 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
   err = rce_gather_rcrules_recursively(&rce_state, args, 0);
   CHECK(err);
 
-  SmtProofVecType proofs;
+  SmtProofEntryVecType proofs;
   err = rce_get_proofs(extension_index, &proofs);
   CHECK(err);
 
@@ -318,76 +406,55 @@ int rce_validate(int is_owner_mode, size_t extension_index, const uint8_t* args,
   // count of proof should be same as size of RCRules
   CHECK2(proof_len == rce_state.rcrules_count, ERROR_RCRULES_PROOFS_MISMATCHED);
 
-  smt_pair_t wl_entries[MAX_LOCK_SCRIPT_HASH_COUNT];
-  smt_pair_t bl_entries[MAX_LOCK_SCRIPT_HASH_COUNT];
-  smt_state_t wl_states;
-  smt_state_t bl_states;
-  smt_state_init(&wl_states, wl_entries, MAX_LOCK_SCRIPT_HASH_COUNT);
-  smt_state_init(&bl_states, bl_entries, MAX_LOCK_SCRIPT_HASH_COUNT);
+  smt_pair_t entries[MAX_LOCK_SCRIPT_HASH_COUNT];
+  smt_pair_t input_entries[MAX_LOCK_SCRIPT_HASH_COUNT];
+  smt_pair_t output_entries[MAX_LOCK_SCRIPT_HASH_COUNT];
 
-  err = rce_collect_hashes(&bl_states, &wl_states);
+  smt_state_t states;
+  smt_state_t input_states;
+  smt_state_t output_states;
+  smt_state_init(&states, entries, MAX_LOCK_SCRIPT_HASH_COUNT);
+  smt_state_init(&input_states, input_entries, MAX_LOCK_SCRIPT_HASH_COUNT);
+  smt_state_init(&output_states, output_entries, MAX_LOCK_SCRIPT_HASH_COUNT);
+
+  err = rce_collect_hashes(&states, &input_states, &output_states);
   CHECK(err);
 
-  smt_state_normalize(&wl_states);
-  smt_state_normalize(&bl_states);
+  smt_state_normalize(&states);
+  smt_state_normalize(&input_states);
+  smt_state_normalize(&output_states);
 
   err = ERROR_SMT_VERIFY_FAILED;
-  bool on_white_list = false;
-  bool on_black_list = false;
-
-  uint8_t temp_proof[MAX_TEMP_PROOF_LENGTH];
-
   for (index = 0; index < proof_len; index++) {
     bool existing = false;
-    mol2_cursor_t proof = proofs.t->get(&proofs, index, &existing);
+    SmtProofEntryType proof_entry = proofs.t->get(&proofs, index, &existing);
     CHECK2(existing, ERROR_INVALID_MOL_FORMAT);
 
+    uint8_t proof_mask = proof_entry.t->mask(&proof_entry);
+    mol2_cursor_t proof = proof_entry.t->proof(&proof_entry);
+
     const RCRule* current_rule = &rce_state.rcrules[index];
-
-    const uint8_t* root_hash = current_rule->smt_root;
-    if (rce_is_emergency_halt_mode(current_rule->flags)) {
-      err = ERROR_RCE_EMERGENCY_HALT;
-      // the emergency halt has the highest priority, can return immediately
-      goto exit;
-    }
-    uint32_t temp_proof_len =
-        mol2_read_at(&proof, temp_proof, MAX_TEMP_PROOF_LENGTH);
-    CHECK2(temp_proof_len <= MAX_TEMP_PROOF_LENGTH, ERROR_TOO_LONG_PROOF);
-
-    if (rce_is_white_list(current_rule->flags)) {
-      err = smt_verify(root_hash, &wl_states, temp_proof, temp_proof_len);
-      if (err == 0) {
-        // all hashes on white list
-        on_white_list = true;
-      }
-      //  else, not all hashes on white list
-    } else {
-      err = smt_verify(root_hash, &bl_states, temp_proof, temp_proof_len);
-      if (err != 0) {
-        // any one of hashes on black list
-        on_black_list = true;
-        break;
-      }
-      // else, all hashes *not* on black list
-    }
+    err = rce_verify_one_rule(&rce_state, &states, &input_states,
+                              &output_states, proof_mask, proof, current_rule);
+    CHECK(err);
   }
-  if (rce_state.has_white_list) {
-    if (on_white_list) {
-      if (on_black_list) {
-        err = ERROR_ON_BLACK_LIST;
-      } else {
-        err = 0;
-      }
+
+  if (rce_state.has_wl) {
+    if (rce_state.both_on_wl) {
+      err = 0;
     } else {
-      err = ERROR_NOT_ON_WHITE_LIST;
+      if (rce_state.input_on_wl && rce_state.output_on_wl) {
+        err = 0;
+      } else {
+        err = ERROR_NOT_ON_WHITE_LIST;
+      }
     }
   } else {
-    if (on_black_list) {
-      err = ERROR_ON_BLACK_LIST2;
-    } else {
-      err = 0;
-    }
+    // if on black list, it's already skipped by "CHECK"
+    // when it reaches here, that means all "black list" checking are done.
+    err = 0;
   }
+
 exit:
   return err;
 }
