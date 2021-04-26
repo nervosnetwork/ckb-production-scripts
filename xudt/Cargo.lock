@@ -341,7 +341,7 @@ dependencies = [
  "ckb-occupied-capacity",
  "ckb-rational",
  "merkle-cbt",
- "molecule 0.6.0",
+ "molecule",
  "numext-fixed-uint",
  "once_cell",
 ]
@@ -596,15 +596,6 @@ dependencies = [
  "bytes",
  "cfg-if 0.1.10",
  "faster-hex 0.4.1",
-]
-
-[[package]]
-name = "molecule"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1234a806dbcac181c1fc7cb69757ee22c5935c2dd4a8cb2551519bba44d85c93"
-dependencies = [
- "cfg-if 1.0.0",
 ]
 
 [[package]]
@@ -1128,7 +1119,6 @@ dependencies = [
  "ckb-traits",
  "ckb-types",
  "lazy_static",
- "molecule 0.7.0",
  "rand 0.6.5",
  "sparse-merkle-tree",
 ]
