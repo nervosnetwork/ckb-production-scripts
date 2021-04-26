@@ -16,7 +16,7 @@ use sparse_merkle_tree::{H256, SparseMerkleTree};
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::traits::Hasher;
 
-use xudt::xudt_rce_mol::{RCDataBuilder, RCDataUnion, RCRuleBuilder};
+use xudt_test::xudt_rce_mol::{RCDataBuilder, RCDataUnion, RCRuleBuilder};
 
 pub const MAX_CYCLES: u64 = std::u64::MAX;
 // on(1): white list

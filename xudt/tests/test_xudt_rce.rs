@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use ckb_error;
 use ckb_error::assert_error_eq;
 use ckb_hash::blake2b_256;
@@ -18,7 +20,7 @@ use sparse_merkle_tree::{H256, SparseMerkleTree};
 use sparse_merkle_tree::default_store::DefaultStore;
 
 use misc::*;
-use xudt::xudt_rce_mol::{RCCellVecBuilder, RCDataBuilder, RCDataUnion, RCRuleBuilder, ScriptVecBuilder, SmtProofBuilder, SmtProofEntryBuilder, SmtProofEntryVec, SmtProofEntryVecBuilder, XudtWitnessInputBuilder};
+use xudt_test::xudt_rce_mol::{RCCellVecBuilder, RCDataBuilder, RCDataUnion, RCRuleBuilder, ScriptVecBuilder, SmtProofBuilder, SmtProofEntryBuilder, SmtProofEntryVec, SmtProofEntryVecBuilder, XudtWitnessInputBuilder};
 
 mod misc;
 
@@ -145,7 +147,7 @@ fn build_args(lock: &[u8], xudt_args: &Bytes) -> Bytes {
     let mut bytes = BytesMut::with_capacity(128);
     bytes.put(lock);
     bytes.put(xudt_args.as_ref());
-    bytes.into()
+    bytes.freeze()
 }
 
 type SMT = SparseMerkleTree<CKBBlake2bHasher, H256, DefaultStore<H256>>;

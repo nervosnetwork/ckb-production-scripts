@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use blake2b_rs::Blake2bBuilder;
 use ckb_script::TransactionScriptsVerifier;
 use ckb_types;
@@ -10,7 +12,7 @@ use rand::prelude::thread_rng;
 use sparse_merkle_tree::H256;
 
 use misc::*;
-use xudt::xudt_rce_mol::{
+use xudt_test::xudt_rce_mol::{
     SmtProofBuilder, SmtUpdateActionBuilder,
     SmtUpdateItemBuilder, SmtUpdateItemVecBuilder,
 };
