@@ -192,8 +192,14 @@ int main() {
     // SMT update validation
     uint8_t witness_buffer[MOL2_DATA_SOURCE_LEN(CACHE_SIZE)];
     mol2_cursor_t witness_data;
-    err = make_witness_cursor(witness_buffer, CACHE_SIZE, 0,
-                              CKB_SOURCE_GROUP_INPUT, &witness_data);
+    size_t witness_source = CKB_SOURCE_GROUP_INPUT;
+    if (ckb_load_cell_by_field(NULL, &len, 0, 0, CKB_SOURCE_GROUP_INPUT,
+                               CKB_CELL_FIELD_CAPACITY) ==
+        CKB_INDEX_OUT_OF_BOUND) {
+      witness_source = CKB_SOURCE_GROUP_OUTPUT;
+    }
+    err = make_witness_cursor(witness_buffer, CACHE_SIZE, 0, witness_source,
+                              &witness_data);
     CHECK(err);
 
     WitnessArgsType witness_args = make_WitnessArgs(&witness_data);
