@@ -139,7 +139,18 @@ uint8_t g_witness_data_source[DEFAULT_DATA_SOURCE_LENGTH];
 int make_cursor_from_witness(WitnessArgsType* witness) {
   int err = 0;
   uint64_t witness_len = 0;
-  err = ckb_load_witness(NULL, &witness_len, 0, 0, CKB_SOURCE_GROUP_INPUT);
+  // at the beginning of the transactions including RCE,
+  // there is no "witness" in CKB_SOURCE_GROUP_INPUT
+  // here we use the first witness of CKB_SOURCE_GROUP_OUTPUT
+  // same logic is applied to rce_validator
+  size_t source = CKB_SOURCE_GROUP_INPUT;
+  err = ckb_load_witness(NULL, &witness_len, 0, 0, source);
+  if (err == CKB_INDEX_OUT_OF_BOUND) {
+    source = CKB_SOURCE_GROUP_OUTPUT;
+    err = ckb_load_witness(NULL, &witness_len, 0, 0, source);
+    CHECK(err);
+  }
+
   CHECK(err);
   CHECK2(witness_len > 0, ERROR_INVALID_MOL_FORMAT);
 
@@ -154,7 +165,7 @@ int make_cursor_from_witness(WitnessArgsType* witness) {
   ptr->total_size = witness_len;
   // pass index and source as args
   ptr->args[0] = 0;
-  ptr->args[1] = CKB_SOURCE_GROUP_INPUT;
+  ptr->args[1] = source;
 
   ptr->cache_size = 0;
   ptr->start_point = 0;
