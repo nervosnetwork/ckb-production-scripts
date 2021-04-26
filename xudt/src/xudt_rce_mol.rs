@@ -2,9 +2,9 @@
 
 #![allow(unused_imports)]
 
-use ckb_types::prelude::*;
 use ckb_types::molecule;
 use ckb_types::packed::*;
+use ckb_types::prelude::*;
 // these lines above are manually added
 // replace "::molecule" to "molecule" in below code
 
