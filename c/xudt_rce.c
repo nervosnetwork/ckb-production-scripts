@@ -146,12 +146,10 @@ int make_cursor_from_witness(WitnessArgsType* witness, bool* use_input_type) {
   size_t source = CKB_SOURCE_GROUP_INPUT;
   err = ckb_load_witness(NULL, &witness_len, 0, 0, source);
   if (err == CKB_INDEX_OUT_OF_BOUND) {
-    printf("CKB_SOURCE_GROUP_OUTPUT used");
     source = CKB_SOURCE_GROUP_OUTPUT;
     err = ckb_load_witness(NULL, &witness_len, 0, 0, source);
     *use_input_type = false;
   } else {
-    printf("CKB_SOURCE_GROUP_INPUT used");
     *use_input_type = true;
   }
   CHECK(err);
