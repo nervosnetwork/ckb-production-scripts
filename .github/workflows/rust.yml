@@ -17,3 +17,5 @@ jobs:
       run: make -f tests/xudt_rce/extension_scripts.Makefile all-via-docker
     - name: Run tests
       run: cargo test
+    - name: Run xudt tests
+      run: cd xudt && cargo test
