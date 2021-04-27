@@ -133,16 +133,22 @@ static uint32_t rce_read_from_cell_data(uintptr_t* arg, uint8_t* ptr,
   }
 }
 
-int make_cursor_from_witness(WitnessArgsType* witness);
+int make_cursor_from_witness(WitnessArgsType* witness, bool* use_input_type);
 
 static int rce_get_proofs(uint32_t index, SmtProofEntryVecType* res) {
   int err = 0;
+  bool use_input_type = true;
   WitnessArgsType witness;
 
-  err = make_cursor_from_witness(&witness);
+  err = make_cursor_from_witness(&witness, &use_input_type);
   CHECK(err);
 
-  BytesOptType input = witness.t->input_type(&witness);
+  BytesOptType input;
+  if (use_input_type) {
+    input = witness.t->input_type(&witness);
+  } else {
+    input = witness.t->output_type(&witness);
+  }
   CHECK2(!input.t->is_none(&input), ERROR_INVALID_MOL_FORMAT);
 
   mol2_cursor_t bytes = input.t->unwrap(&input);
