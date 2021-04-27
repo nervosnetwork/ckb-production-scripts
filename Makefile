@@ -54,7 +54,7 @@ ${PROTOCOL_SCHEMA}:
 
 fmt:
 	clang-format -i -style=Google $(wildcard c/rce_validator.c /always_success.c c/anyone_can_pay.c c/smt.h c/rce.h c/xudt_rce.c c/rce_validator.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
-	cargo fmt --all
+	cd xudt && cargo fmt --all
 	git diff --exit-code $(wildcard c/rce_validator.c /always_success.c c/anyone_can_pay.c c/smt.h c/rce.h c/xudt_rce.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
 
 mol:
