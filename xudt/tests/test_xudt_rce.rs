@@ -11,16 +11,21 @@ use ckb_types::molecule;
 // We use this Bytes!
 use ckb_types::molecule::bytes::Bytes;
 use ckb_types::molecule::bytes::BytesMut;
-use ckb_types::packed::{Byte32, BytesVecBuilder, CellDep, CellInput, CellOutput, OutPoint, Script, WitnessArgsBuilder};
+use ckb_types::packed::{
+    Byte32, BytesVecBuilder, CellDep, CellInput, CellOutput, OutPoint, Script, WitnessArgsBuilder,
+};
 use ckb_types::prelude::{Builder, Entity, Pack};
 use lazy_static::lazy_static;
 use rand::prelude::{thread_rng, ThreadRng};
 use rand::Rng;
-use sparse_merkle_tree::{H256, SparseMerkleTree};
 use sparse_merkle_tree::default_store::DefaultStore;
+use sparse_merkle_tree::{SparseMerkleTree, H256};
 
 use misc::*;
-use xudt_test::xudt_rce_mol::{RCCellVecBuilder, RCDataBuilder, RCDataUnion, RCRuleBuilder, ScriptVecBuilder, SmtProofBuilder, SmtProofEntryBuilder, SmtProofEntryVec, SmtProofEntryVecBuilder, XudtWitnessInputBuilder};
+use xudt_test::xudt_rce_mol::{
+    RCCellVecBuilder, RCDataBuilder, RCDataUnion, RCRuleBuilder, ScriptVecBuilder, SmtProofBuilder,
+    SmtProofEntryBuilder, SmtProofEntryVec, SmtProofEntryVecBuilder, XudtWitnessInputBuilder,
+};
 
 mod misc;
 
@@ -172,12 +177,12 @@ fn build_smt_on_bl(hashes: &Vec<[u8; 32]>, on: bool) -> (H256, Vec<u8>) {
         111, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0,
     ]
-        .into();
+    .into();
     let key_on_bl2: H256 = [
         222, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0,
     ]
-        .into();
+    .into();
     let pairs = vec![
         (key_on_bl1, SMT_EXISTING.clone()),
         (key_on_bl2, SMT_EXISTING.clone()),
@@ -223,12 +228,12 @@ fn build_smt_on_wl(hashes: &Vec<[u8; 32]>, on: bool) -> (H256, Vec<u8>) {
         111, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0,
     ]
-        .into();
+    .into();
     let key_on_wl2: H256 = [
         222, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0,
     ]
-        .into();
+    .into();
     let mut pairs = vec![
         (key_on_wl1, SMT_EXISTING.clone()),
         (key_on_wl2, SMT_EXISTING.clone()),
@@ -258,11 +263,7 @@ fn build_smt_on_wl(hashes: &Vec<[u8; 32]>, on: bool) -> (H256, Vec<u8>) {
     return (root.clone(), compiled_proof.into());
 }
 
-fn build_rc_rule(
-    smt_root: &[u8; 32],
-    is_black: bool,
-    is_emergency: bool,
-) -> Bytes {
+fn build_rc_rule(smt_root: &[u8; 32], is_black: bool, is_emergency: bool) -> Bytes {
     let mut flags: u8 = 0;
 
     if !is_black {
@@ -285,11 +286,13 @@ fn build_rc_rule(
 
 fn make_bytes(input: &[u8]) -> ckb_types::packed::Bytes {
     ckb_types::packed::BytesBuilder::default()
-        .extend(input.into_iter().map(
-            |v| molecule::prelude::Byte::new(v.clone())))
+        .extend(
+            input
+                .into_iter()
+                .map(|v| molecule::prelude::Byte::new(v.clone())),
+        )
         .build()
 }
-
 
 fn build_extension_data(
     count: u32,
@@ -302,8 +305,11 @@ fn build_extension_data(
     let mut builder = SmtProofEntryVecBuilder::default();
     let iter = proofs.iter().zip(proof_masks.iter());
     for (p, m) in iter {
-        let proof_builder =
-            SmtProofBuilder::default().set(p.into_iter().map(|v| molecule::prelude::Byte::new(*v)).collect());
+        let proof_builder = SmtProofBuilder::default().set(
+            p.into_iter()
+                .map(|v| molecule::prelude::Byte::new(*v))
+                .collect(),
+        );
 
         let temp = SmtProofEntryBuilder::default()
             .proof(proof_builder.build())
@@ -1009,6 +1015,3 @@ fn test_rce_both_on_wl_bl() {
         ScriptError::ValidationFailure(57).input_type_script(0), // ERROR_ON_BLACK_LIST
     );
 }
-
-
-

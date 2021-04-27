@@ -4,17 +4,17 @@ use std::collections::HashMap;
 
 use ckb_hash::{Blake2b, Blake2bBuilder};
 use ckb_traits::{CellDataProvider, HeaderProvider};
-use ckb_types::core::{HeaderView, TransactionView};
 use ckb_types::core::cell::{CellMeta, CellMetaBuilder, ResolvedTransaction};
+use ckb_types::core::{HeaderView, TransactionView};
 use ckb_types::molecule::prelude::{Builder, Entity};
 use ckb_types::packed::{Byte32, CellOutput, OutPoint};
 use ckb_types::prelude::Pack;
 use lazy_static::lazy_static;
 use rand::prelude::ThreadRng;
 use rand::Rng;
-use sparse_merkle_tree::{H256, SparseMerkleTree};
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::traits::Hasher;
+use sparse_merkle_tree::{SparseMerkleTree, H256};
 
 use xudt_test::xudt_rce_mol::{RCDataBuilder, RCDataUnion, RCRuleBuilder};
 
@@ -31,6 +31,10 @@ pub const BLAKE2B_LEN: usize = 32;
 pub const PERSONALIZATION: &[u8] = b"ckb-default-hash";
 
 lazy_static! {
+    pub static ref RCE_VALIDATOR_BIN: ckb_types::bytes::Bytes =
+        ckb_types::bytes::Bytes::from(include_bytes!("../../build/rce_validator").as_ref());
+    pub static ref ALWAYS_SUCCESS_BIN: ckb_types::bytes::Bytes =
+        ckb_types::bytes::Bytes::from(include_bytes!("../../build/always_success").as_ref());
     pub static ref SMT_EXISTING: H256 = H256::from([
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0
@@ -208,4 +212,3 @@ pub fn debug_printer(script: &Byte32, msg: &str) {
     );
     println!("{:?}: {}", str, msg);
 }
-
