@@ -203,9 +203,14 @@ int main() {
     CHECK(err);
 
     WitnessArgsType witness_args = make_WitnessArgs(&witness_data);
-    BytesOptType input = witness_args.t->input_type(&witness_args);
-    CHECK2(!input.t->is_none(&input), ERROR_INVALID_MOL_FORMAT);
-    mol2_cursor_t bytes = input.t->unwrap(&input);
+    BytesOptType anytype;
+    if (witness_source == CKB_SOURCE_GROUP_INPUT) {
+      anytype = witness_args.t->input_type(&witness_args);
+    } else {
+      anytype = witness_args.t->output_type(&witness_args);
+    }
+    CHECK2(!anytype.t->is_none(&anytype), ERROR_INVALID_MOL_FORMAT);
+    mol2_cursor_t bytes = anytype.t->unwrap(&anytype);
     // Bytes stored here are in fact SmtUpdate type
     SmtUpdateActionType smt_update_action = make_SmtUpdateAction(&bytes);
     SmtUpdateItemVecType smt_items =

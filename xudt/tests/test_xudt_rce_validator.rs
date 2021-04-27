@@ -652,7 +652,7 @@ fn test_rce_validator_no_input() {
     let smt_update_action_bytes = smt_update_action.as_slice();
 
     let witness_args = WitnessArgsBuilder::default()
-        .input_type(
+        .output_type(
             BytesOptBuilder::default()
                 .set(Some(Pack::pack(&ckb_types::bytes::Bytes::copy_from_slice(
                     smt_update_action_bytes,
