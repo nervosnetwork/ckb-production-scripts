@@ -60,13 +60,13 @@ fmt:
 mol:
 	rm -f c/xudt_rce_mol.h
 	rm -f c/xudt_rce_mol2.h
-	rm -f src/tests/xudt_rce_mol.rs
+	rm -f xudt/src/xudt_rce_mol.rs
 	make c/xudt_rce_mol.h
 	make c/xudt_rce_mol2.h
-	make src/tests/xudt_rce_mol.rs
+	make xudt/src/xudt_rce_mol.rs
 
 
-src/tests/xudt_rce_mol.rs: c/xudt_rce.mol
+xudt/src/xudt_rce_mol.rs: c/xudt_rce.mol
 	${MOLC} --language rust --schema-file $< | rustfmt > $@
 
 c/xudt_rce_mol.h: c/xudt_rce.mol

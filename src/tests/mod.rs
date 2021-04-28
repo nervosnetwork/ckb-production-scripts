@@ -1,10 +1,5 @@
 mod anyone_can_pay;
-#[allow(dead_code)]
-mod blockchain;
 mod secp256k1_compatibility;
-mod xudt_rce;
-#[allow(dead_code)]
-mod xudt_rce_mol;
 
 use ckb_crypto::secp::Privkey;
 use ckb_script::DataLoader;
