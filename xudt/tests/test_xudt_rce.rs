@@ -23,8 +23,9 @@ use sparse_merkle_tree::{SparseMerkleTree, H256};
 
 use misc::*;
 use xudt_test::xudt_rce_mol::{
-    RCCellVecBuilder, RCDataBuilder, RCDataUnion, RCRuleBuilder, ScriptVecBuilder, SmtProofBuilder,
-    SmtProofEntryBuilder, SmtProofEntryVec, SmtProofEntryVecBuilder, XudtWitnessInputBuilder,
+    RCCellVecBuilder, RCDataBuilder, RCDataUnion, RCRuleBuilder, ScriptVec, ScriptVecBuilder,
+    ScriptVecOptBuilder, SmtProofBuilder, SmtProofEntryBuilder, SmtProofEntryVec,
+    SmtProofEntryVecBuilder, XudtWitnessInputBuilder,
 };
 
 mod misc;
@@ -88,8 +89,9 @@ fn build_script(
     };
 
     // it not needed to set "type script" when is_type is false
+    let capacity = bin.len() as u64;
     let cell = CellOutput::new_builder()
-        .capacity(Capacity::bytes(bin.len()).expect("script capacity").pack())
+        .capacity(capacity.pack())
         .type_(Some(type_script_in_code.clone()).pack())
         .build();
 
@@ -128,24 +130,34 @@ fn build_rce_script(args: &Bytes) -> Script {
     Script::new_builder()
         .args(args.pack())
         .hash_type(ScriptHashType::Type.into())
-        .code_hash(Byte32::new(RCE_HASH.clone()))
+        .code_hash(RCE_HASH.clone().pack())
         .build()
 }
 
-fn build_xudt_args(flags: u32, scripts: &Vec<Script>) -> Bytes {
+fn build_xudt_args(flags: XudtFlags, scripts: &Vec<Script>) -> (Bytes, ScriptVec) {
     let mut result = vec![];
-    result.extend(flags.to_le_bytes().as_ref());
+    let flags_num = flags as u32;
+    result.extend(flags_num.to_le_bytes().as_ref());
 
     let mut builder = ScriptVecBuilder::default();
 
     for s in scripts {
         builder = builder.push(s.clone());
     }
-
     let s = builder.build();
-    result.extend(s.as_slice());
 
-    result.into()
+    match flags {
+        XudtFlags::Plain => {}
+        XudtFlags::InArgs => {
+            result.extend(s.as_slice());
+        }
+        XudtFlags::InWitness => {
+            let hash = blake2b_256(s.as_bytes());
+            result.extend(&hash[0..20]); // blake160
+        }
+    }
+
+    (result.into(), s)
 }
 
 fn build_args(lock: &[u8], xudt_args: &Bytes) -> Bytes {
@@ -272,26 +284,14 @@ fn build_rc_rule(smt_root: &[u8; 32], is_black: bool, is_emergency: bool) -> Byt
     if is_emergency {
         flags ^= EMERGENCY_HALT_MODE_MASK;
     }
-    let smt_root = molecule::bytes::Bytes::copy_from_slice(smt_root.as_ref());
-    let sr = Byte32::new_unchecked(smt_root);
     let rcrule = RCRuleBuilder::default()
-        .flags(molecule::prelude::Byte::new(flags))
-        .smt_root(sr)
+        .flags(flags.into())
+        .smt_root(smt_root.pack())
         .build();
     let res = RCDataBuilder::default()
         .set(RCDataUnion::RCRule(rcrule))
         .build();
-    Bytes::copy_from_slice(res.as_slice())
-}
-
-fn make_bytes(input: &[u8]) -> ckb_types::packed::Bytes {
-    ckb_types::packed::BytesBuilder::default()
-        .extend(
-            input
-                .into_iter()
-                .map(|v| molecule::prelude::Byte::new(v.clone())),
-        )
-        .build()
+    res.as_bytes()
 }
 
 fn build_extension_data(
@@ -299,6 +299,7 @@ fn build_extension_data(
     rce_index: u32,
     proofs: Vec<Vec<u8>>,
     proof_masks: Vec<u8>,
+    extension_script_vec: ScriptVec,
 ) -> Bytes {
     assert_eq!(proofs.len(), proof_masks.len());
 
@@ -313,7 +314,7 @@ fn build_extension_data(
 
         let temp = SmtProofEntryBuilder::default()
             .proof(proof_builder.build())
-            .mask(molecule::prelude::Byte::new(*m));
+            .mask((*m).into());
         builder = builder.push(temp.build());
     }
     let proofs: SmtProofEntryVec = builder.build();
@@ -322,17 +323,22 @@ fn build_extension_data(
 
     for i in 0..count {
         if i == rce_index {
-            bytes_vec_builder = bytes_vec_builder.push(make_bytes(proofs.as_slice()));
+            bytes_vec_builder = bytes_vec_builder.push(proofs.as_slice().pack());
         } else {
             bytes_vec_builder = bytes_vec_builder.push(ckb_types::packed::Bytes::default());
         }
     }
     let mut wi_builder = XudtWitnessInputBuilder::default();
+    let b = ScriptVecOptBuilder::default()
+        .set(Some(extension_script_vec))
+        .build();
+    wi_builder = wi_builder.raw_extension_data(b);
     wi_builder = wi_builder.extension_data(bytes_vec_builder.build());
 
-    Bytes::copy_from_slice(wi_builder.build().as_slice())
+    wi_builder.build().as_bytes()
 }
 
+#[derive(Copy, Clone)]
 pub enum TestScheme {
     None,
     OnWhiteList,
@@ -346,10 +352,11 @@ pub enum TestScheme {
     EmergencyHaltMode,
 }
 
+#[derive(Copy, Clone)]
 pub enum XudtFlags {
-    // Plain = 0,
+    Plain = 0,
     InArgs = 1,
-    // InWitness = 2,
+    InWitness = 2,
 }
 
 pub fn gen_tx(
@@ -361,6 +368,8 @@ pub fn gen_tx(
     output_amount: Vec<u128>,
     extension_scripts_bin: Vec<&Bytes>,
     scheme: TestScheme,
+    no_input_witness: bool,
+    xudt_flags: XudtFlags,
     rng: &mut ThreadRng,
 ) -> TransactionView {
     assert_eq!(input_amount.len(), input_count);
@@ -369,6 +378,7 @@ pub fn gen_tx(
     // setup default tx builder
     let dummy_capacity = Capacity::shannons(50000);
     let mut tx_builder = TransactionBuilder::default();
+    let mut extension_script_vec = ScriptVec::default();
 
     let (tx0, always_success_script) = build_script(
         dummy,
@@ -407,12 +417,37 @@ pub fn gen_tx(
             total_count += 1;
         }
         // xUDT args on "args" field
-        let xudt_args = build_xudt_args(XudtFlags::InArgs as u32, &extension_scripts);
+        let (xudt_args, es) = build_xudt_args(xudt_flags, &extension_scripts);
+        extension_script_vec = es;
         args = build_args(&[0u8; 32][..], &xudt_args);
     }
 
     let (mut tx_builder, xudt_rce_script) =
         build_script(dummy, tx_builder, true, &XUDT_RCE_BIN, args);
+
+    // use owner mode
+    let xudt_rce_script = if no_input_witness {
+        let args0 = xudt_rce_script.args().raw_data();
+
+        let hash = blake2b_256(always_success_script.as_slice());
+        let hash_slice = &hash[..];
+
+        let mut result: Vec<u8> = vec![];
+        result.extend_from_slice(hash_slice);
+        result.extend_from_slice(&args0[32..]);
+
+        xudt_rce_script.as_builder().args(result.pack()).build()
+    } else {
+        xudt_rce_script
+    };
+
+    let witness = build_extension_data(
+        total_count,
+        rce_index,
+        proofs.clone(),
+        proof_masks.clone(),
+        extension_script_vec,
+    );
 
     for i in 0..output_count {
         let amount = output_amount[i];
@@ -431,11 +466,17 @@ pub fn gen_tx(
     for i in 0..input_count {
         let previous_out_point = gen_random_out_point(rng);
 
+        let type_script = if no_input_witness {
+            None.pack()
+        } else {
+            Some(xudt_rce_script.clone()).pack()
+        };
+
         let previous_output_cell = CellOutput::new_builder()
             .capacity(dummy_capacity.pack())
             // give an "always success" lock script for testing
             .lock(always_success_script.clone())
-            .type_(Some(xudt_rce_script.clone()).pack())
+            .type_(type_script)
             .build();
         dummy.cells.insert(
             previous_out_point.clone(),
@@ -445,16 +486,19 @@ pub fn gen_tx(
             ),
         );
 
-        // fill witness
-        let witness_input_type =
-            build_extension_data(total_count, rce_index, proofs.clone(), proof_masks.clone());
-        let witness_args = WitnessArgsBuilder::default()
-            .input_type(Some(witness_input_type).pack())
-            .build();
+        tx_builder = tx_builder.input(CellInput::new(previous_out_point, 0));
 
-        tx_builder = tx_builder
-            .input(CellInput::new(previous_out_point, 0))
-            .witness(witness_args.as_bytes().pack());
+        if !no_input_witness {
+            let witness_args = WitnessArgsBuilder::default()
+                .input_type(Some(witness.clone()).pack())
+                .build();
+            tx_builder = tx_builder.witness(witness_args.as_bytes().pack());
+        } else {
+            let witness_args = WitnessArgsBuilder::default()
+                .output_type(Some(witness.clone()).pack())
+                .build();
+            tx_builder = tx_builder.witness(witness_args.as_bytes().pack());
+        }
     }
 
     tx_builder.build()
@@ -633,6 +677,8 @@ fn test_simple_udt() {
         vec![100],
         vec![],
         TestScheme::None,
+        false,
+        XudtFlags::InArgs,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -654,6 +700,8 @@ fn test_simple_udt_failed() {
         vec![200],
         vec![],
         TestScheme::None,
+        false,
+        XudtFlags::InArgs,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -678,6 +726,8 @@ fn test_xudt_extension_returns_success() {
         vec![100],
         vec![&EXTENSION_SCRIPT_0],
         TestScheme::None,
+        false,
+        XudtFlags::InArgs,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -707,6 +757,8 @@ fn test_xudt_extension_multi_return_success() {
         vec![100],
         bin_vec,
         TestScheme::None,
+        false,
+        XudtFlags::InArgs,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -729,6 +781,8 @@ fn test_xudt_extension_returns_failed() {
         vec![100],
         vec![&EXTENSION_SCRIPT_1],
         TestScheme::None,
+        false,
+        XudtFlags::InArgs,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -761,6 +815,8 @@ fn test_xudt_extension_multi_return_failed() {
         vec![100],
         bin_vec,
         TestScheme::None,
+        false,
+        XudtFlags::InArgs,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -789,6 +845,62 @@ fn test_rce_on_wl() {
         vec![100],
         bin_vec,
         TestScheme::OnWhiteList,
+        false,
+        XudtFlags::InArgs,
+        &mut rng,
+    );
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    verify_result.expect("pass verification");
+}
+
+#[test]
+fn test_rce_no_input_witness() {
+    let mut rng = thread_rng();
+    let mut data_loader = DummyDataLoader::new();
+    let special_rce_hash = Bytes::from(RCE_HASH.as_ref());
+    let bin_vec: Vec<&Bytes> = vec![&special_rce_hash];
+
+    let tx = gen_tx(
+        &mut data_loader,
+        Bytes::from(vec![0u8; 32]),
+        1,
+        1,
+        vec![100],
+        vec![100],
+        bin_vec,
+        TestScheme::OnWhiteList,
+        true,
+        XudtFlags::InArgs,
+        &mut rng,
+    );
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    verify_result.expect("pass verification");
+}
+
+#[test]
+fn test_rce_no_input_witness_extension_script_in_witness() {
+    let mut rng = thread_rng();
+    let mut data_loader = DummyDataLoader::new();
+    let special_rce_hash = Bytes::from(RCE_HASH.as_ref());
+    let bin_vec: Vec<&Bytes> = vec![&special_rce_hash];
+
+    let tx = gen_tx(
+        &mut data_loader,
+        Bytes::from(vec![0u8; 32]),
+        1,
+        1,
+        vec![100],
+        vec![100],
+        bin_vec,
+        TestScheme::OnWhiteList,
+        true,
+        XudtFlags::InWitness,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -814,6 +926,8 @@ fn test_rce_only_input_on_wl() {
         vec![100],
         bin_vec,
         TestScheme::OnlyInputOnWhiteList,
+        false,
+        XudtFlags::InArgs,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -842,6 +956,8 @@ fn test_rce_only_output_on_wl() {
         vec![100],
         bin_vec,
         TestScheme::OnlyOutputOnWhiteList,
+        false,
+        XudtFlags::InArgs,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -870,6 +986,8 @@ fn test_rce_both_on_wl() {
         vec![100],
         bin_vec,
         TestScheme::BothOnWhiteList,
+        false,
+        XudtFlags::InArgs,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -895,6 +1013,8 @@ fn test_rce_not_on_wl() {
         vec![100],
         bin_vec,
         TestScheme::NotOnWhiteList,
+        false,
+        XudtFlags::InArgs,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -923,6 +1043,35 @@ fn test_rce_not_on_bl() {
         vec![100],
         bin_vec,
         TestScheme::NotOnBlackList,
+        false,
+        XudtFlags::InArgs,
+        &mut rng,
+    );
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    verify_result.expect("pass verification");
+}
+
+#[test]
+fn test_rce_not_on_bl_extension_script_in_witness() {
+    let mut rng = thread_rng();
+    let mut data_loader = DummyDataLoader::new();
+    let special_rce_hash = Bytes::from(RCE_HASH.as_ref());
+    let bin_vec: Vec<&Bytes> = vec![&special_rce_hash];
+
+    let tx = gen_tx(
+        &mut data_loader,
+        Bytes::from(vec![0u8; 32]),
+        1,
+        1,
+        vec![100],
+        vec![100],
+        bin_vec,
+        TestScheme::NotOnBlackList,
+        true,
+        XudtFlags::InArgs,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -948,6 +1097,8 @@ fn test_rce_on_bl() {
         vec![100],
         bin_vec,
         TestScheme::OnBlackList,
+        false,
+        XudtFlags::InArgs,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -976,6 +1127,8 @@ fn test_rce_emergency_halt_mode() {
         vec![100],
         bin_vec,
         TestScheme::EmergencyHaltMode,
+        false,
+        XudtFlags::InArgs,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
@@ -1004,6 +1157,8 @@ fn test_rce_both_on_wl_bl() {
         vec![100],
         bin_vec,
         TestScheme::BothOn,
+        false,
+        XudtFlags::InArgs,
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);

@@ -136,7 +136,7 @@ uint8_t g_witness_data_source[DEFAULT_DATA_SOURCE_LENGTH];
 // due to the "static" data (s_witness_data_source), the "WitnessArgsType" is a
 // singleton. note: mol2_data_source_t consumes a lot of memory due to the
 // "cache" field (default 2K)
-int make_cursor_from_witness(WitnessArgsType* witness) {
+int make_cursor_from_witness(WitnessArgsType* witness, bool* use_input_type) {
   int err = 0;
   uint64_t witness_len = 0;
   // at the beginning of the transactions including RCE,
@@ -148,9 +148,10 @@ int make_cursor_from_witness(WitnessArgsType* witness) {
   if (err == CKB_INDEX_OUT_OF_BOUND) {
     source = CKB_SOURCE_GROUP_OUTPUT;
     err = ckb_load_witness(NULL, &witness_len, 0, 0, source);
-    CHECK(err);
+    *use_input_type = false;
+  } else {
+    *use_input_type = true;
   }
-
   CHECK(err);
   CHECK2(witness_len > 0, ERROR_INVALID_MOL_FORMAT);
 
@@ -182,10 +183,16 @@ exit:
 int get_extension_data(uint32_t index, uint8_t* buff, uint32_t buff_len,
                        uint32_t* out_len) {
   int err = 0;
-  err = make_cursor_from_witness(&g_witness_args);
+  bool use_input_type = true;
+  err = make_cursor_from_witness(&g_witness_args, &use_input_type);
   CHECK(err);
 
-  BytesOptType input = g_witness_args.t->input_type(&g_witness_args);
+  BytesOptType input;
+  if (use_input_type)
+    input = g_witness_args.t->input_type(&g_witness_args);
+  else
+    input = g_witness_args.t->output_type(&g_witness_args);
+
   CHECK2(!input.t->is_none(&input), ERROR_INVALID_MOL_FORMAT);
 
   mol2_cursor_t bytes = input.t->unwrap(&input);
@@ -210,10 +217,17 @@ exit:
 // the *var_len may be bigger than real length of raw extension data
 int load_raw_extension_data(uint8_t** var_data, uint32_t* var_len) {
   int err = 0;
-  err = make_cursor_from_witness(&g_witness_args);
+  bool use_input_type = true;
+  err = make_cursor_from_witness(&g_witness_args, &use_input_type);
   CHECK(err);
 
-  BytesOptType input = g_witness_args.t->input_type(&g_witness_args);
+  BytesOptType input;
+  if (use_input_type) {
+    input = g_witness_args.t->input_type(&g_witness_args);
+  } else {
+    input = g_witness_args.t->output_type(&g_witness_args);
+  }
+
   CHECK2(!input.t->is_none(&input), ERROR_INVALID_MOL_FORMAT);
 
   struct mol2_cursor_t bytes = input.t->unwrap(&input);
