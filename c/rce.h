@@ -245,9 +245,10 @@ int rce_gather_rcrules_recursively(RceState* rce_state,
     }
     rce_state->rcrules[rce_state->rcrules_count].flags = flags;
     mol2_cursor_t smt_root = rule.t->smt_root(&rule);
-    mol2_read_at(&smt_root,
-                 rce_state->rcrules[rce_state->rcrules_count].smt_root,
-                 SMT_KEY_BYTES);
+    uint32_t read_len = mol2_read_at(
+        &smt_root, rce_state->rcrules[rce_state->rcrules_count].smt_root,
+        SMT_KEY_BYTES);
+    CHECK2(read_len == SMT_KEY_BYTES, ERROR_INVALID_MOL_FORMAT);
 
     rce_state->rcrules_count++;
   } else if (item_id == RCDataUnionCellVec) {
