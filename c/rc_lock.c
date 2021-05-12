@@ -1,6 +1,6 @@
 // uncomment to enable printf in CKB-VM
-//#define CKB_C_STDLIB_PRINTF
-//#include <stdio.h>
+#define CKB_C_STDLIB_PRINTF
+#include <stdio.h>
 
 // it's used by blockchain-api2.h, the behavior when panic
 #ifndef MOL2_EXIT
@@ -82,7 +82,7 @@ int extract_witness_lock(uint8_t *witness, uint64_t len,
 int parse_args(ArgsType *args) {
   int err = 0;
   uint8_t script[SCRIPT_SIZE];
-  uint64_t len = 0;
+  uint64_t len = SCRIPT_SIZE;
   err = ckb_checked_load_script(script, &len, 0);
   CHECK(err);
 
@@ -98,14 +98,13 @@ int parse_args(ArgsType *args) {
   CHECK2(args_bytes_seg.size >= 1, ERROR_ARGUMENTS_LEN);
 
   if (args_bytes_seg.ptr[0] == FlagsTypeRc) {
-    // TODO: use ">="?
-    CHECK2(args_bytes_seg.size == (1 + 20 + 32), ERROR_ARGUMENTS_LEN);
+    CHECK2(args_bytes_seg.size >= (1 + 20 + 32), ERROR_ARGUMENTS_LEN);
     args->flags = args_bytes_seg.ptr[0];
     memcpy(args->pubkey_hash, args_bytes_seg.ptr + 1,
            sizeof(args->pubkey_hash));
     memcpy(args->rc_root, args_bytes_seg.ptr + 1 + 20, sizeof(args->rc_root));
   } else if (args_bytes_seg.ptr[0] == FlagsTypePlain) {
-    CHECK2(args_bytes_seg.size == (1 + 20), ERROR_ARGUMENTS_LEN);
+    CHECK2(args_bytes_seg.size >= (1 + 20), ERROR_ARGUMENTS_LEN);
     args->flags = args_bytes_seg.ptr[0];
     memcpy(args->pubkey_hash, args_bytes_seg.ptr + 1,
            sizeof(args->pubkey_hash));
@@ -113,7 +112,6 @@ int parse_args(ArgsType *args) {
     err = ERROR_UNKNOWN_FLAGS;
   }
 
-  err = 0;
 exit:
   return err;
 }
@@ -175,7 +173,7 @@ int load_and_hash_witness(blake2b_state *ctx, size_t start, size_t index,
 int verify_secp256k1_blake160_sighash_all(uint8_t *pubkey_hash) {
   int ret;
   uint64_t len = 0;
-  unsigned char temp[TEMP_SIZE];
+  unsigned char temp[MAX_WITNESS_SIZE];
   unsigned char lock_bytes[SIGNATURE_SIZE];
   uint64_t read_len = MAX_WITNESS_SIZE;
   uint64_t witness_len = MAX_WITNESS_SIZE;
@@ -306,26 +304,39 @@ int simulator_main() {
 #else
 int main() {
 #endif
+  printf("simulator_main\n");
   // parse lock script's args
   int err = 0;
   ArgsType args = {0};
   err = parse_args(&args);
+  printf("parse_args return %d\n", err);
   CHECK(err);
 
-  // collect input lock script hashes
-  smt_pair_t entries[MAX_LOCK_SCRIPT_HASH_COUNT];
-  smt_state_t states;
-  smt_state_init(&states, entries, MAX_LOCK_SCRIPT_HASH_COUNT);
-  err = collect_input_lock_script_hash(&states);
-  CHECK(err);
+  if (args.flags == FlagsTypePlain || args.flags == FlagsTypeRc) {
+    err = verify_secp256k1_blake160_sighash_all(args.pubkey_hash);
+    printf("verify_secp256k1_blake160_sighash_all : %d\n", err);
+    CHECK(err);
+  } else {
+    err = ERROR_UNKNOWN_FLAGS;
+    CHECK(err);
+  }
 
-  // collect rc rules
-  RceState rce_state;
-  rce_init_state(&rce_state);
-  err = rce_gather_rcrules_recursively(&rce_state, args.rc_root, 0);
-  CHECK(err);
+  if (args.flags == FlagsTypeRc) {
+    // collect input lock script hashes
+    smt_pair_t entries[MAX_LOCK_SCRIPT_HASH_COUNT];
+    smt_state_t states;
+    smt_state_init(&states, entries, MAX_LOCK_SCRIPT_HASH_COUNT);
+    err = collect_input_lock_script_hash(&states);
+    CHECK(err);
 
-  // verify input lock script hashes against proof, using rc rules
+    // collect rc rules
+    RceState rce_state;
+    rce_init_state(&rce_state);
+    err = rce_gather_rcrules_recursively(&rce_state, args.rc_root, 0);
+    CHECK(err);
+
+    // verify input lock script hashes against proof, using rc rules
+  }
 
 exit:
   return err;

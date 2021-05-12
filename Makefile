@@ -16,7 +16,7 @@ MOLC_VERSION := 0.7.0
 # docker pull nervos/ckb-riscv-gnu-toolchain:gnu-bionic-20191012
 BUILDER_DOCKER := nervos/ckb-riscv-gnu-toolchain@sha256:aae8a3f79705f67d505d1f1d5ddc694a4fd537ed1c7e9622420a470d59ba2ec3
 
-all: build/simple_udt build/anyone_can_pay build/always_success build/xudt_rce build/rce_validator
+all: build/simple_udt build/anyone_can_pay build/always_success build/xudt_rce build/rce_validator build/rc_lock
 
 all-via-docker: ${PROTOCOL_HEADER}
 	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make"
@@ -86,6 +86,11 @@ build/rce_validator: c/rce_validator.c c/rce.h
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
+build/rc_lock: c/rc_lock.c c/rce.h c/secp256k1_lock.h build/secp256k1_data_info.h $(SECP256K1_SRC)
+	$(CC) $(XUDT_RCE_CFLAGS) $(LDFLAGS) -o $@ $<
+	$(OBJCOPY) --only-keep-debug $@ $@.debug
+	$(OBJCOPY) --strip-debug --strip-all $@
+
 publish:
 	git diff --exit-code Cargo.toml
 	sed -i.bak 's/.*git =/# &/' Cargo.toml
@@ -112,6 +117,7 @@ clean:
 	rm -rf build/*.debug
 	rm -f build/xudt_rce
 	rm -f build/rce_validator
+	rm -f build/rc_lock
 	cd deps/secp256k1 && [ -f "Makefile" ] && make clean
 	cargo clean
 
