@@ -64,7 +64,7 @@ mol:
 	make c/xudt_rce_mol.h
 	make c/xudt_rce_mol2.h
 	make xudt/src/xudt_rce_mol.rs
-
+	make rc_lock_mol
 
 xudt/src/xudt_rce_mol.rs: c/xudt_rce.mol
 	${MOLC} --language rust --schema-file $< | rustfmt > $@
@@ -75,6 +75,12 @@ c/xudt_rce_mol.h: c/xudt_rce.mol
 c/xudt_rce_mol2.h: c/xudt_rce.mol
 	moleculec --language - --schema-file c/xudt_rce.mol --format json > build/blockchain_mol2.json
 	moleculec-c2 --input build/blockchain_mol2.json | clang-format -style=Google > c/xudt_rce_mol2.h
+
+rc_lock_mol:
+	${MOLC} --language rust --schema-file c/rc_lock.mol | rustfmt > tests/rc_lock_rust/src/rc_lock.rs
+	${MOLC} --language c --schema-file c/rc_lock.mol > c/rc_lock_mol.h
+	${MOLC} --language - --schema-file c/rc_lock.mol --format json > build/rc_lock_mol2.json
+	moleculec-c2 --input build/rc_lock_mol2.json | clang-format -style=Google > c/rc_lock_mol2.h
 
 build/xudt_rce: c/xudt_rce.c c/rce.h
 	$(CC) $(XUDT_RCE_CFLAGS) $(LDFLAGS) -o $@ $<

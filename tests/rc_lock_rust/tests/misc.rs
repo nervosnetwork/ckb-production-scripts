@@ -363,7 +363,7 @@ pub const ARGS_TYPE_RC: u8 = 1;
 pub struct TestConfig {
     pub flags: u8,
     pub pubkey_hash: Bytes,
-    pub rc_rule: Bytes,
+    pub rc_root: Bytes,
     pub proof: Bytes,
     pub scheme: TestScheme,
 }
@@ -379,7 +379,7 @@ impl TestConfig {
         TestConfig {
             flags,
             pubkey_hash,
-            rc_rule,
+            rc_root: rc_rule,
             proof,
             scheme: TestScheme::None,
         }
@@ -393,7 +393,7 @@ impl TestConfig {
         let mut bytes = BytesMut::with_capacity(128);
         bytes.put_u8(self.flags);
         bytes.put(self.pubkey_hash.as_ref());
-        bytes.put(self.rc_rule.as_ref());
+        bytes.put(self.rc_root.as_ref());
         bytes.freeze()
     }
 }

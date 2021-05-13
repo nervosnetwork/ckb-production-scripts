@@ -14,8 +14,11 @@ typedef struct RcLockInputType {
   uint8_t pubkey_hash[20];  // in args in lock script
   uint8_t rc_rule[32];      // in args in lock script
   uint8_t signature[65];    // in witness
-  uint8_t proof[8196];      // max proof
-  uint32_t proof_len;
+
+  uint8_t lock_script_hash_on_wl[32];
+  uint8_t proof[16][8196];  // max proof
+  uint32_t proof_len[16];
+
   uint8_t lock_script_hash[64][32];
   uint8_t lock_script_hash_count;
 } RcLockInputType;
@@ -27,6 +30,7 @@ typedef struct RcLockStates {
 
   uint8_t args[256];
   uint32_t args_len;
+
   uint8_t witness_lock[32768];
   uint32_t witness_lock_len;
 } RcLockStates;
@@ -43,8 +47,8 @@ void convert_input_to_states(void) {
     ASSERT(false);
   }
   memcpy(g_states.witness_lock, g_input.signature, 65);
-  memcpy(g_states.witness_lock + 65, g_input.proof, g_input.proof_len);
-  g_states.witness_lock_len = 65 + g_input.proof_len;
+  //  memcpy(g_states.witness_lock + 65, g_input.proof, g_input.proof_len);
+  //  g_states.witness_lock_len = 65 + g_input.proof_len;
 }
 
 mol_seg_t build_bytes(const uint8_t* data, uint32_t len);

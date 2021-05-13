@@ -1,6 +1,5 @@
 // uncomment to enable printf in CKB-VM
-#define CKB_C_STDLIB_PRINTF
-#include <stdio.h>
+// #define CKB_C_STDLIB_PRINTF
 
 // it's used by blockchain-api2.h, the behavior when panic
 #ifndef MOL2_EXIT
@@ -8,8 +7,8 @@
 #endif
 int ckb_exit(signed char);
 
+// clang-format off
 #include <stdio.h>
-
 #include "blockchain-api2.h"
 #include "blockchain.h"
 #include "ckb_consts.h"
@@ -25,6 +24,8 @@ int ckb_exit(signed char);
 // CHECK is defined in secp256k1
 #undef CHECK
 #include "rce.h"
+#include "rc_lock_mol2.h"
+// clang-format on
 
 #define BLAKE2B_BLOCK_SIZE 32
 #define BLAKE160_SIZE 20
@@ -45,6 +46,8 @@ enum RcLockErrorCode {
   ERROR_PUBKEY_BLAKE160_HASH = -31,
   // rc lock error code is starting from 80
   ERROR_UNKNOWN_FLAGS = 80,
+  ERROR_LOCK_SCRIPT_HASH_NOT_FOUND,
+  ERROR_PROOF_LENGTH_MISMATCHED,
 };
 
 // ArgsType: rename it to a proper name, e.g. id_or_owner
@@ -112,33 +115,6 @@ int parse_args(ArgsType *args) {
     err = ERROR_UNKNOWN_FLAGS;
   }
 
-exit:
-  return err;
-}
-
-int collect_input_lock_script_hash(smt_state_t *hashes) {
-  int err = 0;
-
-  size_t i = 0;
-  while (1) {
-    uint8_t buffer[BLAKE2B_BLOCK_SIZE];
-    uint64_t len = BLAKE2B_BLOCK_SIZE;
-    err = ckb_checked_load_cell_by_field(buffer, &len, 0, i, CKB_SOURCE_INPUT,
-                                         CKB_CELL_FIELD_LOCK_HASH);
-    if (err == CKB_INDEX_OUT_OF_BOUND) {
-      break;
-    }
-    CHECK(err);
-    CHECK2(hashes->len < hashes->capacity, ERROR_TOO_MANY_LOCK);
-
-    memcpy(hashes->pairs[hashes->len].key, buffer, BLAKE2B_BLOCK_SIZE);
-    hashes->len++;
-    i += 1;
-  }
-
-  smt_state_normalize(hashes);
-
-  err = 0;
 exit:
   return err;
 }
@@ -299,6 +275,115 @@ int verify_secp256k1_blake160_sighash_all(uint8_t *pubkey_hash) {
   return 0;
 }
 
+static uint32_t read_from_witness(uintptr_t arg[], uint8_t *ptr, uint32_t len,
+                                  uint32_t offset) {
+  int err;
+  uint64_t output_len = len;
+  err = ckb_load_witness(ptr, &output_len, offset, arg[0], arg[1]);
+  if (err != 0) {
+    return 0;
+  }
+  if (output_len > len) {
+    return len;
+  } else {
+    return output_len;
+  }
+}
+
+uint8_t g_witness_data_source[DEFAULT_DATA_SOURCE_LENGTH];
+int make_witness(WitnessArgsType *witness) {
+  int err = 0;
+  uint64_t witness_len = 0;
+  size_t source = CKB_SOURCE_GROUP_INPUT;
+  err = ckb_load_witness(NULL, &witness_len, 0, 0, source);
+  CHECK(err);
+  CHECK2(witness_len > 0, ERROR_INVALID_MOL_FORMAT);
+
+  mol2_cursor_t cur;
+
+  cur.offset = 0;
+  cur.size = witness_len;
+
+  mol2_data_source_t *ptr = (mol2_data_source_t *)g_witness_data_source;
+
+  ptr->read = read_from_witness;
+  ptr->total_size = witness_len;
+  // pass index and source as args
+  ptr->args[0] = 0;
+  ptr->args[1] = source;
+
+  ptr->cache_size = 0;
+  ptr->start_point = 0;
+  ptr->max_cache_size = MAX_CACHE_SIZE;
+  cur.data_source = ptr;
+
+  *witness = make_WitnessArgs(&cur);
+
+  err = 0;
+exit:
+  return err;
+}
+
+bool is_lock_script_hash_existing(uint8_t *lock_script_hash) {
+  int err = 0;
+  size_t i = 0;
+  while (1) {
+    uint8_t buff[BLAKE2B_BLOCK_SIZE];
+    uint64_t len = BLAKE2B_BLOCK_SIZE;
+    err = ckb_checked_load_cell_by_field(buff, &len, 0, i, CKB_SOURCE_INPUT,
+                                         CKB_CELL_FIELD_LOCK_HASH);
+    if (err == CKB_INDEX_OUT_OF_BOUND) {
+      return false;
+    }
+    CHECK(err);
+
+    if (memcmp(lock_script_hash, buff, BLAKE2B_BLOCK_SIZE) == 0) {
+      return true;
+    }
+    i += 1;
+  }
+
+exit:
+  return false;
+}
+
+int verify_lock_script_hash(uint8_t *lock_script_hash,
+                            SmtProofEntryVecType *proofs, RceState *rce_state) {
+  int err = 0;
+  uint32_t proof_len = proofs->t->len(proofs);
+  CHECK2(proof_len == rce_state->rcrules_count, ERROR_PROOF_LENGTH_MISMATCHED);
+
+  smt_pair_t entries[1];
+  smt_state_t states;
+  smt_state_init(&states, entries, 1);
+  smt_state_insert(&states, lock_script_hash, SMT_VALUE_EMPTY);
+
+  uint8_t proof_mask = 0x3;  // both
+  for (uint32_t i = 0; i < proof_len; i++) {
+    bool existing = false;
+    SmtProofEntryType proof_entry = proofs->t->get(proofs, i, &existing);
+    CHECK2(existing, ERROR_INVALID_MOL_FORMAT);
+    mol2_cursor_t proof = proof_entry.t->proof(&proof_entry);
+
+    const RCRule *current_rule = &rce_state->rcrules[i];
+    err = rce_verify_one_rule(rce_state, &states, NULL, NULL, proof_mask, proof,
+                              current_rule);
+    CHECK(err);
+  }
+
+  if (rce_state->has_wl) {
+    if (rce_state->both_on_wl) {
+      err = 0;
+    } else {
+      err = ERROR_NOT_ON_WHITE_LIST;
+    }
+  } else {
+    // all black list, already checked
+  }
+exit:
+  return err;
+}
+
 #ifdef CKB_USE_SIM
 int simulator_main() {
 #else
@@ -322,20 +407,33 @@ int main() {
   }
 
   if (args.flags == FlagsTypeRc) {
-    // collect input lock script hashes
-    smt_pair_t entries[MAX_LOCK_SCRIPT_HASH_COUNT];
-    smt_state_t states;
-    smt_state_init(&states, entries, MAX_LOCK_SCRIPT_HASH_COUNT);
-    err = collect_input_lock_script_hash(&states);
-    CHECK(err);
-
     // collect rc rules
     RceState rce_state;
     rce_init_state(&rce_state);
     err = rce_gather_rcrules_recursively(&rce_state, args.rc_root, 0);
     CHECK(err);
 
+    // collect proof
+    WitnessArgsType witness;
+    err = make_witness(&witness);
+    CHECK(err);
+    BytesOptType lock = witness.t->lock(&witness);
+    CHECK2(!lock.t->is_none(&lock), ERROR_INVALID_MOL_FORMAT);
+    mol2_cursor_t lock_bytes = lock.t->unwrap(&lock);
+    // convert Bytes to RcLockWitnessLock
+    RcLockWitnessLockType witness_lock = make_RcLockWitnessLock(&lock_bytes);
+    mol2_cursor_t lock_script_hash_cursor =
+        witness_lock.t->lock_script_hash(&witness_lock);
+    uint8_t lock_script_hash[BLAKE2B_BLOCK_SIZE] = {0};
+    err = mol2_read_at(&lock_script_hash_cursor, lock_script_hash,
+                       sizeof(lock_script_hash));
+    CHECK(err);
+    bool existing = is_lock_script_hash_existing(lock_script_hash);
+    CHECK2(existing, ERROR_LOCK_SCRIPT_HASH_NOT_FOUND);
+    SmtProofEntryVecType proofs = witness_lock.t->proofs(&witness_lock);
     // verify input lock script hashes against proof, using rc rules
+    err = verify_lock_script_hash(lock_script_hash, &proofs, &rce_state);
+    CHECK(err);
   }
 
 exit:
