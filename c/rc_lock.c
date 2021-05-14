@@ -12,13 +12,13 @@ int ckb_exit(signed char);
 #include "blockchain-api2.h"
 #include "blockchain.h"
 #include "ckb_consts.h"
+#include "blake2b.h"
 #if defined(CKB_USE_SIM)
 #include "ckb_syscall_rc_lock_sim.h"
 #else
 #include "ckb_syscalls.h"
 #endif
 
-#include "blake2b.h"
 #include "ckb_smt.h"
 #include "secp256k1_helper.h"
 // CHECK is defined in secp256k1
@@ -146,11 +146,11 @@ int load_and_hash_witness(blake2b_state *ctx, size_t start, size_t index,
   return CKB_SUCCESS;
 }
 
-int verify_secp256k1_blake160_sighash_all(uint8_t *pubkey_hash) {
+int verify_secp256k1_blake160_sighash_all(uint8_t *pubkey_hash,
+                                          uint8_t *signature_bytes) {
   int ret;
   uint64_t len = 0;
   unsigned char temp[MAX_WITNESS_SIZE];
-  unsigned char lock_bytes[SIGNATURE_SIZE];
   uint64_t read_len = MAX_WITNESS_SIZE;
   uint64_t witness_len = MAX_WITNESS_SIZE;
 
@@ -170,13 +170,9 @@ int verify_secp256k1_blake160_sighash_all(uint8_t *pubkey_hash) {
   if (ret != 0) {
     return ERROR_ENCODING;
   }
-
-  // there will be "proof" data after signature
   if (lock_bytes_seg.size < SIGNATURE_SIZE) {
     return ERROR_ARGUMENTS_LEN;
   }
-  memcpy(lock_bytes, lock_bytes_seg.ptr, SIGNATURE_SIZE);
-
   /* Load tx hash */
   unsigned char tx_hash[BLAKE2B_BLOCK_SIZE];
   len = BLAKE2B_BLOCK_SIZE;
@@ -247,7 +243,8 @@ int verify_secp256k1_blake160_sighash_all(uint8_t *pubkey_hash) {
 
   secp256k1_ecdsa_recoverable_signature signature;
   if (secp256k1_ecdsa_recoverable_signature_parse_compact(
-          &context, &signature, lock_bytes, lock_bytes[RECID_INDEX]) == 0) {
+          &context, &signature, signature_bytes,
+          signature_bytes[RECID_INDEX]) == 0) {
     return ERROR_SECP_PARSE_SIGNATURE;
   }
 
@@ -389,17 +386,31 @@ int simulator_main() {
 #else
 int main() {
 #endif
-  printf("simulator_main\n");
   // parse lock script's args
   int err = 0;
   ArgsType args = {0};
+  uint8_t signature_bytes[SIGNATURE_SIZE];
+
   err = parse_args(&args);
-  printf("parse_args return %d\n", err);
   CHECK(err);
 
+  // extra signature from witness
+  WitnessArgsType witness;
+  err = make_witness(&witness);
+  CHECK(err);
+
+  BytesOptType lock = witness.t->lock(&witness);
+  CHECK2(!lock.t->is_none(&lock), ERROR_INVALID_MOL_FORMAT);
+  mol2_cursor_t lock_bytes = lock.t->unwrap(&lock);
+  RcLockWitnessLockType witness_lock = make_RcLockWitnessLock(&lock_bytes);
+  mol2_cursor_t signature_cursor = witness_lock.t->signature(&witness_lock);
+  uint32_t read_len =
+      mol2_read_at(&signature_cursor, signature_bytes, SIGNATURE_SIZE);
+  CHECK2(read_len == SIGNATURE_SIZE, ERROR_INVALID_MOL_FORMAT);
+
   if (args.flags == FlagsTypePlain || args.flags == FlagsTypeRc) {
-    err = verify_secp256k1_blake160_sighash_all(args.pubkey_hash);
-    printf("verify_secp256k1_blake160_sighash_all : %d\n", err);
+    err = verify_secp256k1_blake160_sighash_all(args.pubkey_hash,
+                                                signature_bytes);
     CHECK(err);
   } else {
     err = ERROR_UNKNOWN_FLAGS;
@@ -414,20 +425,14 @@ int main() {
     CHECK(err);
 
     // collect proof
-    WitnessArgsType witness;
-    err = make_witness(&witness);
-    CHECK(err);
-    BytesOptType lock = witness.t->lock(&witness);
-    CHECK2(!lock.t->is_none(&lock), ERROR_INVALID_MOL_FORMAT);
-    mol2_cursor_t lock_bytes = lock.t->unwrap(&lock);
     // convert Bytes to RcLockWitnessLock
-    RcLockWitnessLockType witness_lock = make_RcLockWitnessLock(&lock_bytes);
     mol2_cursor_t lock_script_hash_cursor =
         witness_lock.t->lock_script_hash(&witness_lock);
     uint8_t lock_script_hash[BLAKE2B_BLOCK_SIZE] = {0};
-    err = mol2_read_at(&lock_script_hash_cursor, lock_script_hash,
-                       sizeof(lock_script_hash));
-    CHECK(err);
+    read_len = mol2_read_at(&lock_script_hash_cursor, lock_script_hash,
+                            BLAKE2B_BLOCK_SIZE);
+    CHECK2(read_len == BLAKE2B_BLOCK_SIZE, ERROR_INVALID_MOL_FORMAT);
+
     bool existing = is_lock_script_hash_existing(lock_script_hash);
     CHECK2(existing, ERROR_LOCK_SCRIPT_HASH_NOT_FOUND);
     SmtProofEntryVecType proofs = witness_lock.t->proofs(&witness_lock);

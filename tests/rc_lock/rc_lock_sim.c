@@ -37,4 +37,45 @@ int hex2bin(uint8_t* buf, const char* src) {
   return length;
 }
 
+UTEST(secp256k1, pass) {
+  init_input(&g_input);
+  g_input.input_lsh[0] = new_slice(32);
+  g_input.input_lsh_count = 1;
+  g_input.proof[0] = new_slice(100);
+  g_input.proof_count = 1;
+
+  convert_input_to_states();
+
+  int r = simulator_main();
+  ASSERT_EQ(0, r);
+}
+
+UTEST(secp256k1, wrong_signature) {
+  init_input(&g_input);
+  g_input.input_lsh[0] = new_slice(32);
+  g_input.input_lsh_count = 1;
+  g_input.proof[0] = new_slice(100);
+  g_input.proof_count = 1;
+
+  g_input.wrong_signature = true;
+  convert_input_to_states();
+
+  int r = simulator_main();
+  ASSERT_EQ(ERROR_SECP_RECOVER_PUBKEY, r);
+}
+
+UTEST(secp256k1, wrong_pubkey_hash) {
+  init_input(&g_input);
+  g_input.input_lsh[0] = new_slice(32);
+  g_input.input_lsh_count = 1;
+  g_input.proof[0] = new_slice(100);
+  g_input.proof_count = 1;
+
+  g_input.wrong_pubkey_hash = true;
+  convert_input_to_states();
+
+  int r = simulator_main();
+  ASSERT_EQ(ERROR_PUBKEY_BLAKE160_HASH, r);
+}
+
 UTEST_MAIN();

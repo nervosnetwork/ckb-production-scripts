@@ -18,7 +18,7 @@ extern "C" {
 #define MOLECULE_API_DECORATOR
 #endif /* MOLECULE_API_DECORATOR */
 
-#include "xudt_rce.h"
+#include "xudt_rce_mol.h"
 
 /*
  * Reader APIs
