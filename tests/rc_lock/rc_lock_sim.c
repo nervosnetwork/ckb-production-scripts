@@ -37,45 +37,75 @@ int hex2bin(uint8_t* buf, const char* src) {
   return length;
 }
 
-UTEST(secp256k1, pass) {
-  init_input(&g_input);
-  g_input.input_lsh[0] = new_slice(32);
-  g_input.input_lsh_count = 1;
-  g_input.proof[0] = new_slice(100);
-  g_input.proof_count = 1;
-
-  convert_input_to_states();
+UTEST(pubkey_hash, pass) {
+  init_input(&g_setting);
+  g_setting.flags = IdentityFlagsPubkeyHash;
+  convert_setting_to_states();
 
   int r = simulator_main();
   ASSERT_EQ(0, r);
 }
 
-UTEST(secp256k1, wrong_signature) {
-  init_input(&g_input);
-  g_input.input_lsh[0] = new_slice(32);
-  g_input.input_lsh_count = 1;
-  g_input.proof[0] = new_slice(100);
-  g_input.proof_count = 1;
+UTEST(pubkey_hash, wrong_signature) {
+  init_input(&g_setting);
+  g_setting.flags = IdentityFlagsPubkeyHash;
 
-  g_input.wrong_signature = true;
-  convert_input_to_states();
+  g_setting.wrong_signature = true;
+  convert_setting_to_states();
 
   int r = simulator_main();
-  ASSERT_EQ(ERROR_SECP_RECOVER_PUBKEY, r);
+  bool b = (r == ERROR_PUBKEY_BLAKE160_HASH || r == ERROR_SECP_RECOVER_PUBKEY ||
+            r == ERROR_SECP_PARSE_SIGNATURE);
+  ASSERT_TRUE(b);
 }
 
-UTEST(secp256k1, wrong_pubkey_hash) {
-  init_input(&g_input);
-  g_input.input_lsh[0] = new_slice(32);
-  g_input.input_lsh_count = 1;
-  g_input.proof[0] = new_slice(100);
-  g_input.proof_count = 1;
+UTEST(pubkey_hash, wrong_pubkey_hash) {
+  init_input(&g_setting);
+  g_setting.flags = IdentityFlagsPubkeyHash;
 
-  g_input.wrong_pubkey_hash = true;
-  convert_input_to_states();
+  g_setting.wrong_pubkey_hash = true;
+  convert_setting_to_states();
 
   int r = simulator_main();
   ASSERT_EQ(ERROR_PUBKEY_BLAKE160_HASH, r);
+}
+
+UTEST(owner_lock, pass) {
+  init_input(&g_setting);
+  g_setting.flags = IdentityFlagsOwnerLock;
+
+  uint8_t blake160[20] = {0xBE, 0xEF};
+
+  g_setting.input_lsh[0] = new_slice(32);
+  memcpy(g_setting.input_lsh[0].ptr, blake160, sizeof(blake160));
+  g_setting.input_lsh[0].size = 32;
+
+  g_setting.input_lsh_count = 1;
+  memcpy(g_setting.blake160, blake160, sizeof(blake160));
+
+  convert_setting_to_states();
+
+  int r = simulator_main();
+  ASSERT_EQ(0, r);
+}
+
+UTEST(owner_lock, not_pass) {
+  init_input(&g_setting);
+  g_setting.flags = IdentityFlagsOwnerLock;
+
+  uint8_t blake160[20] = {0xBE, 0xEF};
+
+  g_setting.input_lsh[0] = new_slice(32);
+  memcpy(g_setting.input_lsh[0].ptr, blake160, sizeof(blake160));
+  g_setting.input_lsh[0].size = 32;
+  g_setting.input_lsh_count = 1;
+
+  g_setting.blake160[0] = 0x00;
+
+  convert_setting_to_states();
+
+  int r = simulator_main();
+  ASSERT_EQ(ERROR_LOCK_SCRIPT_HASH_NOT_FOUND, r);
 }
 
 UTEST_MAIN();

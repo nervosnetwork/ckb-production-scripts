@@ -50,17 +50,24 @@ enum RcLockErrorCode {
   ERROR_PROOF_LENGTH_MISMATCHED,
 };
 
-// ArgsType: rename it to a proper name, e.g. id_or_owner
-typedef struct ArgsType {
+enum IdentityFlagsType {
+  IdentityFlagsPubkeyHash = 0,
+  IdentityFlagsOwnerLock = 1,
+  IdentityFlagsPubkeyHashRc = 2,
+  IdentityFlagsOwnerLockRc = 3,
+};
+
+typedef struct IdentityType {
+  // IdentityFlagsType
   uint8_t flags;
-  uint8_t pubkey_hash[20];
+  // blake160 (20 bytes) hash of lock script or pubkey
+  uint8_t blake160[20];
+} IdentityType;
+
+typedef struct ArgsType {
+  IdentityType id;
   uint8_t rc_root[32];
 } ArgsType;
-
-enum FlagsType {
-  FlagsTypePlain = 0,
-  FlagsTypeRc = 1,
-};
 
 // make compiler happy
 int make_cursor_from_witness(WitnessArgsType *witness, bool *_input) {
@@ -99,21 +106,18 @@ int parse_args(ArgsType *args) {
   mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
   mol_seg_t args_bytes_seg = MolReader_Bytes_raw_bytes(&args_seg);
   CHECK2(args_bytes_seg.size >= 1, ERROR_ARGUMENTS_LEN);
+  uint8_t flags = args_bytes_seg.ptr[0];
+  CHECK2(flags == IdentityFlagsPubkeyHash || flags == IdentityFlagsOwnerLock ||
+             flags == IdentityFlagsPubkeyHashRc ||
+             flags == IdentityFlagsOwnerLockRc,
+         ERROR_INVALID_MOL_FORMAT);
 
-  if (args_bytes_seg.ptr[0] == FlagsTypeRc) {
-    CHECK2(args_bytes_seg.size >= (1 + 20 + 32), ERROR_ARGUMENTS_LEN);
-    args->flags = args_bytes_seg.ptr[0];
-    memcpy(args->pubkey_hash, args_bytes_seg.ptr + 1,
-           sizeof(args->pubkey_hash));
-    memcpy(args->rc_root, args_bytes_seg.ptr + 1 + 20, sizeof(args->rc_root));
-  } else if (args_bytes_seg.ptr[0] == FlagsTypePlain) {
-    CHECK2(args_bytes_seg.size >= (1 + 20), ERROR_ARGUMENTS_LEN);
-    args->flags = args_bytes_seg.ptr[0];
-    memcpy(args->pubkey_hash, args_bytes_seg.ptr + 1,
-           sizeof(args->pubkey_hash));
-  } else {
-    err = ERROR_UNKNOWN_FLAGS;
-  }
+  CHECK2(args_bytes_seg.size >= (1 + BLAKE160_SIZE + BLAKE2B_BLOCK_SIZE),
+         ERROR_ARGUMENTS_LEN);
+  args->id.flags = args_bytes_seg.ptr[0];
+  memcpy(args->id.blake160, args_bytes_seg.ptr + 1, BLAKE160_SIZE);
+  memcpy(args->rc_root, args_bytes_seg.ptr + 1 + BLAKE160_SIZE,
+         sizeof(args->rc_root));
 
 exit:
   return err;
@@ -324,7 +328,7 @@ exit:
 bool is_lock_script_hash_existing(uint8_t *lock_script_hash) {
   int err = 0;
   size_t i = 0;
-  while (1) {
+  while (true) {
     uint8_t buff[BLAKE2B_BLOCK_SIZE];
     uint64_t len = BLAKE2B_BLOCK_SIZE;
     err = ckb_checked_load_cell_by_field(buff, &len, 0, i, CKB_SOURCE_INPUT,
@@ -334,7 +338,7 @@ bool is_lock_script_hash_existing(uint8_t *lock_script_hash) {
     }
     CHECK(err);
 
-    if (memcmp(lock_script_hash, buff, BLAKE2B_BLOCK_SIZE) == 0) {
+    if (memcmp(lock_script_hash, buff, BLAKE160_SIZE) == 0) {
       return true;
     }
     i += 1;
@@ -344,16 +348,20 @@ exit:
   return false;
 }
 
-int verify_lock_script_hash(uint8_t *lock_script_hash,
-                            SmtProofEntryVecType *proofs, RceState *rce_state) {
+int verify_identity_on_wl(IdentityType *id, SmtProofEntryVecType *proofs,
+                          RceState *rce_state) {
   int err = 0;
   uint32_t proof_len = proofs->t->len(proofs);
   CHECK2(proof_len == rce_state->rcrules_count, ERROR_PROOF_LENGTH_MISMATCHED);
 
+  uint8_t key[SMT_KEY_BYTES] = {0};
+  key[0] = id->flags;
+  memcpy(key + 1, id->blake160, BLAKE160_SIZE);
+
   smt_pair_t entries[1];
   smt_state_t states;
   smt_state_init(&states, entries, 1);
-  smt_state_insert(&states, lock_script_hash, SMT_VALUE_EMPTY);
+  smt_state_insert(&states, key, SMT_VALUE_EMPTY);
 
   uint8_t proof_mask = 0x3;  // both
   for (uint32_t i = 0; i < proof_len; i++) {
@@ -389,7 +397,6 @@ int main() {
   // parse lock script's args
   int err = 0;
   ArgsType args = {0};
-  uint8_t signature_bytes[SIGNATURE_SIZE];
 
   err = parse_args(&args);
   CHECK(err);
@@ -402,22 +409,35 @@ int main() {
   BytesOptType lock = witness.t->lock(&witness);
   CHECK2(!lock.t->is_none(&lock), ERROR_INVALID_MOL_FORMAT);
   mol2_cursor_t lock_bytes = lock.t->unwrap(&lock);
+  // convert Bytes to RcLockWitnessLock
   RcLockWitnessLockType witness_lock = make_RcLockWitnessLock(&lock_bytes);
-  mol2_cursor_t signature_cursor = witness_lock.t->signature(&witness_lock);
-  uint32_t read_len =
-      mol2_read_at(&signature_cursor, signature_bytes, SIGNATURE_SIZE);
-  CHECK2(read_len == SIGNATURE_SIZE, ERROR_INVALID_MOL_FORMAT);
 
-  if (args.flags == FlagsTypePlain || args.flags == FlagsTypeRc) {
-    err = verify_secp256k1_blake160_sighash_all(args.pubkey_hash,
+  // pubkey hash
+  if (args.id.flags == IdentityFlagsPubkeyHash ||
+      args.id.flags == IdentityFlagsPubkeyHashRc) {
+    uint8_t signature_bytes[SIGNATURE_SIZE];
+    BytesOptType signature_opt = witness_lock.t->signature(&witness_lock);
+    mol2_cursor_t signature_cursor = signature_opt.t->unwrap(&signature_opt);
+
+    uint32_t read_len =
+        mol2_read_at(&signature_cursor, signature_bytes, SIGNATURE_SIZE);
+    CHECK2(read_len == SIGNATURE_SIZE, ERROR_INVALID_MOL_FORMAT);
+
+    err = verify_secp256k1_blake160_sighash_all(args.id.blake160,
                                                 signature_bytes);
-    CHECK(err);
-  } else {
-    err = ERROR_UNKNOWN_FLAGS;
     CHECK(err);
   }
 
-  if (args.flags == FlagsTypeRc) {
+  // owner lock
+  if (args.id.flags == IdentityFlagsOwnerLock ||
+      args.id.flags == IdentityFlagsOwnerLockRc) {
+    bool existing = is_lock_script_hash_existing(args.id.blake160);
+    CHECK2(existing, ERROR_LOCK_SCRIPT_HASH_NOT_FOUND);
+  }
+
+  // regulation compliance
+  if (args.id.flags == IdentityFlagsPubkeyHashRc ||
+      args.id.flags == IdentityFlagsOwnerLockRc) {
     // collect rc rules
     RceState rce_state;
     rce_init_state(&rce_state);
@@ -425,19 +445,11 @@ int main() {
     CHECK(err);
 
     // collect proof
-    // convert Bytes to RcLockWitnessLock
-    mol2_cursor_t lock_script_hash_cursor =
-        witness_lock.t->lock_script_hash(&witness_lock);
-    uint8_t lock_script_hash[BLAKE2B_BLOCK_SIZE] = {0};
-    read_len = mol2_read_at(&lock_script_hash_cursor, lock_script_hash,
-                            BLAKE2B_BLOCK_SIZE);
-    CHECK2(read_len == BLAKE2B_BLOCK_SIZE, ERROR_INVALID_MOL_FORMAT);
+    SmtProofEntryVecOptType proofs_opt = witness_lock.t->proofs(&witness_lock);
+    SmtProofEntryVecType proofs = proofs_opt.t->unwrap(&proofs_opt);
 
-    bool existing = is_lock_script_hash_existing(lock_script_hash);
-    CHECK2(existing, ERROR_LOCK_SCRIPT_HASH_NOT_FOUND);
-    SmtProofEntryVecType proofs = witness_lock.t->proofs(&witness_lock);
-    // verify input lock script hashes against proof, using rc rules
-    err = verify_lock_script_hash(lock_script_hash, &proofs, &rce_state);
+    // verify blake160 against proof, using rc rules
+    err = verify_identity_on_wl(&args.id, &proofs, &rce_state);
     CHECK(err);
   }
 

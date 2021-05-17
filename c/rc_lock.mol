@@ -1,8 +1,9 @@
 import xudt_rce;
 
+option SmtProofEntryVecOpt (SmtProofEntryVec);
+
 // the data structure used in lock field of witness
 table RcLockWitnessLock {
-    signature: Bytes,
-    lock_script_hash: Bytes,
-    proofs: SmtProofEntryVec,
+    signature: BytesOpt,
+    proofs: SmtProofEntryVecOpt,
 }
