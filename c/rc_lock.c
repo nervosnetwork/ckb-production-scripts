@@ -48,6 +48,8 @@ enum RcLockErrorCode {
   ERROR_UNKNOWN_FLAGS = 80,
   ERROR_LOCK_SCRIPT_HASH_NOT_FOUND,
   ERROR_PROOF_LENGTH_MISMATCHED,
+  ERROR_NO_RCRULE,
+  ERROR_NO_WHITE_LIST,
 };
 
 enum IdentityFlagsType {
@@ -348,8 +350,8 @@ exit:
   return false;
 }
 
-int verify_identity_on_wl(IdentityType *id, SmtProofEntryVecType *proofs,
-                          RceState *rce_state) {
+int verify_identity(IdentityType *id, SmtProofEntryVecType *proofs,
+                    RceState *rce_state) {
   int err = 0;
   uint32_t proof_len = proofs->t->len(proofs);
   CHECK2(proof_len == rce_state->rcrules_count, ERROR_PROOF_LENGTH_MISMATCHED);
@@ -375,7 +377,6 @@ int verify_identity_on_wl(IdentityType *id, SmtProofEntryVecType *proofs,
                               current_rule);
     CHECK(err);
   }
-
   if (rce_state->has_wl) {
     if (rce_state->both_on_wl) {
       err = 0;
@@ -383,7 +384,8 @@ int verify_identity_on_wl(IdentityType *id, SmtProofEntryVecType *proofs,
       err = ERROR_NOT_ON_WHITE_LIST;
     }
   } else {
-    // all black list, already checked
+    // all black list, it's not allowed
+    err = ERROR_NO_WHITE_LIST;
   }
 exit:
   return err;
@@ -443,13 +445,15 @@ int main() {
     rce_init_state(&rce_state);
     err = rce_gather_rcrules_recursively(&rce_state, args.rc_root, 0);
     CHECK(err);
+    CHECK2(rce_state.rcrules_count > 0, ERROR_NO_RCRULE);
+    CHECK2(rce_state.has_wl, ERROR_NO_WHITE_LIST);
 
     // collect proof
     SmtProofEntryVecOptType proofs_opt = witness_lock.t->proofs(&witness_lock);
     SmtProofEntryVecType proofs = proofs_opt.t->unwrap(&proofs_opt);
 
     // verify blake160 against proof, using rc rules
-    err = verify_identity_on_wl(&args.id, &proofs, &rce_state);
+    err = verify_identity(&args.id, &proofs, &rce_state);
     CHECK(err);
   }
 

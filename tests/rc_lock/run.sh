@@ -9,5 +9,4 @@ make all
 cd ../../..
 echo "Running tests"
 tests/rc_lock/${FOLDER}/rc_lock_simulator
-tests/rc_lock/${FOLDER}/rc_lock_validator_simulator
 echo "Done"

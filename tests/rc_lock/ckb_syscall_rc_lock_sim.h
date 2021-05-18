@@ -14,6 +14,7 @@
 
 #define VERY_LONG_DATA_SIZE 655360
 #define MAX_PROOF_COUNT 64
+#define SPECIAL_SECP256K1_INDEX 1111
 
 #define countof(s) (sizeof(s) / sizeof(s[0]))
 mol_seg_t build_bytes(const uint8_t* data, uint32_t len);
@@ -36,6 +37,12 @@ slice_t new_slice(uint32_t size) {
   return res;
 }
 
+slice_t copy_slice(uint8_t* ptr, uint32_t size) {
+  slice_t s = new_slice(size);
+  memcpy(s.ptr, ptr, size);
+  return s;
+}
+
 void delete_slice(slice_t* t) {
   free(t->ptr);
   t->ptr = NULL;
@@ -51,7 +58,7 @@ typedef struct SIMRCRule {
 typedef struct RcLockSettingType {
   uint8_t flags;          // in args in lock script
   uint8_t blake160[20];   // in args in lock script
-  uint8_t rc_rule[32];    // in args in lock script
+  uint8_t rc_root[32];    // in args in lock script
   uint8_t signature[65];  // in witness
 
   slice_t proofs[MAX_PROOF_COUNT];
@@ -81,6 +88,9 @@ typedef struct RcLockStates {
   uint32_t witness_count;
 
   slice_t script;
+
+  slice_t cell_data[64];
+  uint32_t cell_data_count;
 } RcLockStates;
 
 RcLockStates g_states;
@@ -133,6 +143,59 @@ mol_seg_t build_witness_lock() {
   return res.seg;
 }
 
+slice_t build_rcrule(SIMRCRule* rcrule) {
+  mol_builder_t b2;
+  mol_union_builder_initialize(&b2, 64, 0, MolDefault_RCRule, 33);
+
+  mol_builder_t b;
+  MolBuilder_RCRule_init(&b);
+  MolBuilder_RCRule_set_flags(&b, rcrule->flags);
+  MolBuilder_RCRule_set_smt_root(&b, rcrule->smt_root);
+  mol_seg_res_t res = MolBuilder_RCRule_build(b);
+  ASSERT(res.errno == 0);
+  MolBuilder_RCData_set_RCRule(&b2, res.seg.ptr, res.seg.size);
+  free(res.seg.ptr);
+
+  mol_seg_res_t res2 = MolBuilder_RCData_build(b2);
+  ASSERT(res2.errno == 0);
+  slice_t ret = {.ptr = res2.seg.ptr, .size = res2.seg.size};
+  return ret;
+}
+
+void convert_rcrule(uint8_t* rc_root) {
+  for (uint32_t i = 0; i < g_states.cell_data_count; i++) {
+    free(g_states.cell_data[i].ptr);
+  }
+  g_states.cell_data_count = 0;
+
+  mol_builder_t b2;
+  mol_union_builder_initialize(&b2, 64, 0, MolDefault_RCRule, 33);
+
+  mol_builder_t b;
+  MolBuilder_RCCellVec_init(&b);
+  for (uint32_t i = 0; i < g_setting.proof_count; i++) {
+    uint8_t hash[32] = {0};
+    // very small 2 byte index as hash
+    *((uint16_t*)hash) = i;
+    MolBuilder_RCCellVec_push(&b, hash);
+
+    g_states.cell_data[i] = build_rcrule(g_setting.rc_rules + i);
+  }
+  mol_seg_res_t res = MolBuilder_RCCellVec_build(b);
+  ASSERT(res.errno == 0);
+  MolBuilder_RCData_set_RCCellVec(&b2, res.seg.ptr, res.seg.size);
+  free(res.seg.ptr);
+
+  mol_seg_res_t res2 = MolBuilder_RCData_build(b2);
+  ASSERT(res2.errno == 0);
+  slice_t ret = {.ptr = res2.seg.ptr, .size = res2.seg.size};
+
+  g_states.cell_data[g_setting.proof_count] = ret;
+  g_states.cell_data_count = g_setting.proof_count + 1;
+
+  *((uint16_t*)rc_root) = g_setting.proof_count;
+}
+
 void convert_witness(void) {
   for (size_t i = 0; i < g_states.witness_count; i++) {
     free(g_states.witness[i].ptr);
@@ -169,6 +232,7 @@ void convert_setting_to_states(void) {
   g_states.setting = g_setting;
   // IdentityFlagsPubkeyHash
   // IdentityFlagsPubkeyHashRc
+  // need signature generated
   if (g_setting.flags == 0 || g_setting.flags == 2) {
     // make witness skeleton
     convert_witness();
@@ -188,6 +252,10 @@ void convert_setting_to_states(void) {
       g_setting.signature[0] ^= 0x1;
     }
   }
+  // will use rcrule, set rc root manually
+  if (g_setting.flags == 2 || g_setting.flags == 3) {
+    convert_rcrule(g_setting.rc_root);
+  }
   // make witness again, with correct signature
   convert_witness();
 
@@ -195,7 +263,7 @@ void convert_setting_to_states(void) {
   uint8_t script_args[1 + 20 + 32];
   script_args[0] = g_setting.flags;
   memcpy(script_args + 1, g_setting.blake160, 20);
-  memcpy(script_args + 1 + 20, g_setting.rc_rule, 32);
+  memcpy(script_args + 1 + 20, g_setting.rc_root, 32);
   uint8_t code_hash[32] = {0};
 
   mol_seg_t script =
@@ -239,6 +307,14 @@ void secp256k1_sign(const uint8_t* msg, uint8_t* serialized_sig,
   blake2b_init(&blake2b_ctx, 32);
   blake2b_update(&blake2b_ctx, serialized_pubkey, serialized_pubkey_len);
   blake2b_final(&blake2b_ctx, pubkey_hash, 32);
+
+#if 0
+  printf("{");
+  for (int i = 0; i < 20; i++) {
+    printf("%d,", pubkey_hash[i]);
+  }
+  printf("}\n");
+#endif
   // verify, self testing
   {
     secp256k1_ecdsa_recoverable_signature signature;
@@ -434,13 +510,33 @@ int ckb_load_cell_code(void* addr, size_t memory_size, size_t content_offset,
 
 int ckb_load_cell_data(void* addr, uint64_t* len, size_t offset, size_t index,
                        size_t source) {
-  if (source == CKB_SOURCE_CELL_DEP && index == 42) {
+  if (source == CKB_SOURCE_CELL_DEP && index == SPECIAL_SECP256K1_INDEX) {
     ASSERT(*len == 1048576);
-    FILE* input = fopen("../../build/secp256k1_data", "rb");
+    FILE* input = fopen("build/secp256k1_data", "rb");
     size_t read_item = fread(addr, *len, 1, input);
     ASSERT(read_item == 1);
 
     return 0;
+  }
+
+  if (source == CKB_SOURCE_CELL_DEP) {
+    ASSERT(index < g_states.cell_data_count);
+    slice_t* cur = g_states.cell_data + index;
+    if (addr == NULL) {
+      *len = cur->size;
+      return 0;
+    }
+    if (cur->size <= offset) {
+      *len = 0;
+      return 0;
+    }
+    uint32_t remaining = cur->size - offset;
+    if (remaining > *len) {
+      memcpy(addr, cur->ptr + offset, *len);
+    } else {
+      memcpy(addr, cur->ptr + offset, remaining);
+    }
+    *len = remaining;
   }
   return 0;
 }
@@ -481,7 +577,7 @@ int ckb_load_cell_by_field(void* addr, uint64_t* len, size_t offset,
     }
   } else {
     if (source == CKB_SOURCE_CELL_DEP && field == CKB_CELL_FIELD_DATA_HASH) {
-      if (index == 42) {
+      if (index == SPECIAL_SECP256K1_INDEX) {
         static uint8_t ckb_secp256k1_data_hash[32] = {
             151, 153, 190, 226, 81,  185, 117, 184, 44, 69,  160,
             33,  84,  206, 40,  206, 200, 156, 88,  83, 236, 193,
