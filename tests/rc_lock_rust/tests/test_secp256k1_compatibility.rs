@@ -6,14 +6,23 @@ mod misc;
 use ckb_crypto::secp::Generator;
 use ckb_error::assert_error_eq;
 use ckb_script::{ScriptError, TransactionScriptsVerifier};
-use ckb_types::{bytes::Bytes, packed::WitnessArgs, prelude::*, H256};
+use ckb_types::{bytes::Bytes, bytes::BytesMut, packed::WitnessArgs, prelude::*, H256};
+use lazy_static::lazy_static;
 use misc::{
     blake160, build_resolved_tx, debug_printer, gen_tx, gen_tx_with_grouped_args, gen_witness_lock,
     sign_tx, sign_tx_by_input_group, sign_tx_hash, DummyDataLoader, TestConfig, TestScheme,
-    ARGS_TYPE_PLAIN, ARGS_TYPE_RC, ERROR_ENCODING, ERROR_PUBKEY_BLAKE160_HASH, ERROR_WITNESS_SIZE,
+    ERROR_ENCODING, ERROR_PUBKEY_BLAKE160_HASH, ERROR_WITNESS_SIZE, IDENTITY_FLAGS_PUBKEY_HASH,
     MAX_CYCLES,
 };
 use rand::{thread_rng, Rng, SeedableRng};
+
+lazy_static! {
+    pub static ref EMPTY_RC_ROOT: Bytes = {
+        let mut buf = BytesMut::new();
+        buf.resize(32, 0);
+        buf.freeze()
+    };
+}
 
 #[test]
 fn test_sighash_all_unlock() {
@@ -22,7 +31,12 @@ fn test_sighash_all_unlock() {
     let pubkey = privkey.pubkey().expect("pubkey");
     let pubkey_hash = blake160(&pubkey.serialize());
 
-    let config = TestConfig::new(ARGS_TYPE_PLAIN, pubkey_hash, Bytes::new(), Bytes::new());
+    let config = TestConfig::new(
+        IDENTITY_FLAGS_PUBKEY_HASH,
+        pubkey_hash,
+        &EMPTY_RC_ROOT,
+        Bytes::new(),
+    );
 
     let tx = gen_tx(&mut data_loader, &config);
     let tx = sign_tx(tx, &privkey, &config);
@@ -39,13 +53,13 @@ fn test_sighash_all_unlock_with_args() {
     let mut data_loader = DummyDataLoader::new();
     let privkey = Generator::random_privkey();
     let pubkey = privkey.pubkey().expect("pubkey");
-    let lock_args = {
-        let mut args = blake160(&pubkey.serialize()).to_vec();
-        args.push(42);
-        args.push(255);
-        Bytes::from(args)
-    };
-    let config = TestConfig::new(ARGS_TYPE_PLAIN, lock_args, Bytes::new(), Bytes::new());
+    let lock_args = blake160(&pubkey.serialize());
+    let config = TestConfig::new(
+        IDENTITY_FLAGS_PUBKEY_HASH,
+        lock_args,
+        &EMPTY_RC_ROOT,
+        Bytes::new(),
+    );
     let args = config.gen_args();
 
     let mut rng = thread_rng();
@@ -67,9 +81,9 @@ fn test_sighash_all_with_extra_witness_unlock() {
     let pubkey_hash = blake160(&pubkey.serialize());
 
     let config = TestConfig::new(
-        ARGS_TYPE_PLAIN,
+        IDENTITY_FLAGS_PUBKEY_HASH,
         pubkey_hash.clone(),
-        Bytes::new(),
+        &EMPTY_RC_ROOT,
         Bytes::new(),
     );
 
@@ -125,9 +139,9 @@ fn test_sighash_all_with_grouped_inputs_unlock() {
     let pubkey_hash = blake160(&pubkey.serialize());
 
     let config = TestConfig::new(
-        ARGS_TYPE_PLAIN,
+        IDENTITY_FLAGS_PUBKEY_HASH,
         pubkey_hash.clone(),
-        Bytes::new(),
+        &EMPTY_RC_ROOT,
         Bytes::new(),
     );
     let args = config.gen_args();
@@ -183,17 +197,17 @@ fn test_sighash_all_with_2_different_inputs_unlock() {
     let pubkey_hash2 = blake160(&pubkey2.serialize());
 
     let config1 = TestConfig::new(
-        ARGS_TYPE_PLAIN,
+        IDENTITY_FLAGS_PUBKEY_HASH,
         pubkey_hash.clone(),
-        Bytes::new(),
+        &EMPTY_RC_ROOT,
         Bytes::new(),
     );
     let args1 = config1.gen_args();
 
     let config2 = TestConfig::new(
-        ARGS_TYPE_PLAIN,
+        IDENTITY_FLAGS_PUBKEY_HASH,
         pubkey_hash2.clone(),
-        Bytes::new(),
+        &EMPTY_RC_ROOT,
         Bytes::new(),
     );
     let args2 = config2.gen_args();
@@ -222,7 +236,12 @@ fn test_signing_with_wrong_key() {
     let pubkey = privkey.pubkey().expect("pubkey");
     let pubkey_hash = blake160(&pubkey.serialize());
 
-    let config = TestConfig::new(ARGS_TYPE_PLAIN, pubkey_hash, Bytes::new(), Bytes::new());
+    let config = TestConfig::new(
+        IDENTITY_FLAGS_PUBKEY_HASH,
+        pubkey_hash,
+        &EMPTY_RC_ROOT,
+        Bytes::new(),
+    );
 
     let tx = gen_tx(&mut data_loader, &config);
     let tx = sign_tx(tx, &wrong_privkey, &config);
@@ -242,7 +261,12 @@ fn test_signing_wrong_tx_hash() {
     let pubkey = privkey.pubkey().expect("pubkey");
     let pubkey_hash = blake160(&pubkey.serialize());
 
-    let config = TestConfig::new(ARGS_TYPE_PLAIN, pubkey_hash, Bytes::new(), Bytes::new());
+    let config = TestConfig::new(
+        IDENTITY_FLAGS_PUBKEY_HASH,
+        pubkey_hash,
+        &EMPTY_RC_ROOT,
+        Bytes::new(),
+    );
 
     let tx = gen_tx(&mut data_loader, &config);
     let tx = {
@@ -267,7 +291,12 @@ fn test_super_long_witness() {
     let pubkey = privkey.pubkey().expect("pubkey");
     let pubkey_hash = blake160(&pubkey.serialize());
 
-    let mut config = TestConfig::new(ARGS_TYPE_PLAIN, pubkey_hash, Bytes::new(), Bytes::new());
+    let mut config = TestConfig::new(
+        IDENTITY_FLAGS_PUBKEY_HASH,
+        pubkey_hash,
+        &EMPTY_RC_ROOT,
+        Bytes::new(),
+    );
     config.set_scheme(TestScheme::LongWitness);
 
     let tx = gen_tx(&mut data_loader, &config);
@@ -292,12 +321,22 @@ fn test_sighash_all_2_in_2_out_cycles() {
     let privkey = generator.gen_privkey();
     let pubkey = privkey.pubkey().expect("pubkey");
     let pubkey_hash = blake160(&pubkey.serialize());
-    let config1 = TestConfig::new(ARGS_TYPE_PLAIN, pubkey_hash, Bytes::new(), Bytes::new());
+    let config1 = TestConfig::new(
+        IDENTITY_FLAGS_PUBKEY_HASH,
+        pubkey_hash,
+        &EMPTY_RC_ROOT,
+        Bytes::new(),
+    );
     // key2
     let privkey2 = generator.gen_privkey();
     let pubkey2 = privkey2.pubkey().expect("pubkey");
     let pubkey_hash2 = blake160(&pubkey2.serialize());
-    let config2 = TestConfig::new(ARGS_TYPE_PLAIN, pubkey_hash2, Bytes::new(), Bytes::new());
+    let config2 = TestConfig::new(
+        IDENTITY_FLAGS_PUBKEY_HASH,
+        pubkey_hash2,
+        &EMPTY_RC_ROOT,
+        Bytes::new(),
+    );
 
     // sign with 2 keys
     let tx = gen_tx_with_grouped_args(
@@ -310,8 +349,9 @@ fn test_sighash_all_2_in_2_out_cycles() {
     let tx = sign_tx_by_input_group(tx, &privkey2, 1, 1, &config2);
 
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
-    let verify_result =
-        TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
     let cycles = verify_result.expect("pass verification");
     // TODO when finalized,
     assert!(CONSUME_CYCLES < cycles)
@@ -324,7 +364,12 @@ fn test_sighash_all_witness_append_junk_data() {
     let privkey = Generator::random_privkey();
     let pubkey = privkey.pubkey().expect("pubkey");
     let pubkey_hash = blake160(&pubkey.serialize());
-    let config = TestConfig::new(ARGS_TYPE_PLAIN, pubkey_hash, Bytes::new(), Bytes::new());
+    let config = TestConfig::new(
+        IDENTITY_FLAGS_PUBKEY_HASH,
+        pubkey_hash,
+        &EMPTY_RC_ROOT,
+        Bytes::new(),
+    );
 
     // sign with 2 keys
     let tx = gen_tx_with_grouped_args(
@@ -368,7 +413,12 @@ fn test_sighash_all_witness_args_ambiguity() {
     let privkey = Generator::random_privkey();
     let pubkey = privkey.pubkey().expect("pubkey");
     let pubkey_hash = blake160(&pubkey.serialize());
-    let config = TestConfig::new(ARGS_TYPE_PLAIN, pubkey_hash, Bytes::new(), Bytes::new());
+    let config = TestConfig::new(
+        IDENTITY_FLAGS_PUBKEY_HASH,
+        pubkey_hash,
+        &EMPTY_RC_ROOT,
+        Bytes::new(),
+    );
 
     let tx = gen_tx_with_grouped_args(
         &mut data_loader,
@@ -419,7 +469,12 @@ fn test_sighash_all_witnesses_ambiguity() {
     let privkey = Generator::random_privkey();
     let pubkey = privkey.pubkey().expect("pubkey");
     let pubkey_hash = blake160(&pubkey.serialize());
-    let config = TestConfig::new(ARGS_TYPE_PLAIN, pubkey_hash, Bytes::new(), Bytes::new());
+    let config = TestConfig::new(
+        IDENTITY_FLAGS_PUBKEY_HASH,
+        pubkey_hash,
+        &EMPTY_RC_ROOT,
+        Bytes::new(),
+    );
 
     let tx = gen_tx_with_grouped_args(
         &mut data_loader,
@@ -466,7 +521,12 @@ fn test_sighash_all_cover_extra_witnesses() {
     let privkey = Generator::random_privkey();
     let pubkey = privkey.pubkey().expect("pubkey");
     let pubkey_hash = blake160(&pubkey.serialize());
-    let config = TestConfig::new(ARGS_TYPE_PLAIN, pubkey_hash, Bytes::new(), Bytes::new());
+    let config = TestConfig::new(
+        IDENTITY_FLAGS_PUBKEY_HASH,
+        pubkey_hash,
+        &EMPTY_RC_ROOT,
+        Bytes::new(),
+    );
 
     let tx = gen_tx_with_grouped_args(
         &mut data_loader,

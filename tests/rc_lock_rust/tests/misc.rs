@@ -16,6 +16,7 @@ use ckb_types::{
 };
 use lazy_static::lazy_static;
 use rand::{thread_rng, Rng};
+use rc_lock_test::rc_lock::RcLockWitnessLock;
 use std::collections::HashMap;
 
 pub const MAX_CYCLES: u64 = std::u64::MAX;
@@ -108,11 +109,8 @@ pub fn sign_tx_by_input_group(
                 blake2b.update(&tx_hash.raw_data());
                 // digest the first witness
                 let witness = WitnessArgs::new_unchecked(tx.witnesses().get(i).unwrap().unpack());
-                let zero_lock: Bytes = {
-                    let mut buf = Vec::new();
-                    buf.resize(SIGNATURE_SIZE + 4 + config.proof.len(), 0);
-                    buf.into()
-                };
+                let zero_lock = gen_zero_witness_lock(&config.proof);
+
                 let witness_for_digest = witness
                     .clone()
                     .as_builder()
@@ -130,7 +128,6 @@ pub fn sign_tx_by_input_group(
                 blake2b.finalize(&mut message);
                 let message = H256::from(message);
                 let sig = key.sign_recoverable(&message).expect("sign");
-
                 let sig_bytes = Bytes::from(sig.serialize());
                 let witness_lock = gen_witness_lock(sig_bytes, config.proof.clone());
                 witness
@@ -304,8 +301,10 @@ pub fn sign_tx_hash(tx: TransactionView, key: &Privkey, tx_hash: &[u8]) -> Trans
     blake2b.finalize(&mut message);
     let message = H256::from(message);
     let sig = key.sign_recoverable(&message).expect("sign");
+    let proof = Bytes::new();
+    let witness_lock = gen_witness_lock(sig.serialize().into(), proof);
     let witness_args = WitnessArgsBuilder::default()
-        .lock(Some(Bytes::from(sig.serialize())).pack())
+        .lock(Some(witness_lock).pack())
         .build();
     tx.as_advanced_builder()
         .set_witnesses(vec![witness_args.as_bytes().pack()])
@@ -354,15 +353,20 @@ pub fn debug_printer(script: &Byte32, msg: &str) {
         "Script({:x}{:x}{:x}{:x}{:x})",
         slice[0], slice[1], slice[2], slice[3], slice[4]
     );
-    print!("{:?}: {}", str, msg);
+    println!("{:?}: {}", str, msg);
 }
 
-pub const ARGS_TYPE_PLAIN: u8 = 0;
-pub const ARGS_TYPE_RC: u8 = 1;
+pub const IDENTITY_FLAGS_PUBKEY_HASH: u8 = 0;
+pub const IDENTITY_FLAGS_OWNER_LOCK: u8 = 1;
+pub const IDENTITY_FLAGS_PUBKEY_HASH_RC: u8 = 2;
+pub const IDENTITY_FLAGS_OWNER_LOCK_RC: u8 = 3;
 
-pub struct TestConfig {
+pub struct Identity {
     pub flags: u8,
-    pub pubkey_hash: Bytes,
+    pub blake160: Bytes,
+}
+pub struct TestConfig {
+    pub id: Identity,
     pub rc_root: Bytes,
     pub proof: Bytes,
     pub scheme: TestScheme,
@@ -375,11 +379,12 @@ pub enum TestScheme {
 }
 
 impl TestConfig {
-    pub fn new(flags: u8, pubkey_hash: Bytes, rc_rule: Bytes, proof: Bytes) -> TestConfig {
+    pub fn new(flags: u8, blake160: Bytes, rc_rule: &Bytes, proof: Bytes) -> TestConfig {
+        assert_eq!(blake160.len(), 20);
+        assert_eq!(rc_rule.len(), 32);
         TestConfig {
-            flags,
-            pubkey_hash,
-            rc_root: rc_rule,
+            id: Identity { flags, blake160 },
+            rc_root: rc_rule.clone(),
             proof,
             scheme: TestScheme::None,
         }
@@ -391,17 +396,25 @@ impl TestConfig {
 
     pub fn gen_args(&self) -> Bytes {
         let mut bytes = BytesMut::with_capacity(128);
-        bytes.put_u8(self.flags);
-        bytes.put(self.pubkey_hash.as_ref());
+        bytes.put_u8(self.id.flags);
+        bytes.put(self.id.blake160.as_ref());
         bytes.put(self.rc_root.as_ref());
         bytes.freeze()
     }
 }
 
-pub fn gen_witness_lock(sig: Bytes, proof: Bytes) -> Bytes {
-    let mut bytes = BytesMut::with_capacity(128);
-    bytes.put(sig);
-    bytes.put_u32_le(proof.len() as u32);
-    bytes.put(proof);
-    bytes.freeze()
+pub fn gen_witness_lock(sig: Bytes, proofs: Bytes) -> Bytes {
+    let builder = RcLockWitnessLock::new_builder();
+    // TODO: proofs
+    builder.signature(Some(sig).pack()).build().as_bytes()
+}
+
+pub fn gen_zero_witness_lock(proofs: &Bytes) -> Bytes {
+    let mut zero = BytesMut::new();
+    zero.resize(65, 0);
+    let witness_lock = gen_witness_lock(zero.freeze(), proofs.clone());
+
+    let mut res = BytesMut::new();
+    res.resize(witness_lock.len(), 0);
+    res.freeze()
 }
