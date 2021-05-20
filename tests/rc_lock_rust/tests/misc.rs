@@ -53,6 +53,11 @@ pub const ERROR_OUTPUT_AMOUNT_NOT_ENOUGH: i8 = -42;
 pub const ERROR_NO_PAIR: i8 = -44;
 pub const ERROR_DUPLICATED_INPUTS: i8 = -45;
 pub const ERROR_DUPLICATED_OUTPUTS: i8 = -46;
+pub const ERROR_LOCK_SCRIPT_HASH_NOT_FOUND: i8 = 81;
+pub const ERROR_NOT_ON_WHITE_LIST: i8 = 59;
+pub const ERROR_NO_WHITE_LIST: i8 = 84;
+pub const ERROR_ON_BLACK_LIST: i8 = 57;
+pub const ERROR_RCE_EMERGENCY_HALT: i8 = 54;
 
 lazy_static! {
     pub static ref RC_LOCK: Bytes = Bytes::from(&include_bytes!("../../../build/rc_lock")[..]);
@@ -345,13 +350,17 @@ pub fn blake160(message: &[u8]) -> Bytes {
 }
 
 pub fn sign_tx(
-    dummy: &mut DummyDataLoader,
+    _dummy: &mut DummyDataLoader,
     tx: TransactionView,
     config: &mut TestConfig,
 ) -> TransactionView {
-    let witnesses_len = tx.witnesses().len();
-    let tx = append_rc(dummy, tx, config);
-    sign_tx_by_input_group(tx, 0, witnesses_len, config)
+    // for owner lock, the first input is an "always success" script: used as owner lock
+    let (begin_index, witnesses_len) = if config.is_owner_lock() {
+        (1, tx.witnesses().len() - 1)
+    } else {
+        (0, tx.witnesses().len())
+    };
+    sign_tx_by_input_group(tx, begin_index, witnesses_len, config)
 }
 
 fn build_proofs(proofs: Vec<Vec<u8>>, proof_masks: Vec<u8>) -> SmtProofEntryVec {
@@ -376,10 +385,9 @@ fn build_proofs(proofs: Vec<Vec<u8>>, proof_masks: Vec<u8>) -> SmtProofEntryVec 
 
 pub fn append_rc(
     dummy: &mut DummyDataLoader,
-    tx: TransactionView,
+    tx_builder: TransactionBuilder,
     config: &mut TestConfig,
-) -> TransactionView {
-    let tx_builder = tx.as_advanced_builder();
+) -> TransactionBuilder {
     let smt_key = config.id.to_smt_key();
     let (proofs, rc_datas, proof_masks) = generate_proofs(config.scheme, &vec![smt_key]);
     let (rc_root, b0) = generate_rce_cell(dummy, tx_builder, rc_datas);
@@ -388,7 +396,49 @@ pub fn append_rc(
     config.proof_masks = proof_masks;
     config.rc_root = rc_root.as_bytes();
 
-    b0.build()
+    b0
+}
+
+// when adding the input lock script as first one,
+// it will affect witness offset and length.
+pub fn append_input_lock_script_hash(
+    dummy: &mut DummyDataLoader,
+    tx_builder: TransactionBuilder,
+) -> (TransactionBuilder, Bytes) {
+    let mut rng = thread_rng();
+    let previous_tx_hash = {
+        let mut buf = [0u8; 32];
+        rng.fill(&mut buf);
+        buf.pack()
+    };
+    let previous_out_point = OutPoint::new(previous_tx_hash, 0);
+
+    let hash = CellOutput::calc_data_hash(&ALWAYS_SUCCESS);
+    let script = Script::new_builder()
+        .args(Default::default())
+        .code_hash(hash.clone())
+        .hash_type(ScriptHashType::Data.into())
+        .build();
+    let blake160 = {
+        let hash = script.calc_script_hash();
+        let mut res = BytesMut::new();
+        res.put(&hash.as_slice()[0..20]);
+        res.freeze()
+    };
+
+    let previous_output_cell = CellOutput::new_builder()
+        .capacity(Capacity::shannons(42).pack())
+        .lock(script)
+        .build();
+    dummy.cells.insert(
+        previous_out_point.clone(),
+        (previous_output_cell.clone(), Bytes::new()),
+    );
+    let tx_builder = tx_builder
+        .input(CellInput::new(previous_out_point, 0))
+        .witness(Default::default());
+
+    (tx_builder, blake160)
 }
 
 pub fn sign_tx_by_input_group(
@@ -451,15 +501,15 @@ pub fn sign_tx_by_input_group(
         .build()
 }
 
-pub fn gen_tx(dummy: &mut DummyDataLoader, config: &TestConfig) -> TransactionView {
+pub fn gen_tx(dummy: &mut DummyDataLoader, config: &mut TestConfig) -> TransactionView {
     let lock_args = config.gen_args();
-    gen_tx_with_grouped_args(dummy, vec![(lock_args, 1)], &config)
+    gen_tx_with_grouped_args(dummy, vec![(lock_args, 1)], config)
 }
 
 pub fn gen_tx_with_grouped_args(
     dummy: &mut DummyDataLoader,
     grouped_args: Vec<(Bytes, usize)>,
-    config: &TestConfig,
+    config: &mut TestConfig,
 ) -> TransactionView {
     let mut rng = thread_rng();
     // setup sighash_all dep
@@ -552,13 +602,41 @@ pub fn gen_tx_with_grouped_args(
         )
         .output_data(Bytes::new().pack());
 
-    for (args, inputs_size) in grouped_args {
+    if config.is_owner_lock() {
+        // insert an "always success" script as first input script.
+        let (b0, blake160) = append_input_lock_script_hash(dummy, tx_builder);
+        tx_builder = b0;
+        config.id.blake160 = blake160;
+    }
+    if config.is_rc() {
+        tx_builder = append_rc(dummy, tx_builder, config);
+    }
+
+    for (mut args, inputs_size) in grouped_args {
         // setup dummy input unlock script
         for _ in 0..inputs_size {
             let previous_tx_hash = {
                 let mut buf = [0u8; 32];
                 rng.fill(&mut buf);
                 buf.pack()
+            };
+            args = if config.is_owner_lock() {
+                if config.scheme == TestScheme::OwnerLockMismatched {
+                    config.id.blake160 = {
+                        let mut buf = BytesMut::new();
+                        buf.resize(20, 0);
+                        buf.freeze()
+                    };
+                    config.gen_args()
+                } else {
+                    config.gen_args()
+                }
+            } else {
+                if config.is_rc() {
+                    config.gen_args()
+                } else {
+                    args
+                }
             };
             let previous_out_point = OutPoint::new(previous_tx_hash, 0);
             let script = Script::new_builder()
@@ -575,12 +653,14 @@ pub fn gen_tx_with_grouped_args(
                 (previous_output_cell.clone(), Bytes::new()),
             );
             let mut random_extra_witness = Vec::<u8>::new();
-            random_extra_witness.resize(32, 0);
+            let witness_len = if config.scheme == TestScheme::LongWitness {
+                40000
+            } else {
+                32
+            };
+            random_extra_witness.resize(witness_len, 0);
             rng.fill(&mut random_extra_witness[..]);
 
-            if config.scheme == TestScheme::LongWitness {
-                random_extra_witness.resize(40000, 0);
-            }
             let witness_args = WitnessArgsBuilder::default()
                 .input_type(Some(Bytes::copy_from_slice(&random_extra_witness[..])).pack())
                 .build();
@@ -700,10 +780,12 @@ pub enum TestScheme {
     NotOnBlackList,
     BothOn,
     EmergencyHaltMode,
+
+    OwnerLockMismatched,
 }
 
 impl TestConfig {
-    pub fn new(flags: u8, lock_script_hash: Bytes) -> TestConfig {
+    pub fn new(flags: u8, _lock_script_hash: Bytes) -> TestConfig {
         let private_key = Generator::random_privkey();
         let pubkey = private_key.pubkey().expect("pubkey");
         let pubkey_hash = blake160(&pubkey.serialize());
@@ -712,11 +794,7 @@ impl TestConfig {
             if flags == IDENTITY_FLAGS_PUBKEY_HASH || flags == IDENTITY_FLAGS_PUBKEY_HASH_RC {
                 pubkey_hash
             } else {
-                assert!(lock_script_hash.len() >= 20);
-
-                let mut buf = BytesMut::new();
-                buf.put(&(lock_script_hash.as_ref())[0..20]);
-                buf.freeze()
+                Default::default()
             }
         };
         let rc_root: Bytes = {
@@ -746,6 +824,18 @@ impl TestConfig {
         bytes.put(self.id.blake160.as_ref());
         bytes.put(self.rc_root.as_ref());
         bytes.freeze()
+    }
+
+    pub fn is_owner_lock(&self) -> bool {
+        self.id.flags == IDENTITY_FLAGS_OWNER_LOCK || self.id.flags == IDENTITY_FLAGS_OWNER_LOCK_RC
+    }
+    pub fn is_pubkey_hash(&self) -> bool {
+        self.id.flags == IDENTITY_FLAGS_PUBKEY_HASH
+            || self.id.flags == IDENTITY_FLAGS_PUBKEY_HASH_RC
+    }
+    pub fn is_rc(&self) -> bool {
+        self.id.flags == IDENTITY_FLAGS_OWNER_LOCK_RC
+            || self.id.flags == IDENTITY_FLAGS_PUBKEY_HASH_RC
     }
 }
 
@@ -825,7 +915,7 @@ pub fn generate_rce_cell(
 
 pub fn generate_proofs(
     scheme: TestScheme,
-    script_hash: &Vec<[u8; 32]>,
+    smt_key: &Vec<[u8; 32]>,
 ) -> (Vec<Vec<u8>>, Vec<Bytes>, Vec<u8>) {
     let mut proofs = Vec::<Vec<u8>>::default();
     let mut rc_data = Vec::<Bytes>::default();
@@ -833,8 +923,8 @@ pub fn generate_proofs(
 
     match scheme {
         TestScheme::BothOn => {
-            let (proof1, rc_data1) = generate_single_proof(TestScheme::OnWhiteList, script_hash);
-            let (proof2, rc_data2) = generate_single_proof(TestScheme::OnBlackList, script_hash);
+            let (proof1, rc_data1) = generate_single_proof(TestScheme::OnWhiteList, smt_key);
+            let (proof2, rc_data2) = generate_single_proof(TestScheme::OnBlackList, smt_key);
             proofs.push(proof1);
             rc_data.push(rc_data1);
             proof_masks.push(3);
@@ -843,8 +933,8 @@ pub fn generate_proofs(
             proof_masks.push(3);
         }
         TestScheme::OnlyInputOnWhiteList => {
-            let (proof1, rc_data1) = generate_single_proof(TestScheme::OnWhiteList, script_hash);
-            let (proof2, rc_data2) = generate_single_proof(TestScheme::NotOnWhiteList, script_hash);
+            let (proof1, rc_data1) = generate_single_proof(TestScheme::OnWhiteList, smt_key);
+            let (proof2, rc_data2) = generate_single_proof(TestScheme::NotOnWhiteList, smt_key);
             proofs.push(proof1);
             rc_data.push(rc_data1);
             proof_masks.push(1); // input
@@ -854,8 +944,8 @@ pub fn generate_proofs(
             proof_masks.push(2); // output
         }
         TestScheme::OnlyOutputOnWhiteList => {
-            let (proof1, rc_data1) = generate_single_proof(TestScheme::NotOnWhiteList, script_hash);
-            let (proof2, rc_data2) = generate_single_proof(TestScheme::OnWhiteList, script_hash);
+            let (proof1, rc_data1) = generate_single_proof(TestScheme::NotOnWhiteList, smt_key);
+            let (proof2, rc_data2) = generate_single_proof(TestScheme::OnWhiteList, smt_key);
             proofs.push(proof1);
             rc_data.push(rc_data1);
             proof_masks.push(1); // input
@@ -865,8 +955,8 @@ pub fn generate_proofs(
             proof_masks.push(2); // output
         }
         TestScheme::BothOnWhiteList => {
-            let (proof1, rc_data1) = generate_single_proof(TestScheme::OnWhiteList, script_hash);
-            let (proof2, rc_data2) = generate_single_proof(TestScheme::OnWhiteList, script_hash);
+            let (proof1, rc_data1) = generate_single_proof(TestScheme::OnWhiteList, smt_key);
+            let (proof2, rc_data2) = generate_single_proof(TestScheme::OnWhiteList, smt_key);
             proofs.push(proof1);
             rc_data.push(rc_data1);
             proof_masks.push(1); // input
@@ -876,7 +966,7 @@ pub fn generate_proofs(
             proof_masks.push(2); // output
         }
         _ => {
-            let (proof1, rc_data1) = generate_single_proof(scheme, script_hash);
+            let (proof1, rc_data1) = generate_single_proof(scheme, smt_key);
             proofs.push(proof1);
             rc_data.push(rc_data1);
             proof_masks.push(3);
@@ -886,8 +976,8 @@ pub fn generate_proofs(
     (proofs, rc_data, proof_masks)
 }
 
-pub fn generate_single_proof(scheme: TestScheme, script_hash: &Vec<[u8; 32]>) -> (Vec<u8>, Bytes) {
-    let hash = script_hash.clone();
+pub fn generate_single_proof(scheme: TestScheme, smt_key: &Vec<[u8; 32]>) -> (Vec<u8>, Bytes) {
+    let hash = smt_key.clone();
     let mut is_black_list = false;
     let mut is_emergency_halt = false;
     let (smt_root, proof) = match scheme {
