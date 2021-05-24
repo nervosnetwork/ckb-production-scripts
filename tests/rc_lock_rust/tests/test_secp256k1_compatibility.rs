@@ -244,10 +244,12 @@ fn test_sighash_all_2_in_2_out_cycles() {
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
     let cycles = verify_result.expect("pass verification");
-
     // there is extra cycles, like parsing signature from witness, parsing args
     // so it will be larger than original secp256k1
-    assert!((CONSUME_CYCLES < cycles) && (cycles < (CONSUME_CYCLES + 300000)));
+    if cycles > (CONSUME_CYCLES + 150000) {
+        println!("the cycles is: {}", cycles);
+        assert!(false);
+    }
 }
 
 #[test]
