@@ -73,7 +73,7 @@ typedef struct ArgsType {
 
 // make compiler happy
 int make_cursor_from_witness(WitnessArgsType *witness, bool *_input) {
-  return 0;
+  return -1;
 }
 
 int extract_witness_lock(uint8_t *witness, uint64_t len,
@@ -196,7 +196,9 @@ int verify_secp256k1_blake160_sighash_all(uint8_t *pubkey_hash,
   blake2b_init(&blake2b_ctx, BLAKE2B_BLOCK_SIZE);
   blake2b_update(&blake2b_ctx, tx_hash, BLAKE2B_BLOCK_SIZE);
 
-  /* Clear lock field to zero, then digest the first witness */
+  /* Clear lock field to zero, then digest the first witness
+   * lock_bytes_seg.ptr actually points to the memory in temp buffer
+   * */
   memset((void *)lock_bytes_seg.ptr, 0, lock_bytes_seg.size);
   blake2b_update(&blake2b_ctx, (char *)&witness_len, sizeof(uint64_t));
   blake2b_update(&blake2b_ctx, temp, read_len);
