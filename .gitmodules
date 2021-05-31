@@ -6,5 +6,5 @@
 	url = https://github.com/nervosnetwork/ckb-c-stdlib.git
 [submodule "deps/ckb-c-stdlib-add-identity"]
 	path = deps/ckb-c-stdlib-add-identity
-	url = git@github.com:XuJiandong/ckb-c-stdlib.git
+	url = https://github.com/XuJiandong/ckb-c-stdlib.git
 	branch = add-identity
