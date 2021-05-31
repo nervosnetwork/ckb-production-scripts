@@ -54,9 +54,9 @@ pub const ERROR_OUTPUT_AMOUNT_NOT_ENOUGH: i8 = -42;
 pub const ERROR_NO_PAIR: i8 = -44;
 pub const ERROR_DUPLICATED_INPUTS: i8 = -45;
 pub const ERROR_DUPLICATED_OUTPUTS: i8 = -46;
-pub const ERROR_LOCK_SCRIPT_HASH_NOT_FOUND: i8 = 81;
+pub const ERROR_LOCK_SCRIPT_HASH_NOT_FOUND: i8 = 70;
 pub const ERROR_NOT_ON_WHITE_LIST: i8 = 59;
-pub const ERROR_NO_WHITE_LIST: i8 = 84;
+pub const ERROR_NO_WHITE_LIST: i8 = 83;
 pub const ERROR_ON_BLACK_LIST: i8 = 57;
 pub const ERROR_RCE_EMERGENCY_HALT: i8 = 54;
 

@@ -16,15 +16,15 @@ add_definitions(-DCKB_DECLARATION_ONLY)
 add_definitions(-DCKB_USE_SIM)
 
 include_directories(../../tests/rc_lock)
-include_directories(../../deps/ckb-c-stdlib-simulator-only2)
+include_directories(../../deps/ckb-c-stdlib-add-identity)
 # include_directories(deps/ckb-c-stdlib/libc)
 # on simulator, we don't use own "libc"
 include_directories(../../deps/secp256k1/src)
 include_directories(../../deps/secp256k1)
-include_directories(../../deps/ckb-c-stdlib-simulator-only2/molecule)
+include_directories(../../deps/ckb-c-stdlib-add-identity/molecule)
 include_directories(../../c)
 include_directories(../../build)
 
 add_executable(rc_lock_simulator ../../tests/rc_lock/rc_lock_sim.c)
 target_compile_definitions(rc_lock_simulator PUBLIC -D_FILE_OFFSET_BITS=64 -DCKB_DECLARATION_ONLY)
-target_include_directories(rc_lock_simulator PUBLIC deps/ckb-c-stdlib-simulator-only2/libc)
+target_include_directories(rc_lock_simulator PUBLIC deps/ckb-c-stdlib-add-identity/libc)
