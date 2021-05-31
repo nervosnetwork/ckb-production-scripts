@@ -1,9 +1,17 @@
 import xudt_rce;
 
-option SmtProofEntryVecOpt (SmtProofEntryVec);
+array Identity [byte; 21];
+
+table RcIdentity {
+    identity: Identity,
+    proofs: SmtProofEntryVec,
+}
+
+option RcIdentityOpt (RcIdentity);
 
 // the data structure used in lock field of witness
 table RcLockWitnessLock {
     signature: BytesOpt,
-    proofs: SmtProofEntryVecOpt,
+    rc_identity: RcIdentityOpt,
 }
+

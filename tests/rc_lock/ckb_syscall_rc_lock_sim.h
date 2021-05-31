@@ -56,8 +56,10 @@ typedef struct SIMRCRule {
 
 // set by users
 typedef struct RcLockSettingType {
-  uint8_t flags;          // in args in lock script
-  uint8_t blake160[20];   // in args in lock script
+  uint8_t flags;         // identity's flags
+  uint8_t blake160[20];  // identity's blake160
+  bool use_rc;  // rc or not: if yes, the identity is in witness; otherwise it's
+                // in args in lock script.
   uint8_t rc_root[32];    // in args in lock script
   uint8_t signature[65];  // in witness
 
@@ -72,9 +74,11 @@ typedef struct RcLockSettingType {
   // test scheme
   bool wrong_signature;
   bool wrong_pubkey_hash;
+  // owner lock without rc doesn't require witness
+  bool empty_witness;
 } RcLockSettingType;
 
-RcLockSettingType g_setting;
+RcLockSettingType g_setting = {0};
 
 void init_input(RcLockSettingType* input) {
   memset(input, 0, sizeof(RcLockSettingType));
@@ -122,22 +126,49 @@ mol_seg_t build_proof_vec(slice_t* proof, uint32_t proof_len) {
   return res.seg;
 }
 
+mol_seg_t build_identity(uint8_t flags, uint8_t* blake160) {
+  mol_builder_t b;
+  MolBuilder_Identity_init(&b);
+  b.data_ptr[0] = flags;
+  memcpy(&b.data_ptr[1], blake160, 20);
+  mol_seg_res_t res = MolBuilder_Identity_build(b);
+  ASSERT(res.errno == 0);
+  return res.seg;
+}
+
+mol_seg_t build_rc_identity(mol_seg_t* identity, mol_seg_t* proofs) {
+  mol_builder_t b;
+  MolBuilder_RcIdentity_init(&b);
+  MolBuilder_RcIdentity_set_identity(&b, identity->ptr, identity->size);
+  MolBuilder_RcIdentity_set_proofs(&b, proofs->ptr, proofs->size);
+
+  mol_seg_res_t res = MolBuilder_RcIdentity_build(b);
+  ASSERT(res.errno == 0);
+  return res.seg;
+}
+
 mol_seg_t build_witness_lock() {
   mol_builder_t witness_lock;
   MolBuilder_RcLockWitnessLock_init(&witness_lock);
 
-  mol_seg_t sig_bytes =
+  mol_seg_t signature =
       build_bytes(g_setting.signature, sizeof(g_setting.signature));
-  mol_seg_t proof_bytes =
-      build_proof_vec(g_setting.proofs, g_setting.proof_count);
+  mol_seg_t proofs = build_proof_vec(g_setting.proofs, g_setting.proof_count);
+  mol_seg_t identity = build_identity(g_setting.flags, g_setting.blake160);
+  mol_seg_t rc_identity = build_rc_identity(&identity, &proofs);
 
-  MolBuilder_RcLockWitnessLock_set_signature(&witness_lock, sig_bytes.ptr,
-                                             sig_bytes.size);
-  MolBuilder_RcLockWitnessLock_set_proofs(&witness_lock, proof_bytes.ptr,
-                                          proof_bytes.size);
+  MolBuilder_RcLockWitnessLock_set_signature(&witness_lock, signature.ptr,
+                                             signature.size);
+  if (g_setting.use_rc) {
+    MolBuilder_RcLockWitnessLock_set_rc_identity(&witness_lock, rc_identity.ptr,
+                                                 rc_identity.size);
+  }
 
-  free(sig_bytes.ptr);
-  free(proof_bytes.ptr);
+  free(signature.ptr);
+  free(proofs.ptr);
+  free(identity.ptr);
+  free(rc_identity.ptr);
+
   mol_seg_res_t res = MolBuilder_RcLockWitnessLock_build(witness_lock);
   ASSERT(res.errno == 0);
   return res.seg;
@@ -231,9 +262,7 @@ void convert_witness(void) {
 void convert_setting_to_states(void) {
   g_states.setting = g_setting;
   // IdentityFlagsPubkeyHash
-  // IdentityFlagsPubkeyHashRc
-  // need signature generated
-  if (g_setting.flags == 0 || g_setting.flags == 2) {
+  if (g_setting.flags == 0) {
     // make witness skeleton
     convert_witness();
     // sign
@@ -253,17 +282,21 @@ void convert_setting_to_states(void) {
     }
   }
   // will use rcrule, set rc root manually
-  if (g_setting.flags == 2 || g_setting.flags == 3) {
+  if (g_setting.use_rc) {
     convert_rcrule(g_setting.rc_root);
   }
   // make witness again, with correct signature
   convert_witness();
 
   // Script
-  uint8_t script_args[1 + 20 + 32];
-  script_args[0] = g_setting.flags;
-  memcpy(script_args + 1, g_setting.blake160, 20);
-  memcpy(script_args + 1 + 20, g_setting.rc_root, 32);
+  uint8_t script_args[1 + 20 + 32] = {0};
+  if (g_setting.use_rc) {
+    memcpy(script_args + 1 + 20, g_setting.rc_root, 32);
+  } else {
+    script_args[0] = g_setting.flags;
+    memcpy(script_args + 1, g_setting.blake160, 20);
+  }
+
   uint8_t code_hash[32] = {0};
 
   mol_seg_t script =
@@ -427,6 +460,12 @@ int ckb_load_witness(void* addr, uint64_t* len, size_t offset, size_t index,
   if (index > 0) {
     return CKB_INDEX_OUT_OF_BOUND;
   }
+
+  if (g_setting.empty_witness) {
+    *len = 0;
+    return 0;
+  }
+
   slice_t seg = g_states.witness[0];
 
   if (addr == NULL) {

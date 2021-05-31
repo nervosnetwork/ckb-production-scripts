@@ -25,7 +25,8 @@ use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::traits::Hasher;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 
-use rc_lock_test::rc_lock::{RcLockWitnessLock, SmtProofEntryVecOptBuilder};
+use rc_lock_test::rc_lock::{RcLockWitnessLock};
+use rc_lock_test::rc_lock;
 use rc_lock_test::xudt_rce_mol::{
     RCCellVecBuilder, RCDataBuilder, RCDataUnion, RCRuleBuilder, SmtProofBuilder,
     SmtProofEntryBuilder, SmtProofEntryVec, SmtProofEntryVecBuilder,
@@ -383,6 +384,7 @@ fn build_proofs(proofs: Vec<Vec<u8>>, proof_masks: Vec<u8>) -> SmtProofEntryVec 
     builder.build()
 }
 
+
 pub fn append_rc(
     dummy: &mut DummyDataLoader,
     tx_builder: TransactionBuilder,
@@ -448,6 +450,7 @@ pub fn sign_tx_by_input_group(
     config: &TestConfig,
 ) -> TransactionView {
     let proof_vec = build_proofs(config.proofs.clone(), config.proof_masks.clone());
+    let identity = config.id.to_identity();
     let tx_hash = tx.hash();
     let mut signed_witnesses: Vec<packed::Bytes> = tx
         .inputs()
@@ -460,7 +463,7 @@ pub fn sign_tx_by_input_group(
                 blake2b.update(&tx_hash.raw_data());
                 // digest the first witness
                 let witness = WitnessArgs::new_unchecked(tx.witnesses().get(i).unwrap().unpack());
-                let zero_lock = gen_zero_witness_lock(&proof_vec);
+                let zero_lock = gen_zero_witness_lock(config.use_rc, &proof_vec, &identity);
 
                 let witness_for_digest = witness
                     .clone()
@@ -480,7 +483,7 @@ pub fn sign_tx_by_input_group(
                 let message = CkbH256::from(message);
                 let sig = config.private_key.sign_recoverable(&message).expect("sign");
                 let sig_bytes = Bytes::from(sig.serialize());
-                let witness_lock = gen_witness_lock(sig_bytes, &proof_vec);
+                let witness_lock = gen_witness_lock(sig_bytes, config.use_rc, &proof_vec, &identity);
                 witness
                     .as_builder()
                     .lock(Some(witness_lock).pack())
@@ -674,6 +677,7 @@ pub fn gen_tx_with_grouped_args(
 }
 
 pub fn sign_tx_hash(tx: TransactionView, tx_hash: &[u8], config: &TestConfig) -> TransactionView {
+    let identity = config.id.to_identity();
     // calculate message
     let mut blake2b = ckb_hash::new_blake2b();
     let mut message = [0u8; 32];
@@ -682,7 +686,7 @@ pub fn sign_tx_hash(tx: TransactionView, tx_hash: &[u8], config: &TestConfig) ->
     let message = CkbH256::from(message);
     let sig = config.private_key.sign_recoverable(&message).expect("sign");
     let proofs = SmtProofEntryVecBuilder::default().build();
-    let witness_lock = gen_witness_lock(sig.serialize().into(), &proofs);
+    let witness_lock = gen_witness_lock(sig.serialize().into(), config.use_rc, &proofs, &identity);
     let witness_args = WitnessArgsBuilder::default()
         .lock(Some(witness_lock).pack())
         .build();
@@ -738,8 +742,7 @@ pub fn debug_printer(script: &Byte32, msg: &str) {
 
 pub const IDENTITY_FLAGS_PUBKEY_HASH: u8 = 0;
 pub const IDENTITY_FLAGS_OWNER_LOCK: u8 = 1;
-pub const IDENTITY_FLAGS_PUBKEY_HASH_RC: u8 = 2;
-pub const IDENTITY_FLAGS_OWNER_LOCK_RC: u8 = 3;
+
 
 pub struct Identity {
     pub flags: u8,
@@ -753,10 +756,17 @@ impl Identity {
         (&mut ret[1..21]).copy_from_slice(self.blake160.as_ref());
         ret
     }
+    pub fn to_identity(&self) -> rc_lock::Identity {
+        let mut ret: [u8; 21] = Default::default();
+        ret[0] = self.flags;
+        (&mut ret[1..21]).copy_from_slice(self.blake160.as_ref());
+        rc_lock::Identity::from_slice(&ret[..]).unwrap()
+    }
 }
 
 pub struct TestConfig {
     pub id: Identity,
+    pub use_rc: bool,
     pub scheme: TestScheme,
 
     pub rc_root: Bytes,
@@ -785,13 +795,13 @@ pub enum TestScheme {
 }
 
 impl TestConfig {
-    pub fn new(flags: u8, _lock_script_hash: Bytes) -> TestConfig {
+    pub fn new(flags: u8, use_rc: bool) -> TestConfig {
         let private_key = Generator::random_privkey();
         let pubkey = private_key.pubkey().expect("pubkey");
         let pubkey_hash = blake160(&pubkey.serialize());
 
         let blake160 = {
-            if flags == IDENTITY_FLAGS_PUBKEY_HASH || flags == IDENTITY_FLAGS_PUBKEY_HASH_RC {
+            if flags == IDENTITY_FLAGS_PUBKEY_HASH {
                 pubkey_hash
             } else {
                 Default::default()
@@ -805,6 +815,7 @@ impl TestConfig {
 
         TestConfig {
             id: Identity { flags, blake160 },
+            use_rc,
             rc_root,
             scheme: TestScheme::None,
             proofs: Default::default(),
@@ -820,40 +831,44 @@ impl TestConfig {
 
     pub fn gen_args(&self) -> Bytes {
         let mut bytes = BytesMut::with_capacity(128);
-        bytes.put_u8(self.id.flags);
-        bytes.put(self.id.blake160.as_ref());
-        bytes.put(self.rc_root.as_ref());
+        if self.use_rc {
+            bytes.resize(21, 0);
+            bytes.put(self.rc_root.as_ref());
+        } else {
+            bytes.put_u8(self.id.flags);
+            bytes.put(self.id.blake160.as_ref());
+        }
         bytes.freeze()
     }
 
     pub fn is_owner_lock(&self) -> bool {
-        self.id.flags == IDENTITY_FLAGS_OWNER_LOCK || self.id.flags == IDENTITY_FLAGS_OWNER_LOCK_RC
+        self.id.flags == IDENTITY_FLAGS_OWNER_LOCK
     }
     pub fn is_pubkey_hash(&self) -> bool {
         self.id.flags == IDENTITY_FLAGS_PUBKEY_HASH
-            || self.id.flags == IDENTITY_FLAGS_PUBKEY_HASH_RC
     }
     pub fn is_rc(&self) -> bool {
-        self.id.flags == IDENTITY_FLAGS_OWNER_LOCK_RC
-            || self.id.flags == IDENTITY_FLAGS_PUBKEY_HASH_RC
+        self.use_rc
     }
 }
 
-pub fn gen_witness_lock(sig: Bytes, proofs: &SmtProofEntryVec) -> Bytes {
-    let builder = RcLockWitnessLock::new_builder();
-    let proofs_builder = SmtProofEntryVecOptBuilder::default().set(Some(proofs.clone()));
 
-    builder
-        .signature(Some(sig).pack())
-        .proofs(proofs_builder.build())
-        .build()
-        .as_bytes()
+pub fn gen_witness_lock(sig: Bytes, use_rc: bool, proofs: &SmtProofEntryVec, identity: &rc_lock::Identity) -> Bytes {
+    let builder = RcLockWitnessLock::new_builder();
+    let rc_identity = rc_lock::RcIdentityBuilder::default().identity(identity.clone()).proofs(proofs.clone()).build();
+
+    let mut builder = builder.signature(Some(sig).pack());
+    if use_rc {
+        let opt = rc_lock::RcIdentityOpt::new_unchecked(rc_identity.as_bytes());
+        builder = builder.rc_identity(opt);
+    }
+    builder.build().as_bytes()
 }
 
-pub fn gen_zero_witness_lock(proofs: &SmtProofEntryVec) -> Bytes {
+pub fn gen_zero_witness_lock(use_rc: bool, proofs: &SmtProofEntryVec, identity: &rc_lock::Identity) -> Bytes {
     let mut zero = BytesMut::new();
     zero.resize(65, 0);
-    let witness_lock = gen_witness_lock(zero.freeze(), proofs);
+    let witness_lock = gen_witness_lock(zero.freeze(), use_rc, proofs, identity);
 
     let mut res = BytesMut::new();
     res.resize(witness_lock.len(), 0);

@@ -23,7 +23,7 @@ lazy_static! {}
 fn test_sighash_all_unlock() {
     let mut data_loader = DummyDataLoader::new();
 
-    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, Default::default());
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, false);
 
     let tx = gen_tx(&mut data_loader, &mut config);
     let tx = sign_tx(&mut data_loader, tx, &mut config);
@@ -38,7 +38,7 @@ fn test_sighash_all_unlock() {
 #[test]
 fn test_sighash_all_unlock_with_args() {
     let mut data_loader = DummyDataLoader::new();
-    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, Default::default());
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, false);
     let args = config.gen_args();
 
     let tx = gen_tx_with_grouped_args(&mut data_loader, vec![(args, 1)], &mut config);
@@ -54,7 +54,7 @@ fn test_sighash_all_unlock_with_args() {
 #[test]
 fn test_sighash_all_with_extra_witness_unlock() {
     let mut data_loader = DummyDataLoader::new();
-    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, Default::default());
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, false);
 
     let tx = gen_tx(&mut data_loader, &mut config);
     let extract_witness = vec![1, 2, 3, 4];
@@ -146,10 +146,10 @@ fn test_sighash_all_with_grouped_inputs_unlock() {
 #[test]
 fn test_sighash_all_with_2_different_inputs_unlock() {
     let mut data_loader = DummyDataLoader::new();
-    let mut config1 = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, Default::default());
+    let mut config1 = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, false);
     let args1 = config1.gen_args();
 
-    let mut config2 = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, Default::default());
+    let mut config2 = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, false);
     let args2 = config2.gen_args();
 
     // sign with 2 keys
@@ -167,7 +167,7 @@ fn test_sighash_all_with_2_different_inputs_unlock() {
 fn test_signing_with_wrong_key() {
     let mut data_loader = DummyDataLoader::new();
 
-    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, Default::default());
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, false);
     // make it to wrong private key
     config.private_key = Generator::random_privkey();
 
@@ -186,7 +186,7 @@ fn test_signing_with_wrong_key() {
 fn test_signing_wrong_tx_hash() {
     let mut data_loader = DummyDataLoader::new();
 
-    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, Default::default());
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, false);
 
     let tx = gen_tx(&mut data_loader, &mut config);
     let tx = {
@@ -208,7 +208,7 @@ fn test_signing_wrong_tx_hash() {
 fn test_super_long_witness() {
     let mut data_loader = DummyDataLoader::new();
 
-    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, Default::default());
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, false);
     config.set_scheme(TestScheme::LongWitness);
 
     let tx = gen_tx(&mut data_loader, &mut config);
@@ -227,8 +227,8 @@ fn test_sighash_all_2_in_2_out_cycles() {
 
     let mut data_loader = DummyDataLoader::new();
 
-    let mut config1 = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, Default::default());
-    let config2 = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, Default::default());
+    let mut config1 = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, false);
+    let config2 = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, false);
 
     // sign with 2 keys
     let tx = gen_tx_with_grouped_args(
@@ -255,7 +255,7 @@ fn test_sighash_all_2_in_2_out_cycles() {
 #[test]
 fn test_sighash_all_witness_append_junk_data() {
     let mut data_loader = DummyDataLoader::new();
-    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, Default::default());
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, false);
 
     // sign with 2 keys
     let tx = gen_tx_with_grouped_args(&mut data_loader, vec![(config.gen_args(), 2)], &mut config);
@@ -290,7 +290,7 @@ fn test_sighash_all_witness_args_ambiguity() {
     // this case will fail if contract use a naive function to digest witness.
 
     let mut data_loader = DummyDataLoader::new();
-    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, Default::default());
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, false);
 
     let tx = gen_tx_with_grouped_args(&mut data_loader, vec![(config.gen_args(), 2)], &mut config);
     let tx = sign_tx_by_input_group(tx, 0, 2, &mut config);
@@ -332,7 +332,7 @@ fn test_sighash_all_witnesses_ambiguity() {
     // this case will fail if contract use a naive function to digest witness.
 
     let mut data_loader = DummyDataLoader::new();
-    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, Default::default());
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, false);
 
     let tx = gen_tx_with_grouped_args(&mut data_loader, vec![(config.gen_args(), 3)], &mut config);
     let witness = Unpack::<Vec<_>>::unpack(&tx.witnesses()).remove(0);
@@ -370,7 +370,7 @@ fn test_sighash_all_witnesses_ambiguity() {
 #[test]
 fn test_sighash_all_cover_extra_witnesses() {
     let mut data_loader = DummyDataLoader::new();
-    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, Default::default());
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, false);
 
     let tx = gen_tx_with_grouped_args(&mut data_loader, vec![(config.gen_args(), 2)], &mut config);
     let witness = Unpack::<Vec<_>>::unpack(&tx.witnesses()).remove(0);
