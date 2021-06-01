@@ -12,20 +12,19 @@ int ckb_exit(signed char);
 #include "blockchain-api2.h"
 #include "blockchain.h"
 #include "ckb_consts.h"
-#include "blake2b.h"
+
 #if defined(CKB_USE_SIM)
 #include "ckb_syscall_rc_lock_sim.h"
 #else
 #include "ckb_syscalls.h"
 #endif
-
+#include "ckb_identity.h"
 #include "ckb_smt.h"
-#include "secp256k1_helper.h"
+
 // CHECK is defined in secp256k1
 #undef CHECK
 #include "rce.h"
 #include "rc_lock_mol2.h"
-#include "ckb_identity.h"
 // clang-format on
 
 #define SCRIPT_SIZE 32768
@@ -106,9 +105,12 @@ int make_witness(WitnessArgsType *witness) {
   uint64_t witness_len = 0;
   size_t source = CKB_SOURCE_GROUP_INPUT;
   err = ckb_load_witness(NULL, &witness_len, 0, 0, source);
-  CHECK(err);
-  // witness can be empty
-  //  CHECK2(witness_len > 0, ERROR_INVALID_MOL_FORMAT);
+  // when witness is missing, empty or not accessible, make it zero length.
+  // don't fail, because owner lock without rc doesn't require witness.
+  // when it's zero length, any further actions on witness will fail.
+  if (err != 0) {
+    witness_len = 0;
+  }
 
   mol2_cursor_t cur;
 
@@ -130,9 +132,7 @@ int make_witness(WitnessArgsType *witness) {
 
   *witness = make_WitnessArgs(&cur);
 
-  err = 0;
-exit:
-  return err;
+  return 0;
 }
 
 int verify_identity(CkbIdentityType *id, SmtProofEntryVecType *proofs,
@@ -252,6 +252,8 @@ int main() {
 
   // regulation compliance
   if (has_rc_identity) {
+    CHECK2(witness_lock_existing, ERROR_INVALID_MOL_FORMAT);
+
     // collect rc rules
     RceState rce_state;
     rce_init_state(&rce_state);

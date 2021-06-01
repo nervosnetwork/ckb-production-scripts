@@ -7,6 +7,8 @@
 #undef ASSERT
 #include <assert.h>
 #define ASSERT assert
+#include <blake2b.h>
+
 #include "include/secp256k1.h"
 #include "include/secp256k1_recovery.h"
 #include "rc_lock_mol.h"

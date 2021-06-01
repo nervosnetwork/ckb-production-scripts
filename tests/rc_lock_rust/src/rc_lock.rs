@@ -11,7 +11,6 @@ use super::xudt_rce_mol::*;
 
 use molecule::prelude::*;
 
-
 #[derive(Clone)]
 pub struct Identity(molecule::bytes::Bytes);
 impl ::core::fmt::LowerHex for Identity {

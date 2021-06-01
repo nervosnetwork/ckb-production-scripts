@@ -54,8 +54,9 @@ UTEST(pubkey_hash, wrong_signature) {
   convert_setting_to_states();
 
   int r = simulator_main();
-  bool b = (r == ERROR_PUBKEY_BLAKE160_HASH || r == ERROR_SECP_RECOVER_PUBKEY ||
-            r == ERROR_SECP_PARSE_SIGNATURE);
+  bool b = (r == ERROR_IDENTITY_PUBKEY_BLAKE160_HASH ||
+            r == ERROR_IDENTITY_SECP_RECOVER_PUBKEY ||
+            r == ERROR_IDENTITY_SECP_PARSE_SIGNATURE);
   ASSERT_TRUE(b);
 }
 
@@ -67,7 +68,7 @@ UTEST(pubkey_hash, wrong_pubkey_hash) {
   convert_setting_to_states();
 
   int r = simulator_main();
-  ASSERT_EQ(ERROR_PUBKEY_BLAKE160_HASH, r);
+  ASSERT_EQ(ERROR_IDENTITY_PUBKEY_BLAKE160_HASH, r);
 }
 
 UTEST(owner_lock, pass) {
@@ -125,7 +126,7 @@ UTEST(owner_lock, not_pass) {
   convert_setting_to_states();
 
   int r = simulator_main();
-  ASSERT_EQ(ERROR_LOCK_SCRIPT_HASH_NOT_FOUND, r);
+  ASSERT_EQ(ERROR_IDENTITY_LOCK_SCRIPT_HASH_NOT_FOUND, r);
 }
 
 void set_smt_settings(uint8_t flags, slice_t* rc_rules, slice_t* proofs,

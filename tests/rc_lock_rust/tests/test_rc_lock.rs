@@ -30,6 +30,23 @@ fn test_simple_owner_lock() {
 }
 
 #[test]
+fn test_owner_lock_without_witness() {
+    let mut data_loader = DummyDataLoader::new();
+
+    let mut config = TestConfig::new(IDENTITY_FLAGS_OWNER_LOCK, false);
+    config.scheme2 = TestScheme2::NoWitness;
+
+    let tx = gen_tx(&mut data_loader, &mut config);
+    let tx = sign_tx(&mut data_loader, tx, &mut config);
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    verify_result.expect("pass verification");
+}
+
+#[test]
 fn test_simple_owner_lock_mismatched() {
     let mut data_loader = DummyDataLoader::new();
 
@@ -64,6 +81,24 @@ fn test_owner_lock_on_wl() {
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
     verify_result.expect("pass verification");
+}
+
+#[test]
+fn test_owner_lock_on_wl_without_witness() {
+    let mut data_loader = DummyDataLoader::new();
+
+    let mut config = TestConfig::new(IDENTITY_FLAGS_OWNER_LOCK, true);
+    config.scheme = TestScheme::OnWhiteList;
+    config.scheme2 = TestScheme2::NoWitness;
+
+    let tx = gen_tx(&mut data_loader, &mut config);
+    let tx = sign_tx(&mut data_loader, tx, &mut config);
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    assert!(verify_result.is_err());
 }
 
 #[test]
@@ -167,6 +202,24 @@ fn test_pubkey_hash_on_wl() {
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
     verify_result.expect("pass verification");
+}
+
+#[test]
+fn test_pubkey_hash_on_wl_without_witness() {
+    let mut data_loader = DummyDataLoader::new();
+
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, true);
+    config.scheme = TestScheme::OnWhiteList;
+    config.scheme2 = TestScheme2::NoWitness;
+
+    let tx = gen_tx(&mut data_loader, &mut config);
+    let tx = sign_tx(&mut data_loader, tx, &mut config);
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    assert!(verify_result.is_err());
 }
 
 #[test]

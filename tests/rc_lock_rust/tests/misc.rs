@@ -25,8 +25,8 @@ use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::traits::Hasher;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 
-use rc_lock_test::rc_lock::{RcLockWitnessLock};
 use rc_lock_test::rc_lock;
+use rc_lock_test::rc_lock::RcLockWitnessLock;
 use rc_lock_test::xudt_rce_mol::{
     RCCellVecBuilder, RCDataBuilder, RCDataUnion, RCRuleBuilder, SmtProofBuilder,
     SmtProofEntryBuilder, SmtProofEntryVec, SmtProofEntryVecBuilder,
@@ -384,7 +384,6 @@ fn build_proofs(proofs: Vec<Vec<u8>>, proof_masks: Vec<u8>) -> SmtProofEntryVec 
     builder.build()
 }
 
-
 pub fn append_rc(
     dummy: &mut DummyDataLoader,
     tx_builder: TransactionBuilder,
@@ -483,7 +482,8 @@ pub fn sign_tx_by_input_group(
                 let message = CkbH256::from(message);
                 let sig = config.private_key.sign_recoverable(&message).expect("sign");
                 let sig_bytes = Bytes::from(sig.serialize());
-                let witness_lock = gen_witness_lock(sig_bytes, config.use_rc, &proof_vec, &identity);
+                let witness_lock =
+                    gen_witness_lock(sig_bytes, config.use_rc, &proof_vec, &identity);
                 witness
                     .as_builder()
                     .lock(Some(witness_lock).pack())
@@ -497,6 +497,9 @@ pub fn sign_tx_by_input_group(
         .collect();
     for i in signed_witnesses.len()..tx.witnesses().len() {
         signed_witnesses.push(tx.witnesses().get(i).unwrap());
+    }
+    if config.scheme2 == TestScheme2::NoWitness {
+        signed_witnesses.clear();
     }
     // calculate message
     tx.as_advanced_builder()
@@ -743,7 +746,6 @@ pub fn debug_printer(script: &Byte32, msg: &str) {
 pub const IDENTITY_FLAGS_PUBKEY_HASH: u8 = 0;
 pub const IDENTITY_FLAGS_OWNER_LOCK: u8 = 1;
 
-
 pub struct Identity {
     pub flags: u8,
     pub blake160: Bytes,
@@ -768,7 +770,7 @@ pub struct TestConfig {
     pub id: Identity,
     pub use_rc: bool,
     pub scheme: TestScheme,
-
+    pub scheme2: TestScheme2,
     pub rc_root: Bytes,
     pub proofs: Vec<Vec<u8>>,
     pub proof_masks: Vec<u8>,
@@ -792,6 +794,13 @@ pub enum TestScheme {
     EmergencyHaltMode,
 
     OwnerLockMismatched,
+    OwnerLockWithoutWitness,
+}
+
+#[derive(Copy, Clone, PartialEq)]
+pub enum TestScheme2 {
+    None,
+    NoWitness,
 }
 
 impl TestConfig {
@@ -818,6 +827,7 @@ impl TestConfig {
             use_rc,
             rc_root,
             scheme: TestScheme::None,
+            scheme2: TestScheme2::None,
             proofs: Default::default(),
             proof_masks: Default::default(),
             private_key,
@@ -852,10 +862,17 @@ impl TestConfig {
     }
 }
 
-
-pub fn gen_witness_lock(sig: Bytes, use_rc: bool, proofs: &SmtProofEntryVec, identity: &rc_lock::Identity) -> Bytes {
+pub fn gen_witness_lock(
+    sig: Bytes,
+    use_rc: bool,
+    proofs: &SmtProofEntryVec,
+    identity: &rc_lock::Identity,
+) -> Bytes {
     let builder = RcLockWitnessLock::new_builder();
-    let rc_identity = rc_lock::RcIdentityBuilder::default().identity(identity.clone()).proofs(proofs.clone()).build();
+    let rc_identity = rc_lock::RcIdentityBuilder::default()
+        .identity(identity.clone())
+        .proofs(proofs.clone())
+        .build();
 
     let mut builder = builder.signature(Some(sig).pack());
     if use_rc {
@@ -865,7 +882,11 @@ pub fn gen_witness_lock(sig: Bytes, use_rc: bool, proofs: &SmtProofEntryVec, ide
     builder.build().as_bytes()
 }
 
-pub fn gen_zero_witness_lock(use_rc: bool, proofs: &SmtProofEntryVec, identity: &rc_lock::Identity) -> Bytes {
+pub fn gen_zero_witness_lock(
+    use_rc: bool,
+    proofs: &SmtProofEntryVec,
+    identity: &rc_lock::Identity,
+) -> Bytes {
     let mut zero = BytesMut::new();
     zero.resize(65, 0);
     let witness_lock = gen_witness_lock(zero.freeze(), use_rc, proofs, identity);
