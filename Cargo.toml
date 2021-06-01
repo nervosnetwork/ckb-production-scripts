@@ -1,12 +1,12 @@
 [package]
-name = "ckb-system-scripts"
+name = "ckb-production-scripts"
 version = "0.5.1"
 authors = ["Nervos Core Dev <dev@nervos.org>"]
 edition = "2018"
 build = "build.rs"
 license = "MIT"
-description = "CKB System Scripts"
-repository = "https://github.com/nervosnetwork/ckb-system-scripts"
+description = "CKB Production Scripts"
+repository = "https://github.com/nervosnetwork/ckb-production-scripts"
 include = ["src/**/*", "Cargo.toml", "build.rs", "specs/cells/*"]
 
 [dependencies]
