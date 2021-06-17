@@ -279,6 +279,9 @@ int main() {
         mol2_read_at(&proof_cursor, proof, MAX_PROOF_LENGTH);
     CHECK2(proof_length == proof_cursor.size, ERROR_INVALID_MOL_FORMAT);
 
+    smt_state_normalize(&states);
+    smt_state_normalize(&old_states);
+
     // First validate old values & proof are correct
     err = smt_verify(input_hash, &old_states, proof, proof_length);
     CHECK2(err == 0, ERROR_SMT_VERIFY_FAILED);
