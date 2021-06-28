@@ -1,8 +1,4 @@
-#if defined(CKB_COVERAGE)
 #define ASSERT(s) (void)0
-#else
-#define ASSERT(s) (void)0
-#endif
 
 int ckb_exit(signed char code);
 
@@ -10,9 +6,9 @@ int ckb_exit(signed char code);
 #include "utest.h"
 
 // make compiler happy
-int make_cursor_from_witness(WitnessArgsType *witness) {
+int make_cursor_from_witness(WitnessArgsType *witness, bool *use_input_type) {
   ASSERT(false);
-  return 0;
+  return -1;
 }
 
 // reset all status

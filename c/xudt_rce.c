@@ -208,6 +208,7 @@ int get_extension_data(uint32_t index, uint8_t* buff, uint32_t buff_len,
   CHECK2(buff_len >= extension_data.size, ERROR_INVALID_MOL_FORMAT);
 
   *out_len = mol2_read_at(&extension_data, buff, buff_len);
+  CHECK2(*out_len == extension_data.size, ERROR_INVALID_MOL_FORMAT);
 
   err = 0;
 exit:
@@ -238,7 +239,7 @@ int load_raw_extension_data(uint8_t** var_data, uint32_t* var_len) {
 
   uint32_t read_len =
       mol2_read_at(&script_vec.cur, g_raw_extension_data, RAW_EXTENSION_SIZE);
-  CHECK2(read_len >= script_vec.cur.size, ERROR_INVALID_MOL_FORMAT);
+  CHECK2(read_len == script_vec.cur.size, ERROR_INVALID_MOL_FORMAT);
 
   *var_data = g_raw_extension_data;
   *var_len = read_len;
