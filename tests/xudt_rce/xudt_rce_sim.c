@@ -54,22 +54,23 @@ void set_basic_data() {
 //  uint8_t input_lock_script_hash[32] = {11};
 //  uint8_t output_lock_script_hash[32] = {22};
 
-uint8_t BLACK_LIST_HASH_ROOT[32] = {143, 95,  66,  207, 251, 51,  58,  199,
-                                    247, 61,  211, 60,  28,  25,  51,  99,
-                                    174, 94,  226, 239, 134, 201, 125, 79,
-                                    63,  194, 180, 109, 161, 2,   92,  178};
+uint8_t BLACK_LIST_HASH_ROOT[32] = {121, 127, 78,  214, 231, 172, 41,  53,
+                                    107, 94,  203, 98,  176, 206, 210, 159,
+                                    244, 78,  27,  16,  55,  143, 233, 241,
+                                    40,  121, 79,  244, 222, 150, 136, 137};
 uint8_t BLACK_LIST_PROOF[] = {
-    76,  76,  72,  4,   80,  6,   62,  195, 223, 65,  89,  79,  50, 133, 172,
-    95,  118, 228, 237, 101, 113, 8,   175, 152, 171, 153, 202, 45, 125, 177,
-    0,   236, 236, 176, 183, 31,  109, 113, 80,  7,   88,  178, 89, 155, 132,
-    146, 222, 163, 40,  147, 106, 150, 97,  234, 134, 107, 237, 60, 9,   193,
-    0,   16,  226, 17,  209, 89,  52,  22,  71,  135, 172, 225};
+    76,  79,  4,   76,  79,  4,   72,  79,  1,   80,  68,  166, 240,
+    37,  234, 147, 239, 73,  241, 170, 252, 24,  233, 166, 13,  8,
+    144, 122, 200, 58,  112, 81,  253, 153, 233, 209, 147, 183, 52,
+    155, 85,  36,  80,  198, 252, 191, 18,  88,  112, 77,  185, 211,
+    179, 13,  34,  7,   199, 106, 69,  171, 141, 45,  88,  159, 113,
+    109, 12,  63,  4,   100, 18,  126, 233, 206, 7,   79,  248};
 
-uint8_t WHITE_LIST_HASH_ROOT[32] = {151, 81,  37,  242, 189, 99,  62,  175,
-                                    115, 9,   251, 94,  105, 190, 173, 153,
-                                    42,  249, 87,  115, 253, 152, 110, 88,
-                                    1,   58,  224, 21,  51,  99,  72,  182};
-uint8_t WHITE_LIST_PROOF[] = {76, 76, 72, 4};
+uint8_t WHITE_LIST_HASH_ROOT[32] = {235, 105, 210, 194, 186, 219, 171, 181,
+                                    169, 162, 220, 64,  221, 213, 52,  91,
+                                    187, 59,  99,  192, 244, 1,   14,  56,
+                                    150, 148, 52,  203, 11,  89,  95,  209};
+uint8_t WHITE_LIST_PROOF[] = {76, 79, 4, 76, 79, 4, 72, 79, 251};
 
 void set_rce_not_on_black_list_data() {
   int err = 0;
@@ -216,19 +217,21 @@ UTEST(rce, both_input_and_output_on_white_list) {
   xudt_begin_data();
   set_basic_data();
 
-  uint8_t hash_root1[] = {151, 81,  37,  242, 189, 99, 62,  175, 115, 9,   251,
-                          94,  105, 190, 173, 153, 42, 249, 87,  115, 253, 152,
-                          110, 88,  1,   58,  224, 21, 51,  99,  72,  182};
-  uint8_t proof1[] = {76,  80,  4,   157, 181, 3,   109, 35,  79,  233, 114, 91,
-                      219, 188, 99,  77,  45,  214, 230, 222, 170, 154, 162, 63,
-                      51,  85,  254, 115, 15,  23,  166, 5,   21,  254, 51};
+  uint8_t hash_root1[] = {235, 105, 210, 194, 186, 219, 171, 181, 169, 162, 220,
+                          64,  221, 213, 52,  91,  187, 59,  99,  192, 244, 1,
+                          14,  56,  150, 148, 52,  203, 11,  89,  95,  209};
+  uint8_t proof1[] = {76,  79,  4,   80,  58,  202, 6,   201, 251, 46,
+                      183, 51,  211, 183, 198, 250, 208, 62,  52,  163,
+                      250, 80,  8,   117, 112, 98,  196, 129, 140, 105,
+                      65,  143, 93,  89,  246, 166, 79,  251};
 
-  uint8_t hash_root2[] = {151, 81,  37,  242, 189, 99, 62,  175, 115, 9,   251,
-                          94,  105, 190, 173, 153, 42, 249, 87,  115, 253, 152,
-                          110, 88,  1,   58,  224, 21, 51,  99,  72,  182};
-  uint8_t proof2[] = {76, 80,  4,   96,  186, 33,  226, 13, 35,  104, 150, 165,
-                      4,  223, 103, 18,  193, 40,  37,  99, 107, 99,  12,  175,
-                      14, 142, 165, 116, 90,  255, 239, 90, 63,  128, 35};
+  uint8_t hash_root2[] = {235, 105, 210, 194, 186, 219, 171, 181, 169, 162, 220,
+                          64,  221, 213, 52,  91,  187, 59,  99,  192, 244, 1,
+                          14,  56,  150, 148, 52,  203, 11,  89,  95,  209};
+  uint8_t proof2[] = {76,  79,  4,   80,  7,   254, 28,  186, 6,   69,
+                      212, 48,  120, 112, 200, 117, 139, 175, 188, 251,
+                      98,  186, 61,  215, 102, 198, 181, 210, 37,  254,
+                      148, 30,  164, 112, 118, 218, 79,  251};
 
   uint16_t rcrulevec[MAX_RCRULE_IN_CELL] = {0};
   rcrulevec[0] = rce_add_rcrule(hash_root1, 0x2);
@@ -470,15 +473,16 @@ UTEST(smt, verify_not_existing) {
   uint8_t value1[32] = {0};
   uint8_t key2[32] = {22};
   uint8_t value2[32] = {0};
-  uint8_t root_hash[32] = {143, 95, 66, 207, 251, 51,  58,  199, 247, 61,  211,
-                           60,  28, 25, 51,  99,  174, 94,  226, 239, 134, 201,
-                           125, 79, 63, 194, 180, 109, 161, 2,   92,  178};
-  uint8_t proof[] = {
-      76,  76,  72,  4,   80,  6,   62,  195, 223, 65,  89,  79,  50, 133, 172,
-      95,  118, 228, 237, 101, 113, 8,   175, 152, 171, 153, 202, 45, 125, 177,
-      0,   236, 236, 176, 183, 31,  109, 113, 80,  7,   88,  178, 89, 155, 132,
-      146, 222, 163, 40,  147, 106, 150, 97,  234, 134, 107, 237, 60, 9,   193,
-      0,   16,  226, 17,  209, 89,  52,  22,  71,  135, 172, 225};
+  uint8_t root_hash[32] = {121, 127, 78,  214, 231, 172, 41,  53,  107, 94, 203,
+                           98,  176, 206, 210, 159, 244, 78,  27,  16,  55, 143,
+                           233, 241, 40,  121, 79,  244, 222, 150, 136, 137};
+  uint8_t proof[] = {76,  79,  4,   76,  79,  4,   72,  79,  1,   80,  68,
+                     166, 240, 37,  234, 147, 239, 73,  241, 170, 252, 24,
+                     233, 166, 13,  8,   144, 122, 200, 58,  112, 81,  253,
+                     153, 233, 209, 147, 183, 52,  155, 85,  36,  80,  198,
+                     252, 191, 18,  88,  112, 77,  185, 211, 179, 13,  34,
+                     7,   199, 106, 69,  171, 141, 45,  88,  159, 113, 109,
+                     12,  63,  4,   100, 18,  126, 233, 206, 7,   79,  248};
 
   smt_pair_t entries[8];
   smt_state_t changes;
@@ -493,6 +497,8 @@ UTEST(smt, verify_not_existing) {
 // this is the case from
 // https://github.com/nervosnetwork/ckb-simple-account-layer/blob/1970c0382271837ff46fdc276c5b63bccb4324db/c/tests/main.c#L136
 // the names are changed accordingly.
+// --hex --kvpair --exclude
+// 0x0101010101010101010101010101010101010101010101010101010101010101 1 1
 UTEST(smt, verify_empty) {
   uint8_t key[32];
   uint8_t value[32];
@@ -504,8 +510,10 @@ UTEST(smt, verify_empty) {
   hex2bin(value,
           "0x0000000000000000000000000000000000000000000000000000000000000000");
   hex2bin(root_hash,
-          "0x0000000000000000000000000000000000000000000000000000000000000000");
-  int proof_length = hex2bin(proof, "0x4c");
+          "0x64fb91a9319ff2b3169f2127b5781bbc01d29258e1f946401fef812ef2182deb");
+  int proof_length = hex2bin(proof,
+                             "0x4c4ff85029720fdae893cd8e7291da6c0d1e9341d796cb2"
+                             "8999762b64f99151a86c5cb504f07");
 
   smt_pair_t entries[8];
   smt_state_t changes;
@@ -527,10 +535,10 @@ UTEST(smt, verify_empty2) {
   hex2bin(value,
           "0x0000000000000000000000000000000000000000000000000000000000000000");
   hex2bin(root_hash,
-          "0x27cdd63d6d03e2a8dfc28d1919def1324b11b44733937ce66b8cf343a2fb536e");
+          "0x797f4ed6e7ac29356b5ecb62b0ced29ff44e1b10378fe9f128794ff4de968889");
   int proof_length = hex2bin(proof,
-                             "0x4c50f027cdd63d6d03e2a8dfc28d1919def1324b11b4473"
-                             "3937ce66b8cf343a2fb536e");
+                             "0x4c4ff850b33575f3031d5a0bb435aabaa9b1040b69cc31b"
+                             "09c0512091a0165966ef9300e4f07");
 
   smt_pair_t entries[8];
   smt_state_t changes;
@@ -541,6 +549,9 @@ UTEST(smt, verify_empty2) {
   ASSERT_EQ(0, smt_verify(root_hash, &changes, proof, proof_length));
 }
 
+// --hex --kvpair --include "0"
+// 0x381dc5391dab099da5e28acd1ad859a051cf18ace804d037f12819c6fbc0e18b
+// 0x9158ce9b0e11dd150ba2ae5d55c1db04b1c5986ec626f2e38a93fe8ad0b2923b 11 11
 UTEST(smt, verify1) {
   uint8_t key[32];
   uint8_t value[32];
@@ -552,11 +563,10 @@ UTEST(smt, verify1) {
   hex2bin(value,
           "0x9158ce9b0e11dd150ba2ae5d55c1db04b1c5986ec626f2e38a93fe8ad0b2923b");
   hex2bin(root_hash,
-          "0xa4cbf1b69a848396ac759f362679e2b185ac87a17cba747d2db1ef6fd929042f");
-  int proof_length = hex2bin(
-      proof,
-      "0x4c50f85faa7bccd1095c904fe34c99236f0734f909823d8d48b81b0b92bab531f372c1"
-      "50fe3f2a0a59ba1081f2d343682b200a778191a4e5838a46774eda8e1ee201c6cb2f");
+          "0x28b0daae982888947a3d75259c21247143008b3de07b136ddc1148c2cc9d0c0b");
+  int proof_length = hex2bin(proof,
+                             "0x4c4fff500881fe7c405d49f5067dfed14bea9297a98b9c3"
+                             "b161ee221e8f58d12724bd423");
 
   smt_pair_t entries[8];
   smt_state_t changes;
@@ -567,6 +577,10 @@ UTEST(smt, verify1) {
   ASSERT_EQ(0, smt_verify(root_hash, &changes, proof, proof_length));
 }
 
+// run -- --hex --kvpair --include "0"
+// 0xa9bb945be71f0bd2757d33d2465b6387383da42f321072e47472f0c9c7428a8a
+// 0xa939a47335f777eac4c40fbc0970e25f832a24e1d55adc45a7b76d63fe364e82  11 11 22
+// 22
 UTEST(smt, verify2) {
   uint8_t key[32];
   uint8_t value[32];
@@ -578,11 +592,10 @@ UTEST(smt, verify2) {
   hex2bin(value,
           "0xa939a47335f777eac4c40fbc0970e25f832a24e1d55adc45a7b76d63fe364e82");
   hex2bin(root_hash,
-          "0xa4cbf1b69a848396ac759f362679e2b185ac87a17cba747d2db1ef6fd929042f");
-  int proof_length = hex2bin(
-      proof,
-      "0x4c50f8a9cee9b111fddde5dd16c6684715587ba628bf73407e03e9db579e41af0c09b8"
-      "50fe3f2a0a59ba1081f2d343682b200a778191a4e5838a46774eda8e1ee201c6cb2f");
+          "0x5d2aa5a8202e72d1303488143028f10d5aa058833f0891dd51efdc8f7b65389f");
+  int proof_length = hex2bin(proof,
+                             "0x4c4fff50742b531400f57913260f51ecc70cf11594643cf"
+                             "36623f69c0c2abd3c829d0d29");
 
   smt_pair_t entries[8];
   smt_state_t changes;
@@ -593,6 +606,10 @@ UTEST(smt, verify2) {
   ASSERT_EQ(0, smt_verify(root_hash, &changes, proof, proof_length));
 }
 
+// run -- --hex --kvpair --include "0"
+// 0xe8c0265680a02b680b6cbc880348f062b825b28e237da7169aded4bcac0a04e5
+// 0x2ca41595841e46ce8e74ad749e5c3f1d17202150f99c3d8631233ebdd19b19eb    11 11
+// 22 22
 UTEST(smt, verify3) {
   uint8_t key[32];
   uint8_t value[32];
@@ -604,11 +621,10 @@ UTEST(smt, verify3) {
   hex2bin(value,
           "0x2ca41595841e46ce8e74ad749e5c3f1d17202150f99c3d8631233ebdd19b19eb");
   hex2bin(root_hash,
-          "0xa4cbf1b69a848396ac759f362679e2b185ac87a17cba747d2db1ef6fd929042f");
-  int proof_length = hex2bin(
-      proof,
-      "0x4c50fe32845309d34f132cd6f7ac6a7881962401adc35c19a08d4fffeb511b97ea"
-      "bf86");
+          "0x10379090a0ce3998203c1ba23f20125b334c6591db9695c885a4421b6dceb1f5");
+  int proof_length = hex2bin(proof,
+                             "0x4c4fff50742b531400f57913260f51ecc70cf11594643cf"
+                             "36623f69c0c2abd3c829d0d29");
 
   smt_pair_t entries[8];
   smt_state_t changes;
@@ -647,6 +663,11 @@ UTEST(smt, verify_invalid_hash) {
 
 UTEST(smt, verify_all_leaves_used) {}
 
+// --hex --kvpair --include '0|1'
+// 0xe8c0265680a02b680b6cbc880348f062b825b28e237da7169aded4bcac0a04e5
+// 0x2ca41595841e46ce8e74ad749e5c3f1d17202150f99c3d8631233ebdd19b19eb
+// 0xe8c0265680a02b680b6cbc880348f062b825b28e237da7169aded4bcac0a04e6
+// 0x2ca41595841e46ce8e74ad749e5c3f1d17202150f99c3d8631233ebdd19b19ec
 UTEST(smt, verify_multi_2) {
   uint8_t key[32];
   uint8_t value[32];
@@ -654,11 +675,8 @@ UTEST(smt, verify_multi_2) {
   uint8_t proof[96];
 
   hex2bin(root_hash,
-          "0xaa84c1a9b237e29e78bf2c59539e0ab2aa4ddd727f1d43bda03cc37ca9c523ca");
-  int proof_length = hex2bin(
-      proof,
-      "0x4c4c48f950fe32845309d34f132cd6f7ac6a7881962401adc35c19a08d4fffeb51"
-      "1b97eabf86");
+          "0xbe4491873980f79d92808d6f8435335995c1578792f36aca5f8794b7b1320976");
+  int proof_length = hex2bin(proof, "0x4c4ff94c4ff9484f06");
 
   smt_pair_t entries[8];
   smt_state_t changes;
@@ -678,6 +696,13 @@ UTEST(smt, verify_multi_2) {
   ASSERT_EQ(0, smt_verify(root_hash, &changes, proof, proof_length));
 }
 
+//  --hex --kvpair --include '0|1|2'
+//  0xe8c0265680a02b680b6cbc880348f062b825b28e237da7169aded4bcac0a04e5
+//  0x2ca41595841e46ce8e74ad749e5c3f1d17202150f99c3d8631233ebdd19b19eb
+//  0x381dc5391dab099da5e28acd1ad859a051cf18ace804d037f12819c6fbc0e18b
+//  0x9158ce9b0e11dd150ba2ae5d55c1db04b1c5986ec626f2e38a93fe8ad0b2923b
+//  0xa9bb945be71f0bd2757d33d2465b6387383da42f321072e47472f0c9c7428a8a
+//  0xa939a47335f777eac4c40fbc0970e25f832a24e1d55adc45a7b76d63fe364e82
 UTEST(smt, verify_multi_3) {
   uint8_t key[32];
   uint8_t value[32];
@@ -685,8 +710,8 @@ UTEST(smt, verify_multi_3) {
   uint8_t proof[96];
 
   hex2bin(root_hash,
-          "0xa4cbf1b69a848396ac759f362679e2b185ac87a17cba747d2db1ef6fd929042f");
-  int proof_length = hex2bin(proof, "0x4c4c48f84c48fe");
+          "0x3752245c0d68fe0f7c00cfed7bd587935871a80ea170468b2aa0e9d681188bfa");
+  int proof_length = hex2bin(proof, "0x4c4ff84c4ff8484f054c4ffe484f01");
 
   smt_pair_t entries[8];
   smt_state_t changes;
@@ -758,47 +783,50 @@ UTEST(smt, update) {
           "0xa9bb945be71f0bd2757d33d2465b6387383da42f321072e47472f0c9c7428a8a");
   hex2bin(value,
           "0xa939a47335f777eac4c40fbc0970e25f832a24e1d55adc45a7b76d63fe364e82");
-  int proof_length = hex2bin(proof, "0x4c");
+  int proof_length = hex2bin(proof, "0x4c4f00");
   memset(&proof[32], 0, 64);
   smt_state_init(&changes, entries, 32);
   smt_state_insert(&changes, key, value);
   smt_state_normalize(&changes);
   ASSERT_EQ(0, smt_calculate_root(root_hash, &changes, proof, proof_length));
   hex2bin(expected_hash,
-          "0x5faa7bccd1095c904fe34c99236f0734f909823d8d48b81b0b92bab531f372c1");
+          "0x838fb1557ded00b1eaa321ba217bcb90546c1f05ec6b9cde724241c785b6efc9");
   ASSERT_EQ(0, memcmp(root_hash, expected_hash, 32));
 
+  // run -- --hex --kvpair --include "0"
+  // 0x381dc5391dab099da5e28acd1ad859a051cf18ace804d037f12819c6fbc0e18b
+  // 0x9158ce9b0e11dd150ba2ae5d55c1db04b1c5986ec626f2e38a93fe8ad0b2923b
+  // 11
+  // 11
   hex2bin(key,
           "0x381dc5391dab099da5e28acd1ad859a051cf18ace804d037f12819c6fbc0e18b");
   hex2bin(value,
           "0x9158ce9b0e11dd150ba2ae5d55c1db04b1c5986ec626f2e38a93fe8ad0b2923b");
-  proof_length = hex2bin(
-      proof,
-      "0x4c50f85faa7bccd1095c904fe34c99236f0734f909823d8d48b81b0b92bab531f3"
-      "72c1");
+  proof_length = hex2bin(proof,
+                         "0x4c4fff500881fe7c405d49f5067dfed14bea9297a98b9c3b161"
+                         "ee221e8f58d12724bd423");
   memset(&proof[64], 0, 32);
   smt_state_init(&changes, entries, 32);
   smt_state_insert(&changes, key, value);
   smt_state_normalize(&changes);
   ASSERT_EQ(0, smt_calculate_root(root_hash, &changes, proof, proof_length));
   hex2bin(expected_hash,
-          "0x32845309d34f132cd6f7ac6a7881962401adc35c19a08d4fffeb511b97eabf86");
+          "0x28b0daae982888947a3d75259c21247143008b3de07b136ddc1148c2cc9d0c0b");
   ASSERT_EQ(0, memcmp(root_hash, expected_hash, 32));
 
   hex2bin(key,
           "0xe8c0265680a02b680b6cbc880348f062b825b28e237da7169aded4bcac0a04e5");
   hex2bin(value,
           "0x2ca41595841e46ce8e74ad749e5c3f1d17202150f99c3d8631233ebdd19b19eb");
-  proof_length = hex2bin(
-      proof,
-      "0x4c50fe32845309d34f132cd6f7ac6a7881962401adc35c19a08d4fffeb511b97ea"
-      "bf86");
+  proof_length = hex2bin(proof,
+                         "0x4c4fff500881fe7c405d49f5067dfed14bea9297a98b9c3b161"
+                         "ee221e8f58d12724bd423");
   smt_state_init(&changes, entries, 32);
   smt_state_insert(&changes, key, value);
   smt_state_normalize(&changes);
   ASSERT_EQ(0, smt_calculate_root(root_hash, &changes, proof, proof_length));
   hex2bin(expected_hash,
-          "0xa4cbf1b69a848396ac759f362679e2b185ac87a17cba747d2db1ef6fd929042f");
+          "0xdd20f7c39619ce2828dfcd3bd40c54432e736bbefdeaab6f48ed6e668130336a");
   ASSERT_EQ(0, memcmp(root_hash, expected_hash, 32));
 }
 
