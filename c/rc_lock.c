@@ -27,11 +27,16 @@ int ckb_exit(signed char);
 #undef CHECK
 #include "rce.h"
 #include "rc_lock_mol2.h"
+
+#include "rc_lock_acp.h"
+#include "rc_lock_time_lock.h"
+
 // clang-format on
 
 #define SCRIPT_SIZE 32768
 #define MAX_LOCK_SCRIPT_HASH_COUNT 2048
 #define MAX_SIGNATURE_SIZE 1024
+#define SECP256K1_SIGNATURE_SIZE 65
 
 enum RcLockErrorCode {
   // rc lock error code is starting from 80
@@ -46,8 +51,8 @@ typedef struct ArgsType {
   CkbIdentityType id;
   uint8_t rc_root[32];
   uint64_t since;
-  uint8_t ckb_minimum;  // Used for ACP
-  uint8_t udt_minimum;  // used for ACP
+  int ckb_minimum;  // Used for ACP
+  int udt_minimum;  // used for ACP
 } ArgsType;
 
 // parsed from lock in witness
@@ -66,13 +71,43 @@ int make_cursor_from_witness(WitnessArgsType *witness, bool *_input) {
   return -1;
 }
 
+//
+// move cur by offset within seg.
+// return NULL if out of bounds.
+uint8_t *safe_move_to(mol_seg_t seg, uint8_t *cur, uint32_t offset) {
+  uint8_t *end = seg.ptr + seg.size;
+
+  if (cur < seg.ptr || cur >= end) {
+    return NULL;
+  }
+  uint8_t *next = cur + offset;
+  if (next < seg.ptr || next >= end) {
+    return NULL;
+  }
+  return next;
+}
+
+bool is_memory_enough(mol_seg_t seg, const uint8_t *cur, uint32_t len) {
+  uint8_t *end = seg.ptr + seg.size;
+
+  if (cur < seg.ptr || cur >= end) {
+    return false;
+  }
+  const uint8_t *next = cur + len;
+  // == end is allowed
+  if (next < seg.ptr || next > end) {
+    return false;
+  }
+  return true;
+}
+
 // memory layout of args:
 // 1 byte flag
 // 20 bytes blake160
-//    where to put extra 2 bytes for ACP?
-// 32 bytes rc_root, if rc_identity in witness
+// extra 2 bytes for ACP
+// 32 bytes rc_root
 // 8 bytes since, optional. Used for time lock
-int parse_args(ArgsType *args, bool has_rc_identity) {
+int parse_args(ArgsType *args) {
   int err = 0;
   uint8_t script[SCRIPT_SIZE];
   uint64_t len = SCRIPT_SIZE;
@@ -88,24 +123,49 @@ int parse_args(ArgsType *args, bool has_rc_identity) {
 
   mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
   mol_seg_t args_bytes_seg = MolReader_Bytes_raw_bytes(&args_seg);
-  CHECK2(args_bytes_seg.size >= 1, ERROR_ARGUMENTS_LEN);
-  uint8_t flags = args_bytes_seg.ptr[0];
-  CHECK2(flags == IdentityFlagsPubkeyHash || flags == IdentityFlagsOwnerLock,
+
+  uint8_t *cur = args_bytes_seg.ptr;
+
+  // parse flags
+  CHECK2(is_memory_enough(args_bytes_seg, cur, 1), ERROR_INVALID_MOL_FORMAT);
+  uint8_t flags = *cur;
+  CHECK2(flags == IdentityFlagsPubkeyHash || flags == IdentityFlagsOwnerLock ||
+             flags == IdentityFlagsAcp,
          ERROR_UNKNOWN_FLAGS);
   args->id.flags = flags;
+  cur = safe_move_to(args_bytes_seg, cur, 1);
+  CHECK2(cur != NULL, ERROR_INVALID_MOL_FORMAT);
 
-  CHECK2(args_bytes_seg.size >= (1 + BLAKE160_SIZE), ERROR_INVALID_MOL_FORMAT);
-  memcpy(args->id.blake160, args_bytes_seg.ptr + 1, BLAKE160_SIZE);
+  // parse blake160
+  CHECK2(is_memory_enough(args_bytes_seg, cur, 20), ERROR_INVALID_MOL_FORMAT);
+  memcpy(args->id.blake160, cur, BLAKE160_SIZE);
+  cur = safe_move_to(args_bytes_seg, cur, 20);
+  CHECK2(cur != NULL, ERROR_INVALID_MOL_FORMAT);
 
-  if (has_rc_identity) {
-    CHECK2(args_bytes_seg.size >= (1 + BLAKE160_SIZE + BLAKE2B_BLOCK_SIZE),
-           ERROR_INVALID_MOL_FORMAT);
-    memcpy(args->rc_root, args_bytes_seg.ptr + 1 + BLAKE160_SIZE,
-           sizeof(args->rc_root));
-  } else {
+  // parse ACP's extra 2 minimums
+  if (flags == IdentityFlagsAcp) {
+    CHECK2(is_memory_enough(args_bytes_seg, cur, 2), ERROR_INVALID_MOL_FORMAT);
+    args->ckb_minimum = cur[0];
+    args->udt_minimum = cur[1];
+    cur = safe_move_to(args_bytes_seg, cur, 2);
+    CHECK2(cur != NULL, ERROR_INVALID_MOL_FORMAT);
   }
+  // parse RC cell type hash
+  CHECK2(is_memory_enough(args_bytes_seg, cur, 32), ERROR_INVALID_MOL_FORMAT);
+  memcpy(args->rc_root, cur, sizeof(args->rc_root));
+  cur = safe_move_to(args_bytes_seg, cur, 32);
 
-  // check since
+  // optional since
+  if (cur != NULL) {
+    CHECK2(is_memory_enough(args_bytes_seg, cur, 8), ERROR_INVALID_MOL_FORMAT);
+    args->since = *(uint64_t *)cur;
+    cur = safe_move_to(args_bytes_seg, cur, 8);
+  } else {
+    args->since = 0;
+  }
+  // make sure args is consumed exactly
+  CHECK2(cur == NULL, ERROR_INVALID_MOL_FORMAT);
+
 exit:
   return err;
 }
@@ -161,8 +221,8 @@ int make_witness(WitnessArgsType *witness) {
   return 0;
 }
 
-int verify_identity(CkbIdentityType *id, SmtProofEntryVecType *proofs,
-                    RceState *rce_state) {
+int smt_verify_identity(CkbIdentityType *id, SmtProofEntryVecType *proofs,
+                        RceState *rce_state) {
   int err = 0;
   uint32_t proof_len = proofs->t->len(proofs);
   CHECK2(proof_len == rce_state->rcrules_count, ERROR_PROOF_LENGTH_MISMATCHED);
@@ -270,7 +330,7 @@ int main() {
   err = parse_witness_lock(&witness_lock);
   CHECK(err);
 
-  err = parse_args(&args, witness_lock.has_rc_identity);
+  err = parse_args(&args);
   CHECK(err);
   if (witness_lock.has_rc_identity) {
     identity = witness_lock.id;
@@ -289,7 +349,7 @@ int main() {
     CHECK2(rce_state.has_wl, ERROR_NO_WHITE_LIST);
 
     // verify blake160 against proof, using rc rules
-    err = verify_identity(&identity, &witness_lock.proofs, &rce_state);
+    err = smt_verify_identity(&identity, &witness_lock.proofs, &rce_state);
     CHECK(err);
   }
 
@@ -299,7 +359,13 @@ int main() {
            ERROR_INVALID_MOL_FORMAT);
   }
 
-  err = ckb_verify_identity(&identity, witness_lock.signature);
+  if (identity.flags == IdentityFlagsAcp) {
+    acp_main(&identity, witness_lock.has_signature, witness_lock.signature,
+             witness_lock.signature_size, args.ckb_minimum, args.udt_minimum);
+  } else {
+    err = ckb_verify_identity(&identity, witness_lock.signature,
+                              witness_lock.signature_size);
+  }
 
 exit:
   return err;

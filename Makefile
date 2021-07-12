@@ -53,9 +53,9 @@ ${PROTOCOL_SCHEMA}:
 	curl -L -o $@ ${PROTOCOL_URL}
 
 fmt:
-	clang-format -i -style=Google $(wildcard c/rc_lock.c tests/rc_lock/rc_lock_sim.c tests/rc_lock/ckb_syscall_rc_lock_sim.h c/rce_validator.c /always_success.c c/smt.h c/rce.h c/xudt_rce.c c/rce_validator.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
+	clang-format -i -style=Google $(wildcard c/rc_lock.c c/rc_lock_acp.h c/rc_lock_time_lock.h tests/rc_lock/rc_lock_sim.c tests/rc_lock/ckb_syscall_rc_lock_sim.h c/rce_validator.c /always_success.c c/smt.h c/rce.h c/xudt_rce.c c/rce_validator.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
 	cd xudt && cargo fmt --all
-	git diff --exit-code $(wildcard c/rc_lock.c tests/rc_lock/rc_lock_sim.c tests/rc_lock/ckb_syscall_rc_lock_sim.h c/rce_validator.c /always_success.c c/smt.h c/rce.h c/xudt_rce.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
+	git diff --exit-code $(wildcard c/rc_lock.c c/rc_lock_acp.h c/rc_lock_time_lock.h tests/rc_lock/rc_lock_sim.c tests/rc_lock/ckb_syscall_rc_lock_sim.h c/rce_validator.c /always_success.c c/smt.h c/rce.h c/xudt_rce.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
 
 mol:
 	rm -f c/xudt_rce_mol.h

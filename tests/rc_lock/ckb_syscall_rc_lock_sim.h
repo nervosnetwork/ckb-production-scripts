@@ -537,6 +537,15 @@ int ckb_checked_load_script(void* addr, uint64_t* len, size_t offset) {
   return 0;
 }
 
+int ckb_load_script(void* addr, uint64_t* len, size_t offset) {
+  ASSERT(offset == 0);
+  ASSERT(*len > g_states.script.size);
+
+  memcpy(addr, g_states.script.ptr, g_states.script.size);
+  *len = g_states.script.size;
+  return 0;
+}
+
 int ckb_load_cell_by_field(void* addr, uint64_t* len, size_t offset,
                            size_t index, size_t source, size_t field);
 
@@ -544,7 +553,9 @@ int ckb_load_header_by_field(void* addr, uint64_t* len, size_t offset,
                              size_t index, size_t source, size_t field);
 
 int ckb_load_input_by_field(void* addr, uint64_t* len, size_t offset,
-                            size_t index, size_t source, size_t field);
+                            size_t index, size_t source, size_t field) {
+  return -1;
+}
 
 int ckb_load_cell_code(void* addr, size_t memory_size, size_t content_offset,
                        size_t content_size, size_t index, size_t source);

@@ -847,6 +847,7 @@ impl TestConfig {
         } else {
             bytes.put_u8(self.id.flags);
             bytes.put(self.id.blake160.as_ref());
+            bytes.put(&[0; 32][..]);
         }
         bytes.freeze()
     }
