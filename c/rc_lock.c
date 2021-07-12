@@ -18,6 +18,8 @@ int ckb_exit(signed char);
 #else
 #include "ckb_syscalls.h"
 #endif
+// secp256k1_helper.h is not part of ckb-c-stdlib, can't be included in ckb_identity.h
+#include "secp256k1_helper.h"
 #include "ckb_identity.h"
 #include "ckb_smt.h"
 
@@ -29,6 +31,7 @@ int ckb_exit(signed char);
 
 #define SCRIPT_SIZE 32768
 #define MAX_LOCK_SCRIPT_HASH_COUNT 2048
+#define MAX_SIGNATURE_SIZE 1024
 
 enum RcLockErrorCode {
   // rc lock error code is starting from 80
@@ -38,16 +41,37 @@ enum RcLockErrorCode {
   ERROR_NO_WHITE_LIST,
 };
 
+// parsed from args in lock script
 typedef struct ArgsType {
   CkbIdentityType id;
   uint8_t rc_root[32];
+  uint64_t since;
+  uint8_t ckb_minimum;  // Used for ACP
+  uint8_t udt_minimum;  // used for ACP
 } ArgsType;
+
+// parsed from lock in witness
+typedef struct WitnessLockType {
+  bool has_rc_identity;
+  bool has_signature;
+
+  CkbIdentityType id;
+  uint32_t signature_size;
+  uint8_t signature[MAX_SIGNATURE_SIZE];
+  SmtProofEntryVecType proofs;
+} WitnessLockType;
 
 // make compiler happy
 int make_cursor_from_witness(WitnessArgsType *witness, bool *_input) {
   return -1;
 }
 
+// memory layout of args:
+// 1 byte flag
+// 20 bytes blake160
+//    where to put extra 2 bytes for ACP?
+// 32 bytes rc_root, if rc_identity in witness
+// 8 bytes since, optional. Used for time lock
 int parse_args(ArgsType *args, bool has_rc_identity) {
   int err = 0;
   uint8_t script[SCRIPT_SIZE];
@@ -78,8 +102,10 @@ int parse_args(ArgsType *args, bool has_rc_identity) {
            ERROR_INVALID_MOL_FORMAT);
     memcpy(args->rc_root, args_bytes_seg.ptr + 1 + BLAKE160_SIZE,
            sizeof(args->rc_root));
+  } else {
   }
 
+  // check since
 exit:
   return err;
 }
@@ -176,84 +202,84 @@ exit:
   return err;
 }
 
+int parse_witness_lock(WitnessLockType *witness_lock) {
+  int err = 0;
+  witness_lock->has_signature = false;
+  witness_lock->has_rc_identity = false;
+
+  bool witness_existing = false;
+
+  WitnessArgsType witness_args;
+  err = make_witness(&witness_args);
+  CHECK(err);
+  witness_existing = witness_args.cur.size > 0;
+
+  // witness or witness lock can be empty if owner lock without rc is used
+  if (!witness_existing) return err;
+
+  BytesOptType mol_lock = witness_args.t->lock(&witness_args);
+  if (mol_lock.t->is_none(&mol_lock)) return err;
+
+  mol2_cursor_t mol_lock_bytes = mol_lock.t->unwrap(&mol_lock);
+  // convert Bytes to RcLockWitnessLock
+  RcLockWitnessLockType mol_witness_lock =
+      make_RcLockWitnessLock(&mol_lock_bytes);
+  RcIdentityOptType rc_identity_opt =
+      mol_witness_lock.t->rc_identity(&mol_witness_lock);
+  witness_lock->has_rc_identity = rc_identity_opt.t->is_some(&rc_identity_opt);
+  if (witness_lock->has_rc_identity) {
+    RcIdentityType rc_identity = rc_identity_opt.t->unwrap(&rc_identity_opt);
+    mol2_cursor_t id_cur = rc_identity.t->identity(&rc_identity);
+
+    uint8_t buff[CKB_IDENTITY_LEN] = {0};
+    uint32_t read_len = mol2_read_at(&id_cur, buff, sizeof(buff));
+    CHECK2(read_len == CKB_IDENTITY_LEN, ERROR_INVALID_MOL_FORMAT);
+    witness_lock->id.flags = buff[0];
+    memcpy(witness_lock->id.blake160, buff + 1, CKB_IDENTITY_LEN - 1);
+
+    witness_lock->proofs = rc_identity.t->proofs(&rc_identity);
+  }
+
+  BytesOptType signature_opt = mol_witness_lock.t->signature(&mol_witness_lock);
+  witness_lock->has_signature = signature_opt.t->is_some(&signature_opt);
+  if (witness_lock->has_signature) {
+    mol2_cursor_t signature_cursor = signature_opt.t->unwrap(&signature_opt);
+    witness_lock->signature_size = mol2_read_at(
+        &signature_cursor, witness_lock->signature, signature_cursor.size);
+    CHECK2(signature_cursor.size == witness_lock->signature_size,
+           ERROR_INVALID_MOL_FORMAT);
+  }
+
+exit:
+  return err;
+}
+
 #ifdef CKB_USE_SIM
 int simulator_main() {
 #else
 int main() {
 #endif
   int err = 0;
-  // if has_rc_identity is true, it's one of the following:
-  // - Unlock via administrator’s lock script hash
-  // - Unlock via administrator’s public key hash
-  bool has_rc_identity = false;
-  CkbIdentityType identity = {0};
-  RcIdentityType rc_identity = {0};
-  bool witness_lock_existing = false;
-  bool witness_existing = false;
 
-  WitnessArgsType witness;
-  err = make_witness(&witness);
-  CHECK(err);
-  witness_existing = witness.cur.size > 0;
-
-  BytesOptType lock = {0};
-  mol2_cursor_t lock_bytes = {0};
-  RcLockWitnessLockType witness_lock = {0};
-
-  // witness or witness lock can be empty if owner lock without rc is used
-  if (witness_existing) {
-    lock = witness.t->lock(&witness);
-    if (!lock.t->is_none(&lock)) {
-      witness_lock_existing = true;
-      lock_bytes = lock.t->unwrap(&lock);
-      // convert Bytes to RcLockWitnessLock
-      witness_lock = make_RcLockWitnessLock(&lock_bytes);
-      RcIdentityOptType rc_identity_opt =
-          witness_lock.t->rc_identity(&witness_lock);
-      has_rc_identity = rc_identity_opt.t->is_some(&rc_identity_opt);
-      if (has_rc_identity) {
-        rc_identity = rc_identity_opt.t->unwrap(&rc_identity_opt);
-        mol2_cursor_t id_cur = rc_identity.t->identity(&rc_identity);
-        uint8_t buff[CKB_IDENTITY_LEN] = {0};
-        uint32_t read_len = mol2_read_at(&id_cur, buff, sizeof(buff));
-        CHECK2(read_len == CKB_IDENTITY_LEN, ERROR_INVALID_MOL_FORMAT);
-        identity.flags = buff[0];
-        memcpy(identity.blake160, buff + 1, CKB_IDENTITY_LEN - 1);
-      }
-    } else {
-      witness_lock_existing = false;
-    }
-  } else {
-    witness_lock_existing = false;
-  }
-
+  WitnessLockType witness_lock = {0};
   ArgsType args = {0};
-  err = parse_args(&args, has_rc_identity);
+  // this identity can be either from witness lock (witness_lock.id) or script
+  // args (args.id)
+  CkbIdentityType identity = {0};
+
+  err = parse_witness_lock(&witness_lock);
   CHECK(err);
-  // When rc_identity is missing, the identity included in lock script args will
-  // then be used in further validation.
-  if (!has_rc_identity) {
+
+  err = parse_args(&args, witness_lock.has_rc_identity);
+  CHECK(err);
+  if (witness_lock.has_rc_identity) {
+    identity = witness_lock.id;
+  } else {
     identity = args.id;
   }
 
-  uint8_t signature_bytes[SIGNATURE_SIZE] = {0};
-  if (identity.flags == IdentityFlagsPubkeyHash) {
-    CHECK2(witness_lock_existing, ERROR_INVALID_MOL_FORMAT);
-
-    BytesOptType signature_opt = witness_lock.t->signature(&witness_lock);
-    mol2_cursor_t signature_cursor = signature_opt.t->unwrap(&signature_opt);
-
-    uint32_t read_len =
-        mol2_read_at(&signature_cursor, signature_bytes, SIGNATURE_SIZE);
-    CHECK2(read_len == SIGNATURE_SIZE, ERROR_INVALID_MOL_FORMAT);
-  }
-
-  err = ckb_verify_identity(&identity, signature_bytes);
-
   // regulation compliance
-  if (has_rc_identity) {
-    CHECK2(witness_lock_existing, ERROR_INVALID_MOL_FORMAT);
-
+  if (witness_lock.has_rc_identity) {
     // collect rc rules
     RceState rce_state;
     rce_init_state(&rce_state);
@@ -262,13 +288,18 @@ int main() {
     CHECK2(rce_state.rcrules_count > 0, ERROR_NO_RCRULE);
     CHECK2(rce_state.has_wl, ERROR_NO_WHITE_LIST);
 
-    // collect proof
-    SmtProofEntryVecType proofs = rc_identity.t->proofs(&rc_identity);
-
     // verify blake160 against proof, using rc rules
-    err = verify_identity(&identity, &proofs, &rce_state);
+    err = verify_identity(&identity, &witness_lock.proofs, &rce_state);
     CHECK(err);
   }
+
+  if (identity.flags == IdentityFlagsPubkeyHash) {
+    CHECK2(witness_lock.has_signature, ERROR_INVALID_MOL_FORMAT);
+    CHECK2(witness_lock.signature_size == SECP256K1_SIGNATURE_SIZE,
+           ERROR_INVALID_MOL_FORMAT);
+  }
+
+  err = ckb_verify_identity(&identity, witness_lock.signature);
 
 exit:
   return err;
