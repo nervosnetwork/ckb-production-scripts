@@ -81,6 +81,9 @@ impl Hasher for CKBBlake2bHasher {
         self.0.finalize(&mut hash);
         hash.into()
     }
+    fn write_byte(&mut self, b: u8) {
+        self.0.update(&[b][..]);
+    }
 }
 
 pub type SMT = SparseMerkleTree<CKBBlake2bHasher, H256, DefaultStore<H256>>;
