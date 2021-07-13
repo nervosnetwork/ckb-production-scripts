@@ -43,13 +43,13 @@ mol_seg_t build_script(const uint8_t *code_hash, uint8_t hash_type,
 typedef uint16_t RCHashType;
 
 typedef struct SIMRCRule {
-  uint8_t id;  // id = 0
+  uint8_t id; // id = 0
   uint8_t flags;
   uint8_t smt_root[32];
 } SIMRCRule;
 #define MAX_RCRULE_IN_CELL 16
 typedef struct SIMRCCellVec {
-  uint8_t id;  // id = 1
+  uint8_t id; // id = 1
   uint8_t hash_count;
   RCHashType hash[MAX_RCRULE_IN_CELL];
 } SIMRCCellVec;
@@ -120,26 +120,23 @@ uint8_t k1[32] = {111};
 uint8_t k2[32] = {222};
 uint8_t smt_ooo_root[32] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-uint8_t smt_one_root[32] = {62,  195, 223, 65,  89,  79,  50,  133,
-                            172, 95,  118, 228, 237, 101, 113, 8,
-                            175, 152, 171, 153, 202, 45,  125, 177,
-                            0,   236, 236, 176, 183, 31,  109, 113};
-uint8_t smt_two_root[32] = {143, 95, 66, 207, 251, 51,  58,  199, 247, 61,  211,
-                            60,  28, 25, 51,  99,  174, 94,  226, 239, 134, 201,
-                            125, 79, 63, 194, 180, 109, 161, 2,   92,  178};
-uint8_t smt_ooo_not_k1_proof[1] = {76};
-uint8_t smt_one_has_k1_proof[35] = {76,  80,  7,  88,  178, 89,  155, 132, 146,
-                                    222, 163, 40, 147, 106, 150, 97,  234, 134,
-                                    107, 237, 60, 9,   193, 0,   16,  226, 17,
-                                    209, 89,  52, 22,  71,  135, 172, 225};
-uint8_t smt_one_not_k2_proof[35] = {76, 80,  7,   62,  195, 223, 65,  89,  79,
-                                    50, 133, 172, 95,  118, 228, 237, 101, 113,
-                                    8,  175, 152, 171, 153, 202, 45,  125, 177,
-                                    0,  236, 236, 176, 183, 31,  109, 113};
-uint8_t smt_tow_has_k2_proof[35] = {76, 80,  7,   62,  195, 223, 65,  89,  79,
-                                    50, 133, 172, 95,  118, 228, 237, 101, 113,
-                                    8,  175, 152, 171, 153, 202, 45,  125, 177,
-                                    0,  236, 236, 176, 183, 31,  109, 113};
+uint8_t smt_one_root[32] = {184, 255, 94, 232, 221, 51,  96,  202, 147, 200, 58,
+                            115, 101, 42, 89,  144, 132, 242, 217, 68,  149, 77,
+                            151, 24,  60, 123, 37,  195, 109, 166, 145, 224};
+uint8_t smt_two_root[32] = {121, 127, 78,  214, 231, 172, 41,  53,
+                            107, 94,  203, 98,  176, 206, 210, 159,
+                            244, 78,  27,  16,  55,  143, 233, 241,
+                            40,  121, 79,  244, 222, 150, 136, 137};
+uint8_t smt_ooo_not_k1_proof[3] = {76, 79, 0};
+uint8_t smt_one_has_k1_proof[3] = {76, 79, 0};
+uint8_t smt_one_not_k2_proof[38] = {
+    76,  79,  7,   80,  162, 132, 41,  152, 90,  56,  78, 40,  148,
+    156, 236, 166, 59,  158, 220, 61,  112, 168, 149, 46, 100, 43,
+    156, 80,  123, 123, 118, 121, 197, 49,  175, 152, 79, 248};
+uint8_t smt_tow_has_k2_proof[38] = {
+    76,  79,  7,   80,  162, 132, 41,  152, 90,  56,  78, 40,  148,
+    156, 236, 166, 59,  158, 220, 61,  112, 168, 149, 46, 100, 43,
+    156, 80,  123, 123, 118, 121, 197, 49,  175, 152, 79, 248};
 
 #define countof(s) (sizeof(s) / sizeof(s[0]))
 
@@ -298,17 +295,17 @@ int ckb_look_for_dep_with_hash2(const uint8_t *code_hash, uint8_t hash_type,
     int ret = ckb_load_cell_by_field(hash, &len, 0, current,
                                      CKB_SOURCE_CELL_DEP, field);
     switch (ret) {
-      case CKB_ITEM_MISSING:
-        break;
-      case CKB_SUCCESS:
-        if (memcmp(code_hash, hash, 32) == 0) {
-          /* Found a match */
-          *index = current;
-          return CKB_SUCCESS;
-        }
-        break;
-      default:
-        return CKB_INDEX_OUT_OF_BOUND;
+    case CKB_ITEM_MISSING:
+      break;
+    case CKB_SUCCESS:
+      if (memcmp(code_hash, hash, 32) == 0) {
+        /* Found a match */
+        *index = current;
+        return CKB_SUCCESS;
+      }
+      break;
+    default:
+      return CKB_INDEX_OUT_OF_BOUND;
     }
     current++;
   }
