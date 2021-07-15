@@ -662,6 +662,116 @@ int ckb_look_for_dep_with_hash2(const uint8_t* code_hash, uint8_t hash_type,
   return 0;
 }
 
+#include <dlfcn.h>
+
+#define ERROR_MEMORY_NOT_ENOUGH -23
+#define ERROR_DYNAMIC_LOADING -24
+#define RISCV_PGSIZE 4096
+#define ROUNDUP(a, b) ((((a)-1) / (b) + 1) * (b))
+#define MAX_PATH_SIZE 1024
+
+typedef struct LibMappingEntry {
+  uint8_t dep_cell_hash[32];
+  char path[MAX_PATH_SIZE];
+} LibMappingEntry;
+
+#define MAX_LIB_MAPPING_COUNT 1024
+LibMappingEntry g_lib_mapping[MAX_LIB_MAPPING_COUNT];
+int g_lib_size = 0;
+
+void ckbsim_map_lib(const uint8_t* dep_cell_hash, const char* path) {
+  if (g_lib_size >= MAX_LIB_MAPPING_COUNT) {
+    ASSERT(false);
+    return;
+  }
+  ASSERT(strlen(path) < MAX_PATH_SIZE);
+
+  memcpy(g_lib_mapping[g_lib_size].dep_cell_hash, dep_cell_hash, 32);
+  strcpy(g_lib_mapping[g_lib_size].path, path);
+
+  g_lib_size++;
+}
+
+bool file_exists(const char* path) {
+  FILE* fp = fopen(path, "r");
+  if (fp != NULL) {
+    fclose(fp);
+  };
+  return fp != NULL;
+}
+
+void file_with_so(const char* input, char* output, uint32_t output_len) {
+  strcpy(output, input);
+  char* pos = strchr(output, '.');
+  if (pos != NULL) {
+    *pos = 0;
+    strcat(output, ".so");
+  }
+}
+
+int ckbsim_get_lib(const uint8_t* dep_cell_hash, char* path) {
+  for (int i = 0; i < g_lib_size; i++) {
+    if (memcmp(g_lib_mapping[i].dep_cell_hash, dep_cell_hash, 32) == 0) {
+      const char* target = g_lib_mapping[i].path;
+      if (file_exists(target)) {
+        strcpy(path, target);
+      } else {
+        char output[1024] = {0};
+        file_with_so(target, output, sizeof(output));
+        if (file_exists(output)) {
+          strcpy(path, output);
+        } else {
+          ASSERT(false);
+          return -1;
+        }
+      }
+      return 0;
+    }
+  }
+  return 1;
+}
+
+size_t get_file_size(const char* path) {
+  FILE* fp = fopen(path, "r");
+  ASSERT(fp != NULL);
+  fseek(fp, 0L, SEEK_END);
+  long size = ftell(fp);
+  fclose(fp);
+
+  return size;
+}
+
+int ckb_dlopen2(const uint8_t* dep_cell_hash, uint8_t hash_type,
+                uint8_t* aligned_addr, size_t aligned_size, void** handle,
+                size_t* consumed_size) {
+  int err = 0;
+  (void)hash_type;
+  (void)aligned_size;
+
+  char path[MAX_PATH_SIZE] = {0};
+  ASSERT((aligned_size % RISCV_PGSIZE) == 0);
+  ASSERT(((size_t)aligned_addr) % RISCV_PGSIZE == 0);
+
+  err = ckbsim_get_lib(dep_cell_hash, path);
+  ASSERT(err == 0);
+
+  *handle = dlopen(path, RTLD_NOW);
+  *consumed_size = 0;
+
+  if (*handle == NULL) {
+    printf("Error occurs in dlopen: %s\n", dlerror());
+    ASSERT(false);
+    return -1;
+  }
+  return 0;
+}
+
+void* ckb_dlsym(void* handle, const char* symbol) {
+  void* ret = dlsym(handle, symbol);
+  ASSERT(ret != NULL);
+  return ret;
+}
+
 #undef ASSERT
 #define ASSERT(s) (void)0
 

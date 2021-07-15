@@ -15,6 +15,7 @@ MOLC_VERSION := 0.7.0
 
 # docker pull nervos/ckb-riscv-gnu-toolchain:gnu-bionic-20191012
 BUILDER_DOCKER := nervos/ckb-riscv-gnu-toolchain@sha256:aae8a3f79705f67d505d1f1d5ddc694a4fd537ed1c7e9622420a470d59ba2ec3
+CLANG_FORMAT_DOCKER := kason223/clang-format@sha256:3cce35b0400a7d420ec8504558a02bdfc12fd2d10e40206f140c4545059cd95d
 
 all: build/simple_udt build/anyone_can_pay build/always_success build/xudt_rce build/rce_validator build/rc_lock
 
@@ -52,10 +53,14 @@ $(SECP256K1_SRC):
 ${PROTOCOL_SCHEMA}:
 	curl -L -o $@ ${PROTOCOL_URL}
 
+ALL_C_SOURCE := $(wildcard c/rc_lock.c c/rc_lock_acp.h c/rc_lock_time_lock.h \
+	tests/rc_lock/rc_lock_sim.c tests/rc_lock/ckb_syscall_rc_lock_sim.h \
+	c/rce_validator.c /always_success.c c/rce.h c/xudt_rce.c \
+	c/rce_validator.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
+
 fmt:
-	clang-format -i -style=Google $(wildcard c/rc_lock.c c/rc_lock_acp.h c/rc_lock_time_lock.h tests/rc_lock/rc_lock_sim.c tests/rc_lock/ckb_syscall_rc_lock_sim.h c/rce_validator.c /always_success.c c/smt.h c/rce.h c/xudt_rce.c c/rce_validator.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
-	cd xudt && cargo fmt --all
-	git diff --exit-code $(wildcard c/rc_lock.c c/rc_lock_acp.h c/rc_lock_time_lock.h tests/rc_lock/rc_lock_sim.c tests/rc_lock/ckb_syscall_rc_lock_sim.h c/rce_validator.c /always_success.c c/smt.h c/rce.h c/xudt_rce.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
+	docker run --rm -v `pwd`:/code ${CLANG_FORMAT_DOCKER} bash -c "cd code && clang-format -i -style=Google $(ALL_C_SOURCE)"
+	git diff --exit-code $(ALL_C_SOURCE)
 
 mol:
 	rm -f c/xudt_rce_mol.h
@@ -92,7 +97,7 @@ build/rce_validator: c/rce_validator.c c/rce.h
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
-build/rc_lock: c/rc_lock.c c/rce.h c/secp256k1_lock.h build/secp256k1_data_info.h $(SECP256K1_SRC)
+build/rc_lock: c/rc_lock.c c/rc_lock_acp.h c/rce.h c/secp256k1_lock.h build/secp256k1_data_info.h $(SECP256K1_SRC) deps/ckb-c-stdlib-add-identity/ckb_identity.h
 	$(CC) $(XUDT_RCE_CFLAGS) $(LDFLAGS) -o $@ $<
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@

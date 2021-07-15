@@ -14,12 +14,15 @@ int ckb_exit(signed char);
 #include "ckb_consts.h"
 
 #if defined(CKB_USE_SIM)
+// exclude ckb_dlfcn.h
+#define CKB_C_STDLIB_CKB_DLFCN_H_
 #include "ckb_syscall_rc_lock_sim.h"
 #else
 #include "ckb_syscalls.h"
 #endif
 // secp256k1_helper.h is not part of ckb-c-stdlib, can't be included in ckb_identity.h
 #include "secp256k1_helper.h"
+
 #include "ckb_identity.h"
 #include "ckb_smt.h"
 
@@ -36,7 +39,6 @@ int ckb_exit(signed char);
 #define SCRIPT_SIZE 32768
 #define MAX_LOCK_SCRIPT_HASH_COUNT 2048
 #define MAX_SIGNATURE_SIZE 1024
-#define SECP256K1_SIGNATURE_SIZE 65
 
 enum RcLockErrorCode {
   // rc lock error code is starting from 80
@@ -44,6 +46,7 @@ enum RcLockErrorCode {
   ERROR_PROOF_LENGTH_MISMATCHED,
   ERROR_NO_RCRULE,
   ERROR_NO_WHITE_LIST,
+  ERROR_INVALID_RC_IDENTITY_ID,
 };
 
 // parsed from args in lock script
@@ -334,6 +337,10 @@ int main() {
   CHECK(err);
   if (witness_lock.has_rc_identity) {
     identity = witness_lock.id;
+    // The unlock methods used in rc_identity should be chosen carefully.
+    CHECK2(identity.flags == IdentityFlagsPubkeyHash ||
+               identity.flags == IdentityFlagsOwnerLock,
+           ERROR_INVALID_RC_IDENTITY_ID);
   } else {
     identity = args.id;
   }
