@@ -19,12 +19,16 @@ const BINARIES: &[(&str, &str)] = &[
     ),
     (
         "anyone_can_pay",
-        "7c174c7bb1aa0fe7943d6ac98b7e82163282f973b00c414754f5838942b8162b",
+        "cd69ba816f7471e59110058aa37387c362ed9a240cd178f7bb1ecee386cb31e6",
     ),
     (
         "simple_udt",
         "e1e354d6d643ad42724d40967e334984534e0367405c5ae42a9d7d63d77df419",
     ),
+    (
+        "validate_signature_rsa",
+        "a7d3c232c78a3dca841a997606e553f6fc6cab3d3e8e4e8984129752900512a2",
+    )
 ];
 
 fn main() {

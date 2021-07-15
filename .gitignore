@@ -7,3 +7,11 @@ smt_coverage
 smt_fuzzer
 .vscode
 tests/rc_lock/simulator-build-debug
+cmake-build-debug
+tests/validate_signature_rsa/build.simulator
+tests/validate_signature_rsa/corpus
+tests/validate_signature_rsa/dlopen_fuzzer.dSYM
+tests/validate_signature_rsa/dlopen_coverage
+tests/validate_signature_rsa/dlopen_fuzzer
+tests/validate_signature_rsa/coverage
+tests/validate_signature_rsa/fuzz-*.log
