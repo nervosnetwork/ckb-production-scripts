@@ -37,9 +37,13 @@ int ckb_exit(signed char);
 #define MAX_CODE_SIZE (1024 * 1024)
 #define FLAGS_SIZE 4
 #define MAX_LOCK_SCRIPT_HASH_COUNT 2048
-#define OWNER_MODE_MASK 0xC0000000
+
 #define OWNER_MODE_INPUT_TYPE_MASK 0x80000000
 #define OWNER_MODE_OUTPUT_TYPE_MASK 0x40000000
+#define OWNER_MODE_INPUT_LOCK_NOT_MASK 0x20000000
+#define OWNER_MODE_MASK                                       \
+  (OWNER_MODE_INPUT_TYPE_MASK + OWNER_MODE_OUTPUT_TYPE_MASK + \
+   OWNER_MODE_INPUT_LOCK_NOT_MASK)
 
 #include "rce.h"
 
@@ -252,6 +256,37 @@ exit:
   return err;
 }
 
+int check_owner_mode(size_t source, size_t field, mol_seg_t args_bytes_seg,
+                     int* owner_mode) {
+  int err = 0;
+  size_t i = 0;
+  uint8_t buffer[BLAKE2B_BLOCK_SIZE];
+
+  while (1) {
+    uint64_t len = BLAKE2B_BLOCK_SIZE;
+    err = ckb_checked_load_cell_by_field(buffer, &len, 0, i, source, field);
+    if (err == CKB_INDEX_OUT_OF_BOUND) {
+      err = 0;
+      break;
+    }
+    if (err == CKB_ITEM_MISSING) {
+      i += 1;
+      err = 0;
+      continue;
+    }
+    CHECK(err);
+    if (args_bytes_seg.size >= BLAKE2B_BLOCK_SIZE &&
+        memcmp(buffer, args_bytes_seg.ptr, BLAKE2B_BLOCK_SIZE) == 0) {
+      *owner_mode = 1;
+      break;
+    }
+    i += 1;
+  }
+
+exit:
+  return err;
+}
+
 // *var_data will point to "Raw Extension Data", which can be in args or witness
 // *var_data will refer to a memory location of g_script or g_raw_extension_data
 int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
@@ -259,6 +294,8 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
   int err = 0;
   bool owner_mode_for_input_type = false;
   bool owner_mode_for_output_type = false;
+  // default is on
+  bool owner_mode_for_input_lock = true;
 
   uint64_t len = SCRIPT_SIZE;
   int ret = ckb_checked_load_script(g_script, &len, 0);
@@ -284,25 +321,18 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
     if (val & OWNER_MODE_OUTPUT_TYPE_MASK) {
       owner_mode_for_output_type = true;
     }
+    if (val & OWNER_MODE_INPUT_LOCK_NOT_MASK) {
+      owner_mode_for_input_lock = false;
+    }
   }
 
   *hashes_count = 0;
-  // With owner lock script extracted, we will look through each input in the
-  // current transaction to see if any unlocked cell uses owner lock.
-  *owner_mode = 0;
+
+  // collect hashes
   size_t i = 0;
   while (1) {
     uint8_t buffer[BLAKE2B_BLOCK_SIZE];
     uint64_t len2 = BLAKE2B_BLOCK_SIZE;
-    // There are 2 points worth mentioning here:
-    //
-    // * First, we are using the checked version of CKB syscalls, the checked
-    // versions will return an error if our provided buffer is not enough to
-    // hold all returned data. This can help us ensure that we are processing
-    // enough data here.
-    // * Second, `CKB_CELL_FIELD_LOCK_HASH` is used here to directly load the
-    // lock script hash, so we don't have to manually calculate the hash again
-    // here.
     ret = ckb_checked_load_cell_by_field(buffer, &len2, 0, i, CKB_SOURCE_INPUT,
                                          CKB_CELL_FIELD_LOCK_HASH);
     if (ret == CKB_INDEX_OUT_OF_BOUND) {
@@ -314,62 +344,26 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
     memcpy(&hashes[(*hashes_count) * BLAKE2B_BLOCK_SIZE], buffer,
            BLAKE2B_BLOCK_SIZE);
     *hashes_count += 1;
-
-    if (args_bytes_seg.size >= BLAKE2B_BLOCK_SIZE &&
-        memcmp(buffer, args_bytes_seg.ptr, BLAKE2B_BLOCK_SIZE) == 0) {
-      *owner_mode = 1;
-      break;
-    }
     i += 1;
   }
 
-  if (owner_mode_for_input_type) {
-    // input type hash
-    i = 0;
-    while (1) {
-      uint8_t buffer[BLAKE2B_BLOCK_SIZE];
-      uint64_t len2 = BLAKE2B_BLOCK_SIZE;
-      ret = ckb_checked_load_cell_by_field(
-          buffer, &len2, 0, i, CKB_SOURCE_INPUT, CKB_CELL_FIELD_TYPE_HASH);
-      if (ret == CKB_INDEX_OUT_OF_BOUND) {
-        break;
-      }
-      if (ret == CKB_ITEM_MISSING) {
-        i += 1;
-        continue;
-      }
-      CHECK(ret);
-      if (args_bytes_seg.size >= BLAKE2B_BLOCK_SIZE &&
-          memcmp(buffer, args_bytes_seg.ptr, BLAKE2B_BLOCK_SIZE) == 0) {
-        *owner_mode = 1;
-        break;
-      }
-      i += 1;
-    }
+  *owner_mode = 0;
+
+  if (owner_mode_for_input_lock && *owner_mode == 0) {
+    err = check_owner_mode(CKB_SOURCE_INPUT, CKB_CELL_FIELD_LOCK_HASH,
+                           args_bytes_seg, owner_mode);
+    CHECK(err);
   }
-  if (owner_mode_for_output_type) {
-    // output type hash
-    i = 0;
-    while (1) {
-      uint8_t buffer[BLAKE2B_BLOCK_SIZE];
-      uint64_t len2 = BLAKE2B_BLOCK_SIZE;
-      ret = ckb_checked_load_cell_by_field(
-          buffer, &len2, 0, i, CKB_SOURCE_OUTPUT, CKB_CELL_FIELD_TYPE_HASH);
-      if (ret == CKB_INDEX_OUT_OF_BOUND) {
-        break;
-      }
-      if (ret == CKB_ITEM_MISSING) {
-        i += 1;
-        continue;
-      }
-      CHECK(ret);
-      if (args_bytes_seg.size >= BLAKE2B_BLOCK_SIZE &&
-          memcmp(buffer, args_bytes_seg.ptr, BLAKE2B_BLOCK_SIZE) == 0) {
-        *owner_mode = 1;
-        break;
-      }
-      i += 1;
-    }
+
+  if (owner_mode_for_input_type && *owner_mode == 0) {
+    err = check_owner_mode(CKB_SOURCE_INPUT, CKB_CELL_FIELD_TYPE_HASH,
+                           args_bytes_seg, owner_mode);
+    CHECK(err);
+  }
+  if (owner_mode_for_output_type && *owner_mode == 0) {
+    err = check_owner_mode(CKB_SOURCE_OUTPUT, CKB_CELL_FIELD_TYPE_HASH,
+                           args_bytes_seg, owner_mode);
+    CHECK(err);
   }
 
   // parse xUDT args
