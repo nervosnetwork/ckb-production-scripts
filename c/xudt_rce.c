@@ -37,6 +37,9 @@ int ckb_exit(signed char);
 #define MAX_CODE_SIZE (1024 * 1024)
 #define FLAGS_SIZE 4
 #define MAX_LOCK_SCRIPT_HASH_COUNT 2048
+#define OWNER_MODE_MASK 0xC0000000
+#define OWNER_MODE_INPUT_TYPE_MASK 0x80000000
+#define OWNER_MODE_OUTPUT_TYPE_MASK 0x40000000
 
 #include "rce.h"
 
@@ -254,6 +257,8 @@ exit:
 int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
                uint32_t* var_len, uint8_t* hashes, uint32_t* hashes_count) {
   int err = 0;
+  bool owner_mode_for_input_type = false;
+  bool owner_mode_for_output_type = false;
 
   uint64_t len = SCRIPT_SIZE;
   int ret = ckb_checked_load_script(g_script, &len, 0);
@@ -270,6 +275,16 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
   mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
   mol_seg_t args_bytes_seg = MolReader_Bytes_raw_bytes(&args_seg);
   CHECK2(args_bytes_seg.size >= BLAKE2B_BLOCK_SIZE, ERROR_ARGUMENTS_LEN);
+
+  if (args_bytes_seg.size >= (FLAGS_SIZE + BLAKE2B_BLOCK_SIZE)) {
+    uint32_t val = *(uint32_t*)(args_bytes_seg.ptr + BLAKE2B_BLOCK_SIZE);
+    if (val & OWNER_MODE_INPUT_TYPE_MASK) {
+      owner_mode_for_input_type = true;
+    }
+    if (val & OWNER_MODE_OUTPUT_TYPE_MASK) {
+      owner_mode_for_output_type = true;
+    }
+  }
 
   *hashes_count = 0;
   // With owner lock script extracted, we will look through each input in the
@@ -308,16 +323,67 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
     i += 1;
   }
 
+  if (owner_mode_for_input_type) {
+    // input type hash
+    i = 0;
+    while (1) {
+      uint8_t buffer[BLAKE2B_BLOCK_SIZE];
+      uint64_t len2 = BLAKE2B_BLOCK_SIZE;
+      ret = ckb_checked_load_cell_by_field(
+          buffer, &len2, 0, i, CKB_SOURCE_INPUT, CKB_CELL_FIELD_TYPE_HASH);
+      if (ret == CKB_INDEX_OUT_OF_BOUND) {
+        break;
+      }
+      if (ret == CKB_ITEM_MISSING) {
+        i += 1;
+        continue;
+      }
+      CHECK(ret);
+      if (args_bytes_seg.size >= BLAKE2B_BLOCK_SIZE &&
+          memcmp(buffer, args_bytes_seg.ptr, BLAKE2B_BLOCK_SIZE) == 0) {
+        *owner_mode = 1;
+        break;
+      }
+      i += 1;
+    }
+  }
+  if (owner_mode_for_output_type) {
+    // output type hash
+    i = 0;
+    while (1) {
+      uint8_t buffer[BLAKE2B_BLOCK_SIZE];
+      uint64_t len2 = BLAKE2B_BLOCK_SIZE;
+      ret = ckb_checked_load_cell_by_field(
+          buffer, &len2, 0, i, CKB_SOURCE_OUTPUT, CKB_CELL_FIELD_TYPE_HASH);
+      if (ret == CKB_INDEX_OUT_OF_BOUND) {
+        break;
+      }
+      if (ret == CKB_ITEM_MISSING) {
+        i += 1;
+        continue;
+      }
+      CHECK(ret);
+      if (args_bytes_seg.size >= BLAKE2B_BLOCK_SIZE &&
+          memcmp(buffer, args_bytes_seg.ptr, BLAKE2B_BLOCK_SIZE) == 0) {
+        *owner_mode = 1;
+        break;
+      }
+      i += 1;
+    }
+  }
+
   // parse xUDT args
   if (args_bytes_seg.size < (FLAGS_SIZE + BLAKE2B_BLOCK_SIZE)) {
     *var_data = NULL;
     *var_len = 0;
     *flags = XUDTFlagsPlain;
   } else {
-    uint32_t* flag_ptr = (uint32_t*)(args_bytes_seg.ptr + BLAKE2B_BLOCK_SIZE);
-    if (*flag_ptr == XUDTFlagsPlain) {
+    uint32_t temp_flags =
+        (*(uint32_t*)(args_bytes_seg.ptr + BLAKE2B_BLOCK_SIZE)) &
+        ~OWNER_MODE_MASK;
+    if (temp_flags == XUDTFlagsPlain) {
       *flags = XUDTFlagsPlain;
-    } else if (*flag_ptr == XUDTFlagsInArgs) {
+    } else if (temp_flags == XUDTFlagsInArgs) {
       uint32_t real_size = 0;
       *flags = XUDTFlagsInArgs;
       *var_len = args_bytes_seg.size - BLAKE2B_BLOCK_SIZE - FLAGS_SIZE;
@@ -327,7 +393,7 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
       CHECK(err);
       // note, it's different than "flag = 2"
       CHECK2(real_size == *var_len, ERROR_INVALID_ARGS_FORMAT);
-    } else if (*flag_ptr == XUDTFlagsInWitness) {
+    } else if (temp_flags == XUDTFlagsInWitness) {
       *flags = XUDTFlagsInWitness;
       uint32_t hash_size =
           args_bytes_seg.size - BLAKE2B_BLOCK_SIZE - FLAGS_SIZE;
