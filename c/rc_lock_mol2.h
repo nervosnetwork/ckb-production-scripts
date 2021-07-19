@@ -46,6 +46,8 @@ struct BytesOptType RcLockWitnessLock_get_signature_impl(
     struct RcLockWitnessLockType *);
 struct RcIdentityOptType RcLockWitnessLock_get_rc_identity_impl(
     struct RcLockWitnessLockType *);
+struct BytesOptType RcLockWitnessLock_get_preimage_impl(
+    struct RcLockWitnessLockType *);
 
 // ----definition-----------------
 typedef struct IdentityVTable {
@@ -79,6 +81,7 @@ typedef struct RcIdentityOptType {
 typedef struct RcLockWitnessLockVTable {
   struct BytesOptType (*signature)(struct RcLockWitnessLockType *);
   struct RcIdentityOptType (*rc_identity)(struct RcLockWitnessLockType *);
+  struct BytesOptType (*preimage)(struct RcLockWitnessLockType *);
 } RcLockWitnessLockVTable;
 typedef struct RcLockWitnessLockType {
   mol2_cursor_t cur;
@@ -182,6 +185,7 @@ struct RcLockWitnessLockVTable *GetRcLockWitnessLockVTable(void) {
   if (inited) return &s_vtable;
   s_vtable.signature = RcLockWitnessLock_get_signature_impl;
   s_vtable.rc_identity = RcLockWitnessLock_get_rc_identity_impl;
+  s_vtable.preimage = RcLockWitnessLock_get_preimage_impl;
   return &s_vtable;
 }
 BytesOptType RcLockWitnessLock_get_signature_impl(RcLockWitnessLockType *this) {
@@ -197,6 +201,13 @@ RcIdentityOptType RcLockWitnessLock_get_rc_identity_impl(
   mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 1);
   ret.cur = cur;
   ret.t = GetRcIdentityOptVTable();
+  return ret;
+}
+BytesOptType RcLockWitnessLock_get_preimage_impl(RcLockWitnessLockType *this) {
+  BytesOptType ret;
+  mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 2);
+  ret.cur = cur;
+  ret.t = GetBytesOptVTable();
   return ret;
 }
 #endif  // MOLECULEC_C2_DECLARATION_ONLY

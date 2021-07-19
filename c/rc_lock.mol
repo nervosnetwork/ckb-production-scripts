@@ -13,5 +13,6 @@ option RcIdentityOpt (RcIdentity);
 table RcLockWitnessLock {
     signature: BytesOpt,
     rc_identity: RcIdentityOpt,
+    preimage: BytesOpt,
 }
 

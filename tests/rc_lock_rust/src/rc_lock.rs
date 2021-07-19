@@ -890,6 +890,7 @@ impl ::core::fmt::Display for RcLockWitnessLock {
         write!(f, "{} {{ ", Self::NAME)?;
         write!(f, "{}: {}", "signature", self.signature())?;
         write!(f, ", {}: {}", "rc_identity", self.rc_identity())?;
+        write!(f, ", {}: {}", "preimage", self.preimage())?;
         let extra_count = self.count_extra_fields();
         if extra_count != 0 {
             write!(f, ", .. ({} fields)", extra_count)?;
@@ -899,12 +900,12 @@ impl ::core::fmt::Display for RcLockWitnessLock {
 }
 impl ::core::default::Default for RcLockWitnessLock {
     fn default() -> Self {
-        let v: Vec<u8> = vec![12, 0, 0, 0, 12, 0, 0, 0, 12, 0, 0, 0];
+        let v: Vec<u8> = vec![16, 0, 0, 0, 16, 0, 0, 0, 16, 0, 0, 0, 16, 0, 0, 0];
         RcLockWitnessLock::new_unchecked(v.into())
     }
 }
 impl RcLockWitnessLock {
-    pub const FIELD_COUNT: usize = 2;
+    pub const FIELD_COUNT: usize = 3;
     pub fn total_size(&self) -> usize {
         molecule::unpack_number(self.as_slice()) as usize
     }
@@ -930,11 +931,17 @@ impl RcLockWitnessLock {
     pub fn rc_identity(&self) -> RcIdentityOpt {
         let slice = self.as_slice();
         let start = molecule::unpack_number(&slice[8..]) as usize;
+        let end = molecule::unpack_number(&slice[12..]) as usize;
+        RcIdentityOpt::new_unchecked(self.0.slice(start..end))
+    }
+    pub fn preimage(&self) -> BytesOpt {
+        let slice = self.as_slice();
+        let start = molecule::unpack_number(&slice[12..]) as usize;
         if self.has_extra_fields() {
-            let end = molecule::unpack_number(&slice[12..]) as usize;
-            RcIdentityOpt::new_unchecked(self.0.slice(start..end))
+            let end = molecule::unpack_number(&slice[16..]) as usize;
+            BytesOpt::new_unchecked(self.0.slice(start..end))
         } else {
-            RcIdentityOpt::new_unchecked(self.0.slice(start..))
+            BytesOpt::new_unchecked(self.0.slice(start..))
         }
     }
     pub fn as_reader<'r>(&'r self) -> RcLockWitnessLockReader<'r> {
@@ -966,6 +973,7 @@ impl molecule::prelude::Entity for RcLockWitnessLock {
         Self::new_builder()
             .signature(self.signature())
             .rc_identity(self.rc_identity())
+            .preimage(self.preimage())
     }
 }
 #[derive(Clone, Copy)]
@@ -989,6 +997,7 @@ impl<'r> ::core::fmt::Display for RcLockWitnessLockReader<'r> {
         write!(f, "{} {{ ", Self::NAME)?;
         write!(f, "{}: {}", "signature", self.signature())?;
         write!(f, ", {}: {}", "rc_identity", self.rc_identity())?;
+        write!(f, ", {}: {}", "preimage", self.preimage())?;
         let extra_count = self.count_extra_fields();
         if extra_count != 0 {
             write!(f, ", .. ({} fields)", extra_count)?;
@@ -997,7 +1006,7 @@ impl<'r> ::core::fmt::Display for RcLockWitnessLockReader<'r> {
     }
 }
 impl<'r> RcLockWitnessLockReader<'r> {
-    pub const FIELD_COUNT: usize = 2;
+    pub const FIELD_COUNT: usize = 3;
     pub fn total_size(&self) -> usize {
         molecule::unpack_number(self.as_slice()) as usize
     }
@@ -1023,11 +1032,17 @@ impl<'r> RcLockWitnessLockReader<'r> {
     pub fn rc_identity(&self) -> RcIdentityOptReader<'r> {
         let slice = self.as_slice();
         let start = molecule::unpack_number(&slice[8..]) as usize;
+        let end = molecule::unpack_number(&slice[12..]) as usize;
+        RcIdentityOptReader::new_unchecked(&self.as_slice()[start..end])
+    }
+    pub fn preimage(&self) -> BytesOptReader<'r> {
+        let slice = self.as_slice();
+        let start = molecule::unpack_number(&slice[12..]) as usize;
         if self.has_extra_fields() {
-            let end = molecule::unpack_number(&slice[12..]) as usize;
-            RcIdentityOptReader::new_unchecked(&self.as_slice()[start..end])
+            let end = molecule::unpack_number(&slice[16..]) as usize;
+            BytesOptReader::new_unchecked(&self.as_slice()[start..end])
         } else {
-            RcIdentityOptReader::new_unchecked(&self.as_slice()[start..])
+            BytesOptReader::new_unchecked(&self.as_slice()[start..])
         }
     }
 }
@@ -1082,6 +1097,7 @@ impl<'r> molecule::prelude::Reader<'r> for RcLockWitnessLockReader<'r> {
         }
         BytesOptReader::verify(&slice[offsets[0]..offsets[1]], compatible)?;
         RcIdentityOptReader::verify(&slice[offsets[1]..offsets[2]], compatible)?;
+        BytesOptReader::verify(&slice[offsets[2]..offsets[3]], compatible)?;
         Ok(())
     }
 }
@@ -1089,15 +1105,20 @@ impl<'r> molecule::prelude::Reader<'r> for RcLockWitnessLockReader<'r> {
 pub struct RcLockWitnessLockBuilder {
     pub(crate) signature: BytesOpt,
     pub(crate) rc_identity: RcIdentityOpt,
+    pub(crate) preimage: BytesOpt,
 }
 impl RcLockWitnessLockBuilder {
-    pub const FIELD_COUNT: usize = 2;
+    pub const FIELD_COUNT: usize = 3;
     pub fn signature(mut self, v: BytesOpt) -> Self {
         self.signature = v;
         self
     }
     pub fn rc_identity(mut self, v: RcIdentityOpt) -> Self {
         self.rc_identity = v;
+        self
+    }
+    pub fn preimage(mut self, v: BytesOpt) -> Self {
+        self.preimage = v;
         self
     }
 }
@@ -1108,6 +1129,7 @@ impl molecule::prelude::Builder for RcLockWitnessLockBuilder {
         molecule::NUMBER_SIZE * (Self::FIELD_COUNT + 1)
             + self.signature.as_slice().len()
             + self.rc_identity.as_slice().len()
+            + self.preimage.as_slice().len()
     }
     fn write<W: molecule::io::Write>(&self, writer: &mut W) -> molecule::io::Result<()> {
         let mut total_size = molecule::NUMBER_SIZE * (Self::FIELD_COUNT + 1);
@@ -1116,12 +1138,15 @@ impl molecule::prelude::Builder for RcLockWitnessLockBuilder {
         total_size += self.signature.as_slice().len();
         offsets.push(total_size);
         total_size += self.rc_identity.as_slice().len();
+        offsets.push(total_size);
+        total_size += self.preimage.as_slice().len();
         writer.write_all(&molecule::pack_number(total_size as molecule::Number))?;
         for offset in offsets.into_iter() {
             writer.write_all(&molecule::pack_number(offset as molecule::Number))?;
         }
         writer.write_all(self.signature.as_slice())?;
         writer.write_all(self.rc_identity.as_slice())?;
+        writer.write_all(self.preimage.as_slice())?;
         Ok(())
     }
     fn build(&self) -> Self::Entity {

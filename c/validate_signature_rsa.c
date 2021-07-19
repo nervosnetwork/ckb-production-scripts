@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "blake2b.h"
 #include "mbedtls/md.h"
 #include "mbedtls/md_internal.h"
 #include "mbedtls/memory_buffer_alloc.h"
@@ -19,6 +20,9 @@
 #else
 #define mbedtls_printf(x, ...) (void)0
 #endif
+
+#define BLAKE160_SIZE 20
+#define BLAKE2B_BLOCK_SIZE 32
 
 enum ErrorCode {
   // 0 is the only success code. We can use 0 directly.
@@ -116,6 +120,21 @@ uint32_t get_key_size(uint8_t key_size_enum) {
   }
 }
 
+void get_pubkey_hash(RsaInfo *info, uint8_t *hash) {
+  uint8_t temp[BLAKE2B_BLOCK_SIZE];
+
+  uint32_t key_size = get_key_size(info->key_size);
+  uint32_t total = calculate_rsa_info_length(key_size);
+  uint32_t pubkey_size = total - key_size / 8;
+
+  blake2b_state ctx;
+  blake2b_init(&ctx, BLAKE2B_BLOCK_SIZE);
+  blake2b_update(&ctx, info, pubkey_size);
+  blake2b_final(&ctx, temp, BLAKE2B_BLOCK_SIZE);
+
+  memcpy(hash, temp, BLAKE160_SIZE);
+}
+
 int check_pubkey(mbedtls_mpi *N, mbedtls_mpi *E) {
   int err = 0;
   size_t key_size = mbedtls_mpi_size(N) * 8;
@@ -192,14 +211,16 @@ int validate_signature_rsa(void *prefilled_data,
                            size_t msg_size, uint8_t *output,
                            size_t *output_len) {
   (void)prefilled_data;
-  (void)output;
-  (void)output_len;
   int err = ERROR_RSA_ONLY_INIT;
   uint8_t hash_buf[MBEDTLS_MD_MAX_SIZE] = {0};
   uint32_t hash_size = 0;
   uint32_t key_size = 0;
   bool is_rsa_inited = false;
   mbedtls_rsa_context rsa;
+
+  if (output_len == NULL || *output_len < BLAKE160_SIZE) {
+    return ERROR_RSA_INVALID_PARAM1;
+  }
 
   RsaInfo *input_info = (RsaInfo *)signature_buffer;
 
@@ -252,6 +273,9 @@ int validate_signature_rsa(void *prefilled_data,
     err = ERROR_RSA_VERIFY_FAILED;
     goto exit;
   }
+
+  get_pubkey_hash(input_info, output);
+  *output_len = BLAKE160_SIZE;
 
   err = CKB_SUCCESS;
 
@@ -482,6 +506,10 @@ int validate_signature_iso9796_2(void *_p, const uint8_t *sig_buf,
   if (sig_len < sizeof(RsaInfo)) {
     return ERROR_ISO97962_INVALID_ARG12;
   }
+  if (out_len == NULL || *out_len < BLAKE160_SIZE) {
+    return ERROR_ISO97962_INVALID_ARG12;
+  }
+
   uint32_t key_size_byte = get_key_size(info->key_size) / 8;
 
   uint8_t *sig = NULL;
@@ -538,9 +566,8 @@ int validate_signature_iso9796_2(void *_p, const uint8_t *sig_buf,
                         new_msg, &new_msg_len);
   CHECK(err);
 
-  uint32_t copy_size = new_msg_len > *out_len ? *out_len : new_msg_len;
-  memcpy(out, new_msg, copy_size);
-  *out = copy_size;
+  get_pubkey_hash(info, out);
+  *out_len = BLAKE160_SIZE;
 
   err = 0;
 exit:

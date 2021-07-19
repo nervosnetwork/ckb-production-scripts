@@ -94,7 +94,8 @@ ${PROTOCOL_SCHEMA}:
 ALL_C_SOURCE := $(wildcard c/rc_lock.c c/rc_lock_acp.h c/rc_lock_time_lock.h \
 	tests/rc_lock/rc_lock_sim.c tests/rc_lock/ckb_syscall_rc_lock_sim.h \
 	c/rce_validator.c /always_success.c c/rce.h c/xudt_rce.c \
-	c/rce_validator.c tests/xudt_rce/*.c tests/xudt_rce/*.h)
+	c/rce_validator.c tests/xudt_rce/*.c tests/xudt_rce/*.h\
+	c/validate_signature_rsa.h c/validate_signature_rsa.c)
 
 fmt:
 	docker run --rm -v `pwd`:/code ${CLANG_FORMAT_DOCKER} bash -c "cd code && clang-format -i -style=Google $(ALL_C_SOURCE)"
