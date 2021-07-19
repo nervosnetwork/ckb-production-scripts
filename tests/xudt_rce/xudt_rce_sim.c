@@ -494,6 +494,29 @@ UTEST(smt, verify_not_existing) {
   ASSERT_EQ(0, smt_verify(root_hash, &changes, proof, sizeof(proof)));
 }
 
+UTEST(smt, verify_last_byte_is_0x48) {
+  uint8_t key1[32] = {11};
+  uint8_t value1[32] = {1};
+  uint8_t key2[32] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                      0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                      0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                      0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+  uint8_t value2[32] = {1};
+  uint8_t root_hash[32] = {169, 24,  71, 89,  102, 129, 67,  21,  134, 246, 101,
+                           254, 182, 10, 49,  96,  17,  26,  147, 156, 55,  41,
+                           146, 217, 85, 213, 123, 98,  154, 145, 222, 186};
+  uint8_t proof[] = {76, 79, 255, 76, 79, 255, 72};  // 72 is 0x48
+
+  smt_pair_t entries[8];
+  smt_state_t changes;
+  smt_state_init(&changes, entries, 32);
+  smt_state_insert(&changes, key1, value1);
+  smt_state_insert(&changes, key2, value2);
+  smt_state_normalize(&changes);
+
+  ASSERT_EQ(0, smt_verify(root_hash, &changes, proof, sizeof(proof)));
+}
+
 // this is the case from
 // https://github.com/nervosnetwork/ckb-simple-account-layer/blob/1970c0382271837ff46fdc276c5b63bccb4324db/c/tests/main.c#L136
 // the names are changed accordingly.
