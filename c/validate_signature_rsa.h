@@ -108,8 +108,9 @@ uint32_t get_key_size(uint8_t key_size_enum);
  * @param signature_size size of signature_buffer.
  * @param message_buffer pointer to message buffer.
  * @param message_size size of message_buffer.
- * @param output blake160 hash of pubkey
- * @param output_len length of output buffer size. should be >= 20.
+ * @param output blake160 hash of pubkey; NULL if not needed.
+ * @param output_len length of output buffer size, should be >= 20. NULL if not
+ * needed.
  * @return 0 succeed; otherwise fail.
  */
 int validate_signature(void *prefilled_data, const uint8_t *signature_buffer,

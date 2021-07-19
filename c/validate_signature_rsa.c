@@ -218,10 +218,6 @@ int validate_signature_rsa(void *prefilled_data,
   bool is_rsa_inited = false;
   mbedtls_rsa_context rsa;
 
-  if (output_len == NULL || *output_len < BLAKE160_SIZE) {
-    return ERROR_RSA_INVALID_PARAM1;
-  }
-
   RsaInfo *input_info = (RsaInfo *)signature_buffer;
 
   // for key size with 1024 and 2048 bits, it uses up to 7K bytes.
@@ -274,8 +270,10 @@ int validate_signature_rsa(void *prefilled_data,
     goto exit;
   }
 
-  get_pubkey_hash(input_info, output);
-  *output_len = BLAKE160_SIZE;
+  if (output != NULL && output_len != NULL && *output_len >= BLAKE160_SIZE) {
+    get_pubkey_hash(input_info, output);
+    *output_len = BLAKE160_SIZE;
+  }
 
   err = CKB_SUCCESS;
 
@@ -506,9 +504,6 @@ int validate_signature_iso9796_2(void *_p, const uint8_t *sig_buf,
   if (sig_len < sizeof(RsaInfo)) {
     return ERROR_ISO97962_INVALID_ARG12;
   }
-  if (out_len == NULL || *out_len < BLAKE160_SIZE) {
-    return ERROR_ISO97962_INVALID_ARG12;
-  }
 
   uint32_t key_size_byte = get_key_size(info->key_size) / 8;
 
@@ -566,8 +561,10 @@ int validate_signature_iso9796_2(void *_p, const uint8_t *sig_buf,
                         new_msg, &new_msg_len);
   CHECK(err);
 
-  get_pubkey_hash(info, out);
-  *out_len = BLAKE160_SIZE;
+  if (out != NULL && out_len != NULL && *out_len >= BLAKE160_SIZE) {
+    get_pubkey_hash(info, out);
+    *out_len = BLAKE160_SIZE;
+  }
 
   err = 0;
 exit:
