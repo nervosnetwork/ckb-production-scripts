@@ -20,6 +20,8 @@ jobs:
     - name: Run tests
       run: cargo test
     - name: Run xudt tests
-      run: cd xudt && cargo test
+      run: cd tests/xudt_rce_rust && cargo test
+    - name: Run xudt simulator tests
+      run: cd tests/xudt_rce && bash run.sh
     - name: Run rc_lock tests
       run: cd tests/rc_lock_rust && cargo test

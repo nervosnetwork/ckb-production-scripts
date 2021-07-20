@@ -38,6 +38,13 @@ int ckb_exit(signed char);
 #define FLAGS_SIZE 4
 #define MAX_LOCK_SCRIPT_HASH_COUNT 2048
 
+#define OWNER_MODE_INPUT_TYPE_MASK 0x80000000
+#define OWNER_MODE_OUTPUT_TYPE_MASK 0x40000000
+#define OWNER_MODE_INPUT_LOCK_NOT_MASK 0x20000000
+#define OWNER_MODE_MASK                                       \
+  (OWNER_MODE_INPUT_TYPE_MASK | OWNER_MODE_OUTPUT_TYPE_MASK | \
+   OWNER_MODE_INPUT_LOCK_NOT_MASK)
+
 #include "rce.h"
 
 // global variables, type definitions, etc
@@ -208,6 +215,7 @@ int get_extension_data(uint32_t index, uint8_t* buff, uint32_t buff_len,
   CHECK2(buff_len >= extension_data.size, ERROR_INVALID_MOL_FORMAT);
 
   *out_len = mol2_read_at(&extension_data, buff, buff_len);
+  CHECK2(*out_len == extension_data.size, ERROR_INVALID_MOL_FORMAT);
 
   err = 0;
 exit:
@@ -238,7 +246,7 @@ int load_raw_extension_data(uint8_t** var_data, uint32_t* var_len) {
 
   uint32_t read_len =
       mol2_read_at(&script_vec.cur, g_raw_extension_data, RAW_EXTENSION_SIZE);
-  CHECK2(read_len >= script_vec.cur.size, ERROR_INVALID_MOL_FORMAT);
+  CHECK2(read_len == script_vec.cur.size, ERROR_INVALID_MOL_FORMAT);
 
   *var_data = g_raw_extension_data;
   *var_len = read_len;
@@ -248,11 +256,46 @@ exit:
   return err;
 }
 
+int check_owner_mode(size_t source, size_t field, mol_seg_t args_bytes_seg,
+                     int* owner_mode) {
+  int err = 0;
+  size_t i = 0;
+  uint8_t buffer[BLAKE2B_BLOCK_SIZE];
+
+  while (1) {
+    uint64_t len = BLAKE2B_BLOCK_SIZE;
+    err = ckb_checked_load_cell_by_field(buffer, &len, 0, i, source, field);
+    if (err == CKB_INDEX_OUT_OF_BOUND) {
+      err = 0;
+      break;
+    }
+    if (err == CKB_ITEM_MISSING) {
+      i += 1;
+      err = 0;
+      continue;
+    }
+    CHECK(err);
+    if (args_bytes_seg.size >= BLAKE2B_BLOCK_SIZE &&
+        memcmp(buffer, args_bytes_seg.ptr, BLAKE2B_BLOCK_SIZE) == 0) {
+      *owner_mode = 1;
+      break;
+    }
+    i += 1;
+  }
+
+exit:
+  return err;
+}
+
 // *var_data will point to "Raw Extension Data", which can be in args or witness
 // *var_data will refer to a memory location of g_script or g_raw_extension_data
 int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
                uint32_t* var_len, uint8_t* hashes, uint32_t* hashes_count) {
   int err = 0;
+  bool owner_mode_for_input_type = false;
+  bool owner_mode_for_output_type = false;
+  // default is on
+  bool owner_mode_for_input_lock = true;
 
   uint64_t len = SCRIPT_SIZE;
   int ret = ckb_checked_load_script(g_script, &len, 0);
@@ -270,23 +313,26 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
   mol_seg_t args_bytes_seg = MolReader_Bytes_raw_bytes(&args_seg);
   CHECK2(args_bytes_seg.size >= BLAKE2B_BLOCK_SIZE, ERROR_ARGUMENTS_LEN);
 
+  if (args_bytes_seg.size >= (FLAGS_SIZE + BLAKE2B_BLOCK_SIZE)) {
+    uint32_t val = *(uint32_t*)(args_bytes_seg.ptr + BLAKE2B_BLOCK_SIZE);
+    if (val & OWNER_MODE_INPUT_TYPE_MASK) {
+      owner_mode_for_input_type = true;
+    }
+    if (val & OWNER_MODE_OUTPUT_TYPE_MASK) {
+      owner_mode_for_output_type = true;
+    }
+    if (val & OWNER_MODE_INPUT_LOCK_NOT_MASK) {
+      owner_mode_for_input_lock = false;
+    }
+  }
+
   *hashes_count = 0;
-  // With owner lock script extracted, we will look through each input in the
-  // current transaction to see if any unlocked cell uses owner lock.
-  *owner_mode = 0;
+
+  // collect hashes
   size_t i = 0;
   while (1) {
     uint8_t buffer[BLAKE2B_BLOCK_SIZE];
     uint64_t len2 = BLAKE2B_BLOCK_SIZE;
-    // There are 2 points worth mentioning here:
-    //
-    // * First, we are using the checked version of CKB syscalls, the checked
-    // versions will return an error if our provided buffer is not enough to
-    // hold all returned data. This can help us ensure that we are processing
-    // enough data here.
-    // * Second, `CKB_CELL_FIELD_LOCK_HASH` is used here to directly load the
-    // lock script hash, so we don't have to manually calculate the hash again
-    // here.
     ret = ckb_checked_load_cell_by_field(buffer, &len2, 0, i, CKB_SOURCE_INPUT,
                                          CKB_CELL_FIELD_LOCK_HASH);
     if (ret == CKB_INDEX_OUT_OF_BOUND) {
@@ -298,13 +344,26 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
     memcpy(&hashes[(*hashes_count) * BLAKE2B_BLOCK_SIZE], buffer,
            BLAKE2B_BLOCK_SIZE);
     *hashes_count += 1;
-
-    if (args_bytes_seg.size >= BLAKE2B_BLOCK_SIZE &&
-        memcmp(buffer, args_bytes_seg.ptr, BLAKE2B_BLOCK_SIZE) == 0) {
-      *owner_mode = 1;
-      break;
-    }
     i += 1;
+  }
+
+  *owner_mode = 0;
+
+  if (owner_mode_for_input_lock && *owner_mode == 0) {
+    err = check_owner_mode(CKB_SOURCE_INPUT, CKB_CELL_FIELD_LOCK_HASH,
+                           args_bytes_seg, owner_mode);
+    CHECK(err);
+  }
+
+  if (owner_mode_for_input_type && *owner_mode == 0) {
+    err = check_owner_mode(CKB_SOURCE_INPUT, CKB_CELL_FIELD_TYPE_HASH,
+                           args_bytes_seg, owner_mode);
+    CHECK(err);
+  }
+  if (owner_mode_for_output_type && *owner_mode == 0) {
+    err = check_owner_mode(CKB_SOURCE_OUTPUT, CKB_CELL_FIELD_TYPE_HASH,
+                           args_bytes_seg, owner_mode);
+    CHECK(err);
   }
 
   // parse xUDT args
@@ -313,10 +372,12 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
     *var_len = 0;
     *flags = XUDTFlagsPlain;
   } else {
-    uint32_t* flag_ptr = (uint32_t*)(args_bytes_seg.ptr + BLAKE2B_BLOCK_SIZE);
-    if (*flag_ptr == XUDTFlagsPlain) {
+    uint32_t temp_flags =
+        (*(uint32_t*)(args_bytes_seg.ptr + BLAKE2B_BLOCK_SIZE)) &
+        ~OWNER_MODE_MASK;
+    if (temp_flags == XUDTFlagsPlain) {
       *flags = XUDTFlagsPlain;
-    } else if (*flag_ptr == XUDTFlagsInArgs) {
+    } else if (temp_flags == XUDTFlagsInArgs) {
       uint32_t real_size = 0;
       *flags = XUDTFlagsInArgs;
       *var_len = args_bytes_seg.size - BLAKE2B_BLOCK_SIZE - FLAGS_SIZE;
@@ -326,7 +387,7 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
       CHECK(err);
       // note, it's different than "flag = 2"
       CHECK2(real_size == *var_len, ERROR_INVALID_ARGS_FORMAT);
-    } else if (*flag_ptr == XUDTFlagsInWitness) {
+    } else if (temp_flags == XUDTFlagsInWitness) {
       *flags = XUDTFlagsInWitness;
       uint32_t hash_size =
           args_bytes_seg.size - BLAKE2B_BLOCK_SIZE - FLAGS_SIZE;

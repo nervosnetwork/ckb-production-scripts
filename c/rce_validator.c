@@ -279,6 +279,9 @@ int main() {
         mol2_read_at(&proof_cursor, proof, MAX_PROOF_LENGTH);
     CHECK2(proof_length == proof_cursor.size, ERROR_INVALID_MOL_FORMAT);
 
+    smt_state_normalize(&states);
+    smt_state_normalize(&old_states);
+
     // First validate old values & proof are correct
     err = smt_verify(input_hash, &old_states, proof, proof_length);
     CHECK2(err == 0, ERROR_SMT_VERIFY_FAILED);
@@ -289,8 +292,18 @@ int main() {
     if (((flags & FLAG_FREEZE_TYPE) != 0) && (has_input) && (input_is_rule)) {
       return ERROR_TYPE_FREEZED;
     }
-    // When changing from RCRule to RCCellVec, or from RCCellVec to RCCellVec,
-    // no further action is needed.
+    RCCellVecType cell_vec = rc_data.t->as_RCCellVec(&rc_data);
+    uint32_t len = cell_vec.t->len(&cell_vec);
+    bool item_existing = false;
+    for (uint32_t i = 0; i < len; i++) {
+      uint8_t hash[BLAKE2B_BLOCK_SIZE];
+      mol2_cursor_t item = cell_vec.t->get(&cell_vec, i, &item_existing);
+      CHECK2(item_existing, ERROR_INVALID_MOL_FORMAT);
+      CHECK2(item.size == BLAKE2B_BLOCK_SIZE, ERROR_INVALID_MOL_FORMAT);
+      uint32_t read_len = mol2_read_at(&item, hash, sizeof(hash));
+      CHECK2(read_len == sizeof(hash), ERROR_INVALID_MOL_FORMAT);
+    }
+
   } else {
     return ERROR_INVALID_MOL_FORMAT;
   }

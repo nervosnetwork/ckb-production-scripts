@@ -10,6 +10,7 @@ int ckb_exit(signed char);
 // clang-format off
 #include <stdio.h>
 #include "blockchain-api2.h"
+#define MOLECULEC_VERSION 7000
 #include "blockchain.h"
 #include "ckb_consts.h"
 
@@ -59,7 +60,7 @@ enum RcLockErrorCode {
   ERROR_NO_WHITE_LIST,
   ERROR_INVALID_RC_IDENTITY_ID,
   ERROR_INVALID_PREIMAGE,
-  ERROR_INVALID_ARGS,
+  ERROR_INVALID_RC_LOCK_ARGS,
   ERROR_ISO9796_2_VERIFY,
 };
 
@@ -405,12 +406,12 @@ int verify_iso9796_2_sighash_all(uint8_t *pubkey_hash, uint8_t *sig,
 
   RsaInfo *info = (RsaInfo *)sig;
   uint32_t key_size = get_key_size(info->key_size);
-  CHECK2(key_size != 0, ERROR_INVALID_ARGS);
+  CHECK2(key_size != 0, ERROR_INVALID_RC_LOCK_ARGS);
   uint32_t one_sig_len = calculate_rsa_info_length(key_size);
   uint32_t raw_sig_len = key_size / 8;
 
   uint32_t expected_sig_len = one_sig_len + 3 * raw_sig_len;
-  CHECK2(sig_len == expected_sig_len, ERROR_INVALID_ARGS);
+  CHECK2(sig_len == expected_sig_len, ERROR_INVALID_RC_LOCK_ARGS);
 
   uint8_t msg[BLAKE2B_BLOCK_SIZE];
   err = generate_sighash_all(msg, sizeof(msg));

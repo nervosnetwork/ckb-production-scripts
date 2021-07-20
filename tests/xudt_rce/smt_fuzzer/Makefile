@@ -16,16 +16,16 @@ LLVM_COV=llvm-cov
 
 CORPUS_DIR=corpus
 
-FUZZER_FLAGS=-g -O1 -fsanitize=fuzzer,address,undefined -I ../../../c -I ../../../deps/ckb-c-stdlib-simulator-only2
+FUZZER_FLAGS=-g -O1 -fsanitize=fuzzer,address,undefined -I ../../../c -I ../../../deps/ckb-c-stdlib-20210713 -I ../../../deps/sparse-merkle-tree/c
 
 COVERAGE_DIR=coverage
-COVERAGE_FLAGS=-fprofile-instr-generate -fcoverage-mapping -I ../../../c -I ../../../deps/ckb-c-stdlib-simulator-only2
+COVERAGE_FLAGS=-fprofile-instr-generate -fcoverage-mapping -I ../../../c -I ../../../deps/ckb-c-stdlib-20210713 -I ../../../deps/sparse-merkle-tree/c
 
 ifeq ($(OS),MacOS)
 	COVERAGE_FLAGS+=-Wl,-U,_LLVMFuzzerCustomMutator -Wl,-U,_LLVMFuzzerInitialize
 endif
 
-EXTERNAL_HEADERS=../../../deps/ckb-c-stdlib-simulator-only2/ckb_smt.h
+EXTERNAL_HEADERS=../../../deps/sparse-merkle-tree/c/ckb_smt.h
 
 all: fuzzer coverage
 

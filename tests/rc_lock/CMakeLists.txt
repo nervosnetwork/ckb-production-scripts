@@ -17,6 +17,7 @@ add_definitions(-DCKB_USE_SIM)
 
 include_directories(../../tests/rc_lock)
 include_directories(../../deps/ckb-c-stdlib-add-identity)
+include_directories(../../deps/sparse-merkle-tree/c)
 # include_directories(deps/ckb-c-stdlib/libc)
 # on simulator, we don't use own "libc"
 include_directories(../../deps/secp256k1/src)

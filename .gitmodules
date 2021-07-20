@@ -7,7 +7,15 @@
 [submodule "deps/ckb-c-stdlib-add-identity"]
 	path = deps/ckb-c-stdlib-add-identity
 	url = https://github.com/XuJiandong/ckb-c-stdlib.git
-	branch = add-identity
+	branch = ckb-identity
+[submodule "deps/ckb-c-stdlib-20210713"]
+	path = deps/ckb-c-stdlib-20210713
+	url = https://github.com/nervosnetwork/ckb-c-stdlib.git
+	branch = master
+[submodule "deps/sparse-merkle-tree"]
+	path = deps/sparse-merkle-tree
+	url = https://github.com/nervosnetwork/sparse-merkle-tree.git
+	branch = master
 [submodule "deps/mbedtls"]
 	path = deps/mbedtls
 	url = https://github.com/nervosnetwork/mbedtls.git

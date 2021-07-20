@@ -349,6 +349,7 @@ int rce_verify_one_rule(RceState* rce_state, smt_state_t* states,
 
   uint32_t temp_proof_len =
       mol2_read_at(&proof, temp_proof, MAX_TEMP_PROOF_LENGTH);
+  CHECK2(temp_proof_len == proof.size, ERROR_INVALID_MOL_FORMAT);
   CHECK2(temp_proof_len < MAX_TEMP_PROOF_LENGTH, ERROR_INVALID_MOL_FORMAT);
 
   if (rce_is_white_list(current_rule->flags)) {
