@@ -87,10 +87,6 @@ validate_signature_rsa_clean:
 	rm -f build/validate_signature_rsa
 	rm -f build/*.o
 
-fmt:
-	clang-format -i -style=Google $(wildcard c/validate_signature_rsa.h c/validate_signature_rsa.c tests/validate_signature_rsa/*.c tests/validate_signature_rsa/*.h)
-	git diff --exit-code $(wildcard c/validate_signature_rsa.h c/validate_signature_rsa.c tests/validate_signature_rsa/*.c tests/validate_signature_rsa/*.h)
-
 ${PROTOCOL_SCHEMA}:
 	curl -L -o $@ ${PROTOCOL_URL}
 
