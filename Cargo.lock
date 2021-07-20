@@ -338,6 +338,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "ckb-production-scripts"
+version = "0.5.1"
+dependencies = [
+ "blake2b-rs",
+ "byteorder",
+ "ckb-crypto",
+ "ckb-dao-utils",
+ "ckb-error",
+ "ckb-hash",
+ "ckb-script",
+ "ckb-types",
+ "faster-hex 0.3.1",
+ "includedir",
+ "includedir_codegen",
+ "lazy_static",
+ "phf",
+ "rand 0.6.5",
+ "ripemd160",
+ "secp256k1",
+ "sha2",
+]
+
+[[package]]
 name = "ckb-rational"
 version = "0.24.0-pre"
 source = "git+https://github.com/nervosnetwork/ckb.git?rev=d75e4c5#d75e4c56ffa40e17fd2fe477da3f98c5578edcd1"
@@ -350,7 +373,7 @@ name = "ckb-resource"
 version = "0.24.0-pre"
 source = "git+https://github.com/nervosnetwork/ckb.git?rev=d75e4c5#d75e4c56ffa40e17fd2fe477da3f98c5578edcd1"
 dependencies = [
- "ckb-system-scripts 0.4.0-alpha.10+witness-args",
+ "ckb-system-scripts",
  "ckb-types",
  "includedir",
  "includedir_codegen",
@@ -399,29 +422,6 @@ dependencies = [
  "includedir",
  "includedir_codegen",
  "phf",
-]
-
-[[package]]
-name = "ckb-system-scripts"
-version = "0.5.1"
-dependencies = [
- "blake2b-rs",
- "byteorder",
- "ckb-crypto",
- "ckb-dao-utils",
- "ckb-error",
- "ckb-hash",
- "ckb-script",
- "ckb-types",
- "faster-hex 0.3.1",
- "includedir",
- "includedir_codegen",
- "lazy_static",
- "phf",
- "rand 0.6.5",
- "ripemd160",
- "secp256k1",
- "sha2",
 ]
 
 [[package]]

@@ -1,6 +1,11 @@
 target/
 build/
 !build/.gitkeep
+tests/xudt_rce/simulator-build-debug
+tests/xudt_rce/smt_fuzzer/smt_fuzzer.dSYM
+smt_coverage
+smt_fuzzer
+.vscode
 cmake-build-debug
 tests/validate_signature_rsa/build.simulator
 tests/validate_signature_rsa/corpus
