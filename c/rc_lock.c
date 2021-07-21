@@ -42,15 +42,9 @@ int ckb_exit(signed char);
 #define SCRIPT_SIZE 32768
 #define MAX_LOCK_SCRIPT_HASH_COUNT 2048
 #define MAX_SIGNATURE_SIZE 1024
-#define MAX_PREIMAGE_SIZE 1024
-#define MAX_CODE_SIZE (1024 * 400)
-
-enum IdentityFlagsExtraType {
-  IdentityFlagsRsaDl = 3,
-  IdentityFlagsRsaExec = 4,
-  IdentityFlagsIso9796_2Dl = 5,
-  IdentityFlagsIso9796_2Exec = 6,
-};
+#define RC_ROOT_MASK 1
+#define ACP_MASK (1 << 1)
+#define SINCE_MASK (1 << 2)
 
 enum RcLockErrorCode {
   // rc lock error code is starting from 80
@@ -59,17 +53,24 @@ enum RcLockErrorCode {
   ERROR_NO_RCRULE,
   ERROR_NO_WHITE_LIST,
   ERROR_INVALID_RC_IDENTITY_ID,
-  ERROR_INVALID_PREIMAGE,
   ERROR_INVALID_RC_LOCK_ARGS,
   ERROR_ISO9796_2_VERIFY,
+  ERROR_ARGS_FORMAT,
 };
 
 // parsed from args in lock script
 typedef struct ArgsType {
   CkbIdentityType id;
+
+  uint8_t rc_lock_flags;
+
+  bool has_rc_root;
   uint8_t rc_root[32];
+
   bool has_since;
   uint64_t since;
+
+  bool has_acp;
   int ckb_minimum;  // Used for ACP
   int udt_minimum;  // used for ACP
 } ArgsType;
@@ -87,21 +88,6 @@ typedef struct WitnessLockType {
 
   SmtProofEntryVecType proofs;
 } WitnessLockType;
-
-uint32_t calculate_rsa_info_length(int key_size) { return 8 + key_size / 4; }
-
-uint32_t get_key_size(uint8_t key_size_enum) {
-  if (key_size_enum == CKB_KEYSIZE_1024) {
-    return 1024;
-  } else if (key_size_enum == CKB_KEYSIZE_2048) {
-    return 2048;
-  } else if (key_size_enum == CKB_KEYSIZE_4096) {
-    return 4096;
-  } else {
-    ASSERT(false);
-    return 0;
-  }
-}
 
 // make compiler happy
 int make_cursor_from_witness(WitnessArgsType *witness, bool *_input) {
@@ -139,11 +125,9 @@ bool is_memory_enough(mol_seg_t seg, const uint8_t *cur, uint32_t len) {
 }
 
 // memory layout of args:
-// 1 byte flag
-// 20 bytes blake160
-// extra 2 bytes for ACP
-// 32 bytes rc_root
-// 8 bytes since, optional. Used for time lock
+// <identity, 21 bytes> <rc_lock args>
+// <rc_lock flags, 1 byte>  <RC cell type id, 32 bytes, optional> <ckb/udt min,
+// 2 bytes, optional> <since, 8 bytes, optional>
 int parse_args(ArgsType *args) {
   int err = 0;
   uint8_t script[SCRIPT_SIZE];
@@ -159,51 +143,61 @@ int parse_args(ArgsType *args) {
   CHECK2(mol_err == MOL_OK, ERROR_ENCODING);
 
   mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
-  mol_seg_t args_bytes_seg = MolReader_Bytes_raw_bytes(&args_seg);
+  mol_seg_t seg = MolReader_Bytes_raw_bytes(&args_seg);
 
-  uint8_t *cur = args_bytes_seg.ptr;
+  uint8_t *cur = seg.ptr;
 
   // parse flags
-  CHECK2(is_memory_enough(args_bytes_seg, cur, 1), ERROR_INVALID_MOL_FORMAT);
+  CHECK2(is_memory_enough(seg, cur, 1), ERROR_ARGS_FORMAT);
   uint8_t flags = *cur;
-  CHECK2(flags == IdentityFlagsPubkeyHash || flags == IdentityFlagsOwnerLock ||
-             flags == IdentityFlagsAcp,
-         ERROR_UNKNOWN_FLAGS);
   args->id.flags = flags;
-  cur = safe_move_to(args_bytes_seg, cur, 1);
-  CHECK2(cur != NULL, ERROR_INVALID_MOL_FORMAT);
+  cur = safe_move_to(seg, cur, 1);
+  CHECK2(cur != NULL, ERROR_ARGS_FORMAT);
 
   // parse blake160
-  CHECK2(is_memory_enough(args_bytes_seg, cur, 20), ERROR_INVALID_MOL_FORMAT);
+  CHECK2(is_memory_enough(seg, cur, 20), ERROR_ARGS_FORMAT);
   memcpy(args->id.blake160, cur, BLAKE160_SIZE);
-  cur = safe_move_to(args_bytes_seg, cur, 20);
-  CHECK2(cur != NULL, ERROR_INVALID_MOL_FORMAT);
+  cur = safe_move_to(seg, cur, 20);
+  CHECK2(cur != NULL, ERROR_ARGS_FORMAT);
 
-  // parse ACP's extra 2 minimums
-  if (flags == IdentityFlagsAcp) {
-    CHECK2(is_memory_enough(args_bytes_seg, cur, 2), ERROR_INVALID_MOL_FORMAT);
-    args->ckb_minimum = cur[0];
-    args->udt_minimum = cur[1];
-    cur = safe_move_to(args_bytes_seg, cur, 2);
-    CHECK2(cur != NULL, ERROR_INVALID_MOL_FORMAT);
+  CHECK2(is_memory_enough(seg, cur, 1), ERROR_ARGS_FORMAT);
+  args->rc_lock_flags = *cur;
+  cur = safe_move_to(seg, cur, 1);
+
+  args->has_rc_root = args->rc_lock_flags & RC_ROOT_MASK;
+  args->has_acp = args->rc_lock_flags & ACP_MASK;
+  args->has_since = args->rc_lock_flags & SINCE_MASK;
+  uint32_t expected_size = 0;
+  if (args->has_rc_root) {
+    expected_size += 32;
   }
-  // parse RC cell type hash
-  CHECK2(is_memory_enough(args_bytes_seg, cur, 32), ERROR_INVALID_MOL_FORMAT);
-  memcpy(args->rc_root, cur, sizeof(args->rc_root));
-  cur = safe_move_to(args_bytes_seg, cur, 32);
+  if (args->has_acp) {
+    expected_size += 2;
+  }
+  if (args->has_since) {
+    expected_size += 8;
+  }
 
-  // optional since
-  if (cur != NULL) {
-    CHECK2(is_memory_enough(args_bytes_seg, cur, 8), ERROR_INVALID_MOL_FORMAT);
-    args->since = *(uint64_t *)cur;
-    cur = safe_move_to(args_bytes_seg, cur, 8);
-    args->has_since = true;
+  if (expected_size == 0) {
+    CHECK2(cur == NULL, ERROR_ARGS_FORMAT);
   } else {
-    args->since = 0;
-    args->has_since = false;
+    CHECK2(cur != NULL, ERROR_ARGS_FORMAT);
+    CHECK2(is_memory_enough(seg, cur, expected_size), ERROR_ARGS_FORMAT);
+    if (args->has_rc_root) {
+      memcpy(args->rc_root, cur, 32);
+      cur += 32;  // it's safe to move, already checked
+    }
+    if (args->has_acp) {
+      args->ckb_minimum = cur[0];
+      args->udt_minimum = cur[1];
+      cur += 2;
+    }
+    if (args->has_since) {
+      args->since = *(uint64_t *)cur;
+      cur += 8;
+    }
+    CHECK2(cur == (seg.ptr + seg.size), ERROR_INVALID_MOL_FORMAT);
   }
-  // make sure args is consumed exactly
-  CHECK2(cur == NULL, ERROR_INVALID_MOL_FORMAT);
 
 exit:
   return err;
@@ -363,130 +357,12 @@ exit:
   return err;
 }
 
-int verify_rsa_via_dl(CkbIdentityType *id, uint8_t *sig, uint32_t sig_len,
-                      uint8_t *preimage, uint32_t preimage_len,
-                      CkbSwappableSignatureInstance *inst) {
-  int err = 0;
-  uint8_t hash[BLAKE2B_BLOCK_SIZE];
-
-  // code hash: 32 bytes
-  // hash type: 1 byte
-  // pubkey hash: 20 bytes
-  CHECK2(preimage_len == (32 + 1 + 20), ERROR_INVALID_PREIMAGE);
-
-  blake2b_state ctx;
-  blake2b_init(&ctx, BLAKE2B_BLOCK_SIZE);
-  blake2b_update(&ctx, preimage, preimage_len);
-  blake2b_final(&ctx, hash, BLAKE2B_BLOCK_SIZE);
-  CHECK2(memcmp(hash, id->blake160, BLAKE160_SIZE) == 0,
-         ERROR_INVALID_PREIMAGE);
-
-  uint8_t *code_hash = preimage;
-  uint8_t hash_type = *(preimage + 32);
-  uint8_t *pubkey_hash = preimage + 32 + 1;
-
-  err = ckb_initialize_swappable_signature(code_hash, hash_type, inst);
-  CHECK(err);
-
-  err = verify_sighash_all(pubkey_hash, sig, sig_len, inst->verify_func);
-  CHECK(err);
-
-exit:
-  return err;
-}
-
-// this function is different from verify_sighash_all:
-// One function call of validate_siganture_t can only validate 8 bytes of data.
-// It costs 4 calls to validate full 32-bytes message.
-// The layout of buffer "sig" should be:
-// RsaInfo + sig[key_size/8] + sig[key_size/8] + sig[key_size/8]
-int verify_iso9796_2_sighash_all(uint8_t *pubkey_hash, uint8_t *sig,
-                                 uint32_t sig_len, validate_signature_t func) {
-  int err = 0;
-
-  RsaInfo *info = (RsaInfo *)sig;
-  uint32_t key_size = get_key_size(info->key_size);
-  CHECK2(key_size != 0, ERROR_INVALID_RC_LOCK_ARGS);
-  uint32_t one_sig_len = calculate_rsa_info_length(key_size);
-  uint32_t raw_sig_len = key_size / 8;
-
-  uint32_t expected_sig_len = one_sig_len + 3 * raw_sig_len;
-  CHECK2(sig_len == expected_sig_len, ERROR_INVALID_RC_LOCK_ARGS);
-
-  uint8_t msg[BLAKE2B_BLOCK_SIZE];
-  err = generate_sighash_all(msg, sizeof(msg));
-  CHECK(err);
-
-  for (int index = 0; index < 4; index++) {
-    uint8_t sig_shard[one_sig_len];
-    uint8_t output_pubkey_hash[BLAKE160_SIZE];
-    uint8_t *msg_shard = msg + index * 8;
-    size_t output_len = BLAKE160_SIZE;
-    uint32_t sig_shard_len = one_sig_len;
-
-    memcpy(sig_shard, sig, 8);
-    memcpy(sig_shard + 8, sig + 8 + index * raw_sig_len, raw_sig_len);
-
-    err = func(NULL, sig_shard, sig_shard_len, msg_shard, 8, output_pubkey_hash,
-               &output_len);
-    CHECK(err);
-    CHECK2(output_len >= BLAKE160_SIZE, ERROR_ISO9796_2_VERIFY);
-
-    if (memcmp(pubkey_hash, output_pubkey_hash, BLAKE160_SIZE) != 0) {
-      return ERROR_IDENTITY_PUBKEY_BLAKE160_HASH;
-    }
-  }
-
-exit:
-  return 0;
-}
-
-int verify_iso9796_2_via_dl(CkbIdentityType *id, uint8_t *sig, uint32_t sig_len,
-                            uint8_t *preimage, uint32_t preimage_len,
-                            CkbSwappableSignatureInstance *inst) {
-  int err = 0;
-  uint8_t hash[BLAKE2B_BLOCK_SIZE];
-
-  // code hash: 32 bytes
-  // hash type: 1 byte
-  // pubkey hash: 20 bytes
-  CHECK2(preimage_len == (32 + 1 + 20), ERROR_INVALID_PREIMAGE);
-
-  blake2b_state ctx;
-  blake2b_init(&ctx, BLAKE2B_BLOCK_SIZE);
-  blake2b_update(&ctx, preimage, preimage_len);
-  blake2b_final(&ctx, hash, BLAKE2B_BLOCK_SIZE);
-  CHECK2(memcmp(hash, id->blake160, BLAKE160_SIZE) == 0,
-         ERROR_INVALID_PREIMAGE);
-
-  uint8_t *code_hash = preimage;
-  uint8_t hash_type = *(preimage + 32);
-  uint8_t *pubkey_hash = preimage + 32 + 1;
-
-  err = ckb_initialize_swappable_signature(code_hash, hash_type, inst);
-  CHECK(err);
-
-  err = verify_iso9796_2_sighash_all(pubkey_hash, sig, sig_len,
-                                     inst->verify_func);
-  CHECK(err);
-
-exit:
-  return err;
-}
-
 #ifdef CKB_USE_SIM
 int simulator_main() {
 #else
 int main() {
 #endif
   int err = 0;
-  uint8_t code_buffer[MAX_CODE_SIZE];
-  CkbSwappableSignatureInstance swappable_inst = {
-      .code_buffer = code_buffer,
-      .code_buffer_size = MAX_CODE_SIZE,
-      .prefilled_data_buffer = NULL,
-      .prefilled_buffer_size = 0,
-      .verify_func = NULL};
 
   WitnessLockType witness_lock = {0};
   ArgsType args = {0};
@@ -499,24 +375,17 @@ int main() {
 
   err = parse_args(&args);
   CHECK(err);
-  if (witness_lock.has_rc_identity) {
+
+  if (args.has_rc_root) {
+    CHECK2(witness_lock.has_rc_identity, ERROR_INVALID_MOL_FORMAT);
     identity = witness_lock.id;
     // The unlock methods used in rc_identity should be chosen carefully.
-    CHECK2(identity.flags == IdentityFlagsPubkeyHash ||
-               identity.flags == IdentityFlagsOwnerLock,
-           ERROR_INVALID_RC_IDENTITY_ID);
   } else {
     identity = args.id;
-    // time lock is not used for administrators
-    if (args.has_since) {
-      err = check_since(args.since);
-      CHECK(err);
-    }
   }
 
-  // regulation compliance
-  if (witness_lock.has_rc_identity) {
-    // collect rc rules
+  // regulation compliance, also as administrators
+  if (args.has_rc_root) {
     RceState rce_state;
     rce_init_state(&rce_state);
     err = rce_gather_rcrules_recursively(&rce_state, args.rc_root, 0);
@@ -527,32 +396,27 @@ int main() {
     // verify blake160 against proof, using rc rules
     err = smt_verify_identity(&identity, &witness_lock.proofs, &rce_state);
     CHECK(err);
-  }
-
-  if (identity.flags == IdentityFlagsPubkeyHash) {
-    CHECK2(witness_lock.has_signature, ERROR_INVALID_MOL_FORMAT);
-    CHECK2(witness_lock.signature_size == SECP256K1_SIGNATURE_SIZE,
-           ERROR_INVALID_MOL_FORMAT);
-  }
-
-  if (identity.flags == IdentityFlagsAcp) {
-    err = acp_main(&identity, witness_lock.has_signature,
-                   witness_lock.signature, witness_lock.signature_size,
-                   args.ckb_minimum, args.udt_minimum);
-  } else if (identity.flags == IdentityFlagsRsaDl) {
-    err = verify_rsa_via_dl(&identity, witness_lock.signature,
-                            witness_lock.signature_size, witness_lock.preimage,
-                            witness_lock.preimage_size, &swappable_inst);
-  } else if (identity.flags == IdentityFlagsIso9796_2Dl) {
-    err = verify_iso9796_2_via_dl(
-        &identity, witness_lock.signature, witness_lock.signature_size,
-        witness_lock.preimage, witness_lock.preimage_size, &swappable_inst);
   } else {
-    err = ckb_verify_identity(&identity, witness_lock.signature,
-                              witness_lock.signature_size);
+    // time lock is not used for administrators
+    if (args.has_since) {
+      err = check_since(args.since);
+      CHECK(err);
+    }
+    // ACP without signature is not used for administrators
+    if (args.has_acp && !witness_lock.has_signature) {
+      uint64_t min_ckb_amount = 0;
+      uint128_t min_udt_amount = 0;
+      process_amount(args.ckb_minimum, args.udt_minimum, &min_ckb_amount,
+                     &min_udt_amount);
+      // skip checking identity to follow ACP
+      return check_payment_unlock(min_ckb_amount, min_udt_amount);
+    }
   }
-  CHECK(err);
 
+  err = ckb_verify_identity(&identity, witness_lock.signature,
+                            witness_lock.signature_size, witness_lock.preimage,
+                            witness_lock.preimage_size);
+  CHECK(err);
 exit:
   return err;
 }

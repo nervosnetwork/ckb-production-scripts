@@ -291,9 +291,13 @@ void convert_setting_to_states(void) {
   convert_witness();
 
   // Script
-  uint8_t script_args[1 + 20 + 32] = {0};
+  uint8_t script_args[1 + 20 + 1 + 32 + 2 + 8] = {0};
+  uint32_t script_args_len = 22;
+
   if (g_setting.use_rc) {
-    memcpy(script_args + 1 + 20, g_setting.rc_root, 32);
+    memcpy(script_args + 1 + 20 + 1, g_setting.rc_root, 32);
+    script_args[1 + 20] |= 1;
+    script_args_len += 32;
   } else {
     script_args[0] = g_setting.flags;
     memcpy(script_args + 1, g_setting.blake160, 20);
@@ -301,8 +305,7 @@ void convert_setting_to_states(void) {
 
   uint8_t code_hash[32] = {0};
 
-  mol_seg_t script =
-      build_script(code_hash, 0, script_args, sizeof(script_args));
+  mol_seg_t script = build_script(code_hash, 0, script_args, script_args_len);
   g_states.script.ptr = script.ptr;
   g_states.script.size = script.size;
 }

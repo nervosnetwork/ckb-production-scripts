@@ -82,6 +82,10 @@ int validate_signature_iso9796_2(void *, const uint8_t *sig_buf,
                                  size_t sig_size, const uint8_t *msg_buf,
                                  size_t msg_size, uint8_t *out,
                                  size_t *out_len);
+int validate_signature_iso9796_2_batch(void *_p, const uint8_t *sig_buf,
+                                       size_t sig_len, const uint8_t *msg_buf,
+                                       size_t msg_len, uint8_t *out,
+                                       size_t *out_len);
 
 bool is_valid_iso97962_md_type(uint8_t md) {
   return md == CKB_MD_SHA1 || md == CKB_MD_SHA224 || md == CKB_MD_SHA256 ||
@@ -311,6 +315,9 @@ __attribute__((visibility("default"))) int validate_signature(
   } else if (id == CKB_VERIFY_ISO9796_2) {
     return validate_signature_iso9796_2(prefilled_data, sig_buf, sig_len,
                                         msg_buf, msg_len, output, output_len);
+  } else if (id == CKB_VERIFY_ISO9796_2_BATCH) {
+    return validate_signature_iso9796_2_batch(
+        prefilled_data, sig_buf, sig_len, msg_buf, msg_len, output, output_len);
   } else {
     return ERROR_RSA_INVALID_ID;
   }
@@ -574,4 +581,41 @@ exit:
     mbedtls_printf("validate_signature_iso9796_2() failed: %d\n", err);
   }
   return err;
+}
+
+// It costs 4 calls to validate full 32-bytes message.
+// The layout of buffer "sig" should be:
+// RsaInfo + sig[key_size/8] + sig[key_size/8] + sig[key_size/8]
+int validate_signature_iso9796_2_batch(void *_p, const uint8_t *sig_buf,
+                                       size_t sig_len, const uint8_t *msg_buf,
+                                       size_t msg_len, uint8_t *out,
+                                       size_t *out_len) {
+  (void)_p;
+  int err = 0;
+
+  RsaInfo *info = (RsaInfo *)sig_buf;
+  uint32_t key_size = get_key_size(info->key_size);
+  CHECK2(key_size != 0, ERROR_ISO97962_INVALID_ARG9);
+  uint32_t one_sig_len = calculate_rsa_info_length(key_size);
+  uint32_t raw_sig_len = key_size / 8;
+
+  uint32_t expected_sig_len = one_sig_len + 3 * raw_sig_len;
+  CHECK2(sig_len == expected_sig_len, ERROR_ISO97962_INVALID_ARG9);
+
+  for (int index = 0; index < 4; index++) {
+    uint8_t sig_shard[one_sig_len];
+    const uint8_t *msg_shard = msg_buf + index * 8;
+    uint32_t sig_shard_len = one_sig_len;
+
+    memcpy(sig_shard, sig_buf, 8);
+    memcpy(sig_shard + 8, sig_buf + 8 + index * raw_sig_len, raw_sig_len);
+
+    err = validate_signature_iso9796_2(NULL, sig_shard, sig_shard_len,
+                                       msg_shard, 8, out, out_len);
+    CHECK(err);
+    CHECK2(*out_len >= BLAKE160_SIZE, ERROR_WRONG_PUBKEY);
+  }
+
+exit:
+  return 0;
 }

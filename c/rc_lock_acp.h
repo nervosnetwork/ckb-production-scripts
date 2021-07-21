@@ -265,17 +265,3 @@ void process_amount(int min_ckb, int min_udt, uint64_t *min_ckb_amount,
     *min_udt_amount = MAX_UINT128;
   }
 }
-
-int acp_main(CkbIdentityType *identity, bool has_sig, uint8_t *signature,
-             uint32_t signature_size, int min_ckb, int min_udt) {
-  uint64_t min_ckb_amount = 0;
-  uint128_t min_udt_amount = 0;
-  process_amount(min_ckb, min_udt, &min_ckb_amount, &min_udt_amount);
-  if (has_sig) {
-    /* unlock via signature */
-    return ckb_verify_identity(identity, signature, signature_size);
-  } else {
-    /* unlock via payment */
-    return check_payment_unlock(min_ckb_amount, min_udt_amount);
-  }
-}

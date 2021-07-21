@@ -143,8 +143,10 @@ void set_smt_settings(uint8_t flags, slice_t* rc_rules, slice_t* proofs,
 UTEST(owner_lock_rc, on_wl_pass) {
   init_input(&g_setting);
 
-  uint8_t rcrule[] = {27,184,65,248,52,120,241,12,100,15,235,104,55,72,202,95,112,5,253,104,226,18,138,226,158,194,129,11,9,61,192,8};
-  uint8_t proof[] = {76,79,0};
+  uint8_t rcrule[] = {139, 110, 45,  98,  252, 190, 83,  246, 168, 167, 1,
+                      3,   115, 125, 229, 198, 236, 195, 46,  100, 235, 117,
+                      53,  192, 64,  138, 186, 153, 122, 170, 105, 255};
+  uint8_t proof[] = {76, 79, 0};
 
   slice_t proof_slice = copy_slice(proof, sizeof(proof));
   slice_t rcrule_slice = copy_slice(rcrule, sizeof(rcrule));
@@ -153,7 +155,7 @@ UTEST(owner_lock_rc, on_wl_pass) {
   set_smt_settings(IdentityFlagsOwnerLock, &rcrule_slice, &proof_slice,
                    &smt_flags, 1);
 
-  // the true smt key will be {1(IdentityFlagsOwnerLockRc), 11, 0, 0, ...}
+  // the true smt key will be {252(IdentityFlagsOwnerLockRc), 11, 0, 0, ...}
   uint8_t blake160[20] = {11};
 
   g_setting.input_lsh[0] = new_slice(32);
@@ -229,21 +231,18 @@ UTEST(owner_lock_rc, one_white_list_not_pass) {
 UTEST(owner_lock_rc, on_wl_and_not_on_bl_pass) {
   init_input(&g_setting);
 
-  uint8_t wl_rcrule[] = {249, 66,  221, 47, 190, 232, 225, 55, 103, 103, 249,
-                         137, 17,  180, 35, 62,  28,  221, 15, 158, 58,  216,
-                         31,  134, 177, 3,  114, 216, 112, 23, 153, 187};
-  uint8_t wl_proof[] = {76,  80,  167, 132, 225, 80,  249, 77,  218,
-                        113, 177, 125, 47,  220, 235, 79,  189, 236,
-                        109, 165, 246, 42,  250, 67,  238, 16,  247,
-                        227, 139, 242, 240, 143, 31,  28,  184};
+  uint8_t wl_rcrule[] = {139, 110, 45,  98,  252, 190, 83,  246, 168, 167, 1,
+                         3,   115, 125, 229, 198, 236, 195, 46,  100, 235, 117,
+                         53,  192, 64,  138, 186, 153, 122, 170, 105, 255};
+  uint8_t wl_proof[] = {76, 79, 0};
 
-  uint8_t bl_rcrule[] = {151, 81,  37,  242, 189, 99, 62,  175, 115, 9,   251,
-                         94,  105, 190, 173, 153, 42, 249, 87,  115, 253, 152,
-                         110, 88,  1,   58,  224, 21, 51,  99,  72,  182};
-  uint8_t bl_proof[] = {76,  80,  11,  151, 81,  37,  242, 189, 99,
-                        62,  175, 115, 9,   251, 94,  105, 190, 173,
-                        153, 42,  249, 87,  115, 253, 152, 110, 88,
-                        1,   58,  224, 21,  51,  99,  72,  182};
+  uint8_t bl_rcrule[] = {100, 251, 145, 169, 49,  159, 242, 179, 22, 159, 33,
+                         39,  181, 120, 27,  188, 1,   210, 146, 88, 225, 249,
+                         70,  64,  31,  239, 129, 46,  242, 24,  45, 235};
+  uint8_t bl_proof[] = {76,  79,  11,  80,  155, 119, 208, 214, 123, 234,
+                        234, 187, 167, 211, 156, 15,  105, 92,  178, 57,
+                        80,  173, 151, 49,  210, 21,  41,  37,  7,   254,
+                        10,  177, 132, 217, 251, 159, 79,  244};
 
   slice_t rcrules[2] = {copy_slice(wl_rcrule, sizeof(wl_rcrule)),
                         copy_slice(bl_rcrule, sizeof(bl_rcrule))};
@@ -255,7 +254,7 @@ UTEST(owner_lock_rc, on_wl_and_not_on_bl_pass) {
   set_smt_settings(IdentityFlagsOwnerLock, rcrules, proofs, smt_flags,
                    countof(smt_flags));
 
-  // the true smt key will be {1(IdentityFlagsOwnerLockRc), 11, 0, 0, ...}
+  // the true smt key will be {252(IdentityFlagsOwnerLockRc), 11, 0, 0, ...}
   uint8_t blake160[20] = {11};
 
   g_setting.input_lsh[0] = new_slice(32);
@@ -268,8 +267,7 @@ UTEST(owner_lock_rc, on_wl_and_not_on_bl_pass) {
   convert_setting_to_states();
 
   int r = simulator_main();
-//  ASSERT_EQ(0, r);
-// TODO
+  ASSERT_EQ(0, r);
 }
 
 UTEST(owner_lock_rc, not_on_bl_not_pass) {
@@ -357,12 +355,10 @@ UTEST(owner_lock_rc, on_wl_and_on_bl_not_pass) {
 UTEST(pubkey_hash_rc, on_wl_pass) {
   init_input(&g_setting);
 
-  uint8_t rcrule[] = {60,  88, 9,  38,  78,  115, 57, 222, 226, 199, 240,
-                      180, 76, 66, 80,  104, 114, 61, 25,  62,  103, 233,
-                      89,  48, 51, 148, 166, 3,   99, 236, 63,  103};
-  uint8_t proof[] = {76,  80,  167, 47,  46,  156, 221, 185, 1,  120, 166, 245,
-                     121, 170, 246, 116, 57,  123, 204, 225, 14, 189, 214, 33,
-                     164, 181, 166, 211, 225, 70,  88,  66,  69, 236, 96};
+  uint8_t rcrule[] = {86,  4,   51,  150, 173, 97,  193, 82,  123, 248, 54,
+                      167, 112, 185, 170, 116, 142, 241, 202, 71,  142, 213,
+                      135, 198, 56,  190, 227, 253, 37,  242, 16,  105};
+  uint8_t proof[] = {76, 79, 0};
 
   slice_t proof_slice = copy_slice(proof, sizeof(proof));
   slice_t rcrule_slice = copy_slice(rcrule, sizeof(rcrule));
@@ -385,28 +381,24 @@ UTEST(pubkey_hash_rc, on_wl_pass) {
   convert_setting_to_states();
 
   int r = simulator_main();
-//  ASSERT_EQ(0, r);
-// TODO
+  ASSERT_EQ(0, r);
 }
 
 UTEST(pubkey_hash_rc, on_wl_not_on_bl_pass) {
   init_input(&g_setting);
 
-  uint8_t wl_rcrule[] = {60,  88, 9,  38,  78,  115, 57, 222, 226, 199, 240,
-                         180, 76, 66, 80,  104, 114, 61, 25,  62,  103, 233,
-                         89,  48, 51, 148, 166, 3,   99, 236, 63,  103};
-  uint8_t wl_proof[] = {76,  80,  167, 47,  46,  156, 221, 185, 1,
-                        120, 166, 245, 121, 170, 246, 116, 57,  123,
-                        204, 225, 14,  189, 214, 33,  164, 181, 166,
-                        211, 225, 70,  88,  66,  69,  236, 96};
+  uint8_t wl_rcrule[] = {86,  4,   51,  150, 173, 97,  193, 82,  123, 248, 54,
+                         167, 112, 185, 170, 116, 142, 241, 202, 71,  142, 213,
+                         135, 198, 56,  190, 227, 253, 37,  242, 16,  105};
+  uint8_t wl_proof[] = {76, 79, 0};
 
-  uint8_t bl_proof[] = {76,  80,  167, 151, 81,  37,  242, 189, 99,
-                        62,  175, 115, 9,   251, 94,  105, 190, 173,
-                        153, 42,  249, 87,  115, 253, 152, 110, 88,
-                        1,   58,  224, 21,  51,  99,  72,  182};
-  uint8_t bl_rcrule[] = {151, 81,  37,  242, 189, 99, 62,  175, 115, 9,   251,
-                         94,  105, 190, 173, 153, 42, 249, 87,  115, 253, 152,
-                         110, 88,  1,   58,  224, 21, 51,  99,  72,  182};
+  uint8_t bl_rcrule[] = {100, 251, 145, 169, 49,  159, 242, 179, 22, 159, 33,
+                         39,  181, 120, 27,  188, 1,   210, 146, 88, 225, 249,
+                         70,  64,  31,  239, 129, 46,  242, 24,  45, 235};
+  uint8_t bl_proof[] = {76,  79,  167, 80,  205, 140, 177, 162, 11,  63,
+                        224, 144, 227, 3,   251, 104, 67,  243, 165, 93,
+                        9,   239, 70,  120, 65,  234, 182, 40,  245, 142,
+                        203, 49,  78,  68,  21,  11,  79,  88};
 
   slice_t rcrule_slice[] = {copy_slice(wl_rcrule, sizeof(wl_rcrule)),
                             copy_slice(bl_rcrule, sizeof(bl_rcrule))};
@@ -431,8 +423,7 @@ UTEST(pubkey_hash_rc, on_wl_not_on_bl_pass) {
   convert_setting_to_states();
 
   int r = simulator_main();
-//  ASSERT_EQ(0, r);
-// TODO
+  ASSERT_EQ(0, r);
 }
 
 UTEST(pubkey_hash_rc, not_bl_not_pass) {

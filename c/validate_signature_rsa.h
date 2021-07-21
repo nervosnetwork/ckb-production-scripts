@@ -8,6 +8,9 @@
 #define CKB_VERIFY_RSA 1
 // when algorithm_id is CKB_VERIFY_ISO9796_2, use RsaInfo structure
 #define CKB_VERIFY_ISO9796_2 2
+// when algorithm_id is CKB_VERIFY_ISO9796_2_BATCH, use modified RsaInfo
+// structure
+#define CKB_VERIFY_ISO9796_2_BATCH 3
 
 // used as key_size enum values: their "KeySize" are 1024, 2048, 4098 bits.
 // The term "KeySize" has same meaning below.

@@ -43,13 +43,13 @@ mol_seg_t build_script(const uint8_t *code_hash, uint8_t hash_type,
 typedef uint16_t RCHashType;
 
 typedef struct SIMRCRule {
-  uint8_t id; // id = 0
+  uint8_t id;  // id = 0
   uint8_t flags;
   uint8_t smt_root[32];
 } SIMRCRule;
 #define MAX_RCRULE_IN_CELL 16
 typedef struct SIMRCCellVec {
-  uint8_t id; // id = 1
+  uint8_t id;  // id = 1
   uint8_t hash_count;
   RCHashType hash[MAX_RCRULE_IN_CELL];
 } SIMRCCellVec;
@@ -295,17 +295,17 @@ int ckb_look_for_dep_with_hash2(const uint8_t *code_hash, uint8_t hash_type,
     int ret = ckb_load_cell_by_field(hash, &len, 0, current,
                                      CKB_SOURCE_CELL_DEP, field);
     switch (ret) {
-    case CKB_ITEM_MISSING:
-      break;
-    case CKB_SUCCESS:
-      if (memcmp(code_hash, hash, 32) == 0) {
-        /* Found a match */
-        *index = current;
-        return CKB_SUCCESS;
-      }
-      break;
-    default:
-      return CKB_INDEX_OUT_OF_BOUND;
+      case CKB_ITEM_MISSING:
+        break;
+      case CKB_SUCCESS:
+        if (memcmp(code_hash, hash, 32) == 0) {
+          /* Found a match */
+          *index = current;
+          return CKB_SUCCESS;
+        }
+        break;
+      default:
+        return CKB_INDEX_OUT_OF_BOUND;
     }
     current++;
   }

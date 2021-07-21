@@ -747,7 +747,7 @@ pub fn debug_printer(script: &Byte32, msg: &str) {
 }
 
 pub const IDENTITY_FLAGS_PUBKEY_HASH: u8 = 0;
-pub const IDENTITY_FLAGS_OWNER_LOCK: u8 = 1;
+pub const IDENTITY_FLAGS_OWNER_LOCK: u8 = 0xFC;
 
 pub struct Identity {
     pub flags: u8,
@@ -806,6 +806,10 @@ pub enum TestScheme2 {
     NoWitness,
 }
 
+const RC_ROOT_MASK: u8 = 1;
+const ACP_MASK: u8 = 2;
+const SINCE_MASK: u8 = 4;
+
 impl TestConfig {
     pub fn new(flags: u8, use_rc: bool) -> TestConfig {
         let private_key = Generator::random_privkey();
@@ -844,13 +848,18 @@ impl TestConfig {
 
     pub fn gen_args(&self) -> Bytes {
         let mut bytes = BytesMut::with_capacity(128);
+        let mut rc_lock_flags: u8 = 0;
+
         if self.use_rc {
+            rc_lock_flags |= RC_ROOT_MASK;
+
             bytes.resize(21, 0);
+            bytes.put(&[rc_lock_flags][..]);
             bytes.put(self.rc_root.as_ref());
         } else {
             bytes.put_u8(self.id.flags);
             bytes.put(self.id.blake160.as_ref());
-            bytes.put(&[0; 32][..]);
+            bytes.put(&[rc_lock_flags][..]);
         }
         bytes.freeze()
     }
