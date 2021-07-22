@@ -15,3 +15,6 @@ tests/validate_signature_rsa/dlopen_coverage
 tests/validate_signature_rsa/dlopen_fuzzer
 tests/validate_signature_rsa/coverage
 tests/validate_signature_rsa/fuzz-*.log
+tests/rc_lock/exec_fuzzer/exec_fuzzer.dSYM
+fuzzer.profraw
+fuzzer.profdata

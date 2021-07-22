@@ -562,4 +562,35 @@ UTEST(pubkey_hash_rc, no_rcrule_not_pass) {
   ASSERT_EQ(ERROR_NO_RCRULE, r);
 }
 
+UTEST(exec, random) {
+  int err = 0;
+  CkbBinaryArgsType bin = {0};
+  ckb_exec_reset(&bin);
+  for (int i = 0; i < 64; i++) {
+    uint32_t len = i + 256;
+    uint8_t buff[len];
+    for (int j = 0; j < len; j++) {
+      buff[j] = j & 0xFF;
+    }
+    err = ckb_exec_append(&bin, buff, len);
+    ASSERT(err != 0);
+  }
+
+  CkbHexArgsType hex;
+  err = ckb_exec_encode(&bin, &hex);
+  ASSERT(err != 0);
+
+  CkbBinaryArgsType bin2 = {0};
+  err = ckb_exec_decode(hex.argc, hex.argv, &bin2);
+  ASSERT(err != 0);
+
+  ASSERT_EQ(bin.argc, bin2.argc);
+  ASSERT_EQ(bin.used_buff, bin2.used_buff);
+  for (uint32_t i = 0; i < bin.argc; i++) {
+    ASSERT_EQ(bin.len[i], bin2.len[i]);
+    int equal = memcmp(bin.args[i], bin2.args[i], bin.len[i]);
+    ASSERT_EQ(0, equal);
+  }
+}
+
 UTEST_MAIN();
