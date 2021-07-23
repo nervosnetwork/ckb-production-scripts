@@ -39,21 +39,8 @@ fn test_sighash_all_unlock() {
     let tx = sign_tx(&mut data_loader, tx, &mut config);
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
-        .as_builder()
-        .rfc_0232(200)
-        .build()
-        .unwrap();
-    let consensus = ConsensusBuilder::default()
-        .hardfork_switch(hardfork_switch)
-        .build();
-    let epoch = EpochNumberWithFraction::new(300, 0, 1);
-    let tx_env = {
-        let header = HeaderView::new_advanced_builder()
-            .epoch(epoch.pack())
-            .build();
-        TxVerifyEnv::new_commit(&header)
-    };
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
     let mut verifier =
         TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
@@ -72,21 +59,8 @@ fn test_sighash_all_unlock_with_args() {
     let tx = sign_tx(&mut data_loader, tx, &mut config);
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
-        .as_builder()
-        .rfc_0232(200)
-        .build()
-        .unwrap();
-    let consensus = ConsensusBuilder::default()
-        .hardfork_switch(hardfork_switch)
-        .build();
-    let epoch = EpochNumberWithFraction::new(300, 0, 1);
-    let tx_env = {
-        let header = HeaderView::new_advanced_builder()
-            .epoch(epoch.pack())
-            .build();
-        TxVerifyEnv::new_commit(&header)
-    };
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
     let mut verifier =
         TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
@@ -114,21 +88,8 @@ fn test_sighash_all_with_extra_witness_unlock() {
         let tx = sign_tx(&mut data_loader, tx.clone(), &mut config);
         let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-        let hardfork_switch = HardForkSwitch::new_without_any_enabled()
-            .as_builder()
-            .rfc_0232(200)
-            .build()
-            .unwrap();
-        let consensus = ConsensusBuilder::default()
-            .hardfork_switch(hardfork_switch)
-            .build();
-        let epoch = EpochNumberWithFraction::new(300, 0, 1);
-        let tx_env = {
-            let header = HeaderView::new_advanced_builder()
-                .epoch(epoch.pack())
-                .build();
-            TxVerifyEnv::new_commit(&header)
-        };
+        let consensus = misc::gen_consensus();
+        let tx_env = misc::gen_tx_env();
         let verifier =
             TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
@@ -153,21 +114,8 @@ fn test_sighash_all_with_extra_witness_unlock() {
             .build();
         let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-        let hardfork_switch = HardForkSwitch::new_without_any_enabled()
-            .as_builder()
-            .rfc_0232(200)
-            .build()
-            .unwrap();
-        let consensus = ConsensusBuilder::default()
-            .hardfork_switch(hardfork_switch)
-            .build();
-        let epoch = EpochNumberWithFraction::new(300, 0, 1);
-        let tx_env = {
-            let header = HeaderView::new_advanced_builder()
-                .epoch(epoch.pack())
-                .build();
-            TxVerifyEnv::new_commit(&header)
-        };
+        let consensus = misc::gen_consensus();
+        let tx_env = misc::gen_tx_env();
         let verifier =
             TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
@@ -191,21 +139,8 @@ fn test_sighash_all_with_grouped_inputs_unlock() {
         let tx = sign_tx(&mut data_loader, tx.clone(), &mut config);
         let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-        let hardfork_switch = HardForkSwitch::new_without_any_enabled()
-            .as_builder()
-            .rfc_0232(200)
-            .build()
-            .unwrap();
-        let consensus = ConsensusBuilder::default()
-            .hardfork_switch(hardfork_switch)
-            .build();
-        let epoch = EpochNumberWithFraction::new(300, 0, 1);
-        let tx_env = {
-            let header = HeaderView::new_advanced_builder()
-                .epoch(epoch.pack())
-                .build();
-            TxVerifyEnv::new_commit(&header)
-        };
+        let consensus = misc::gen_consensus();
+        let tx_env = misc::gen_tx_env();
         let verifier =
             TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
@@ -233,21 +168,8 @@ fn test_sighash_all_with_grouped_inputs_unlock() {
             .build();
         let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-        let hardfork_switch = HardForkSwitch::new_without_any_enabled()
-            .as_builder()
-            .rfc_0232(200)
-            .build()
-            .unwrap();
-        let consensus = ConsensusBuilder::default()
-            .hardfork_switch(hardfork_switch)
-            .build();
-        let epoch = EpochNumberWithFraction::new(300, 0, 1);
-        let tx_env = {
-            let header = HeaderView::new_advanced_builder()
-                .epoch(epoch.pack())
-                .build();
-            TxVerifyEnv::new_commit(&header)
-        };
+        let consensus = misc::gen_consensus();
+        let tx_env = misc::gen_tx_env();
         let verifier =
             TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
@@ -275,21 +197,8 @@ fn test_sighash_all_with_2_different_inputs_unlock() {
 
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
-        .as_builder()
-        .rfc_0232(200)
-        .build()
-        .unwrap();
-    let consensus = ConsensusBuilder::default()
-        .hardfork_switch(hardfork_switch)
-        .build();
-    let epoch = EpochNumberWithFraction::new(300, 0, 1);
-    let tx_env = {
-        let header = HeaderView::new_advanced_builder()
-            .epoch(epoch.pack())
-            .build();
-        TxVerifyEnv::new_commit(&header)
-    };
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(MAX_CYCLES);
@@ -308,21 +217,8 @@ fn test_signing_with_wrong_key() {
     let tx = sign_tx(&mut data_loader, tx, &mut config);
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
-        .as_builder()
-        .rfc_0232(200)
-        .build()
-        .unwrap();
-    let consensus = ConsensusBuilder::default()
-        .hardfork_switch(hardfork_switch)
-        .build();
-    let epoch = EpochNumberWithFraction::new(300, 0, 1);
-    let tx_env = {
-        let header = HeaderView::new_advanced_builder()
-            .epoch(epoch.pack())
-            .build();
-        TxVerifyEnv::new_commit(&header)
-    };
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(MAX_CYCLES);
@@ -347,21 +243,8 @@ fn test_signing_wrong_tx_hash() {
     };
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
-        .as_builder()
-        .rfc_0232(200)
-        .build()
-        .unwrap();
-    let consensus = ConsensusBuilder::default()
-        .hardfork_switch(hardfork_switch)
-        .build();
-    let epoch = EpochNumberWithFraction::new(300, 0, 1);
-    let tx_env = {
-        let header = HeaderView::new_advanced_builder()
-            .epoch(epoch.pack())
-            .build();
-        TxVerifyEnv::new_commit(&header)
-    };
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(MAX_CYCLES);
@@ -382,21 +265,8 @@ fn test_super_long_witness() {
     let tx = sign_tx(&mut data_loader, tx, &mut config);
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
-        .as_builder()
-        .rfc_0232(200)
-        .build()
-        .unwrap();
-    let consensus = ConsensusBuilder::default()
-        .hardfork_switch(hardfork_switch)
-        .build();
-    let epoch = EpochNumberWithFraction::new(300, 0, 1);
-    let tx_env = {
-        let header = HeaderView::new_advanced_builder()
-            .epoch(epoch.pack())
-            .build();
-        TxVerifyEnv::new_commit(&header)
-    };
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
     let mut verifier =
         TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
@@ -425,21 +295,8 @@ fn test_sighash_all_2_in_2_out_cycles() {
 
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
-        .as_builder()
-        .rfc_0232(200)
-        .build()
-        .unwrap();
-    let consensus = ConsensusBuilder::default()
-        .hardfork_switch(hardfork_switch)
-        .build();
-    let epoch = EpochNumberWithFraction::new(300, 0, 1);
-    let tx_env = {
-        let header = HeaderView::new_advanced_builder()
-            .epoch(epoch.pack())
-            .build();
-        TxVerifyEnv::new_commit(&header)
-    };
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
     let mut verifier =
         TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
@@ -477,21 +334,8 @@ fn test_sighash_all_witness_append_junk_data() {
 
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
-        .as_builder()
-        .rfc_0232(200)
-        .build()
-        .unwrap();
-    let consensus = ConsensusBuilder::default()
-        .hardfork_switch(hardfork_switch)
-        .build();
-    let epoch = EpochNumberWithFraction::new(300, 0, 1);
-    let tx_env = {
-        let header = HeaderView::new_advanced_builder()
-            .epoch(epoch.pack())
-            .build();
-        TxVerifyEnv::new_commit(&header)
-    };
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(MAX_CYCLES);
@@ -536,21 +380,8 @@ fn test_sighash_all_witness_args_ambiguity() {
 
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
-        .as_builder()
-        .rfc_0232(200)
-        .build()
-        .unwrap();
-    let consensus = ConsensusBuilder::default()
-        .hardfork_switch(hardfork_switch)
-        .build();
-    let epoch = EpochNumberWithFraction::new(300, 0, 1);
-    let tx_env = {
-        let header = HeaderView::new_advanced_builder()
-            .epoch(epoch.pack())
-            .build();
-        TxVerifyEnv::new_commit(&header)
-    };
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(MAX_CYCLES);
@@ -596,21 +427,8 @@ fn test_sighash_all_witnesses_ambiguity() {
     assert_eq!(tx.witnesses().len(), tx.inputs().len());
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
-        .as_builder()
-        .rfc_0232(200)
-        .build()
-        .unwrap();
-    let consensus = ConsensusBuilder::default()
-        .hardfork_switch(hardfork_switch)
-        .build();
-    let epoch = EpochNumberWithFraction::new(300, 0, 1);
-    let tx_env = {
-        let header = HeaderView::new_advanced_builder()
-            .epoch(epoch.pack())
-            .build();
-        TxVerifyEnv::new_commit(&header)
-    };
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(MAX_CYCLES);
@@ -651,21 +469,8 @@ fn test_sighash_all_cover_extra_witnesses() {
 
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
-        .as_builder()
-        .rfc_0232(200)
-        .build()
-        .unwrap();
-    let consensus = ConsensusBuilder::default()
-        .hardfork_switch(hardfork_switch)
-        .build();
-    let epoch = EpochNumberWithFraction::new(300, 0, 1);
-    let tx_env = {
-        let header = HeaderView::new_advanced_builder()
-            .epoch(epoch.pack())
-            .build();
-        TxVerifyEnv::new_commit(&header)
-    };
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(60000000);

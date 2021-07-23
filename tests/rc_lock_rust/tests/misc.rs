@@ -1,14 +1,18 @@
 use std::collections::HashMap;
 
+use ckb_chain_spec::consensus::{Consensus, ConsensusBuilder};
 use ckb_crypto::secp::{Generator, Privkey, Pubkey};
 use ckb_hash::{Blake2b, Blake2bBuilder};
+use ckb_script::TxVerifyEnv;
 use ckb_traits::{CellDataProvider, HeaderProvider};
 use ckb_types::bytes::{BufMut, BytesMut};
 use ckb_types::{
     bytes::Bytes,
     core::{
         cell::{CellMeta, CellMetaBuilder, ResolvedTransaction},
-        Capacity, DepType, HeaderView, ScriptHashType, TransactionBuilder, TransactionView,
+        hardfork::HardForkSwitch,
+        Capacity, DepType, EpochNumberWithFraction, HeaderView, ScriptHashType, TransactionBuilder,
+        TransactionView,
     },
     molecule,
     packed::{
@@ -807,7 +811,9 @@ pub enum TestScheme2 {
 }
 
 const RC_ROOT_MASK: u8 = 1;
+#[allow(dead_code)]
 const ACP_MASK: u8 = 2;
+#[allow(dead_code)]
 const SINCE_MASK: u8 = 4;
 
 impl TestConfig {
@@ -1055,4 +1061,23 @@ pub fn generate_single_proof(scheme: TestScheme, smt_key: &Vec<[u8; 32]>) -> (Ve
 
     let rc_data = build_rc_rule(&smt_root.into(), is_black_list, is_emergency_halt);
     (proof, rc_data)
+}
+
+pub fn gen_consensus() -> Consensus {
+    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
+        .as_builder()
+        .rfc_0232(200)
+        .build()
+        .unwrap();
+    ConsensusBuilder::default()
+        .hardfork_switch(hardfork_switch)
+        .build()
+}
+
+pub fn gen_tx_env() -> TxVerifyEnv {
+    let epoch = EpochNumberWithFraction::new(300, 0, 1);
+    let header = HeaderView::new_advanced_builder()
+        .epoch(epoch.pack())
+        .build();
+    TxVerifyEnv::new_commit(&header)
 }
