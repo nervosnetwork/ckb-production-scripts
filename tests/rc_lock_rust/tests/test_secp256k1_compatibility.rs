@@ -186,8 +186,8 @@ fn test_sighash_all_with_2_different_inputs_unlock() {
 
     // sign with 2 keys
     let tx = gen_tx_with_grouped_args(&mut data_loader, vec![(args1, 2), (args2, 2)], &mut config1);
-    let tx = sign_tx_by_input_group(tx, 0, 2, &mut config1);
-    let tx = sign_tx_by_input_group(tx, 2, 2, &mut config2);
+    let tx = sign_tx_by_input_group(&mut data_loader, tx, 0, 2, &mut config1);
+    let tx = sign_tx_by_input_group(&mut data_loader, tx, 2, 2, &mut config2);
 
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
@@ -278,8 +278,8 @@ fn test_sighash_all_2_in_2_out_cycles() {
         vec![(config1.gen_args(), 1), (config2.gen_args(), 1)],
         &mut config1,
     );
-    let tx = sign_tx_by_input_group(tx, 0, 1, &config1);
-    let tx = sign_tx_by_input_group(tx, 1, 1, &config2);
+    let tx = sign_tx_by_input_group(&mut data_loader, tx, 0, 1, &config1);
+    let tx = sign_tx_by_input_group(&mut data_loader, tx, 1, 1, &config2);
 
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
@@ -306,7 +306,7 @@ fn test_sighash_all_witness_append_junk_data() {
 
     // sign with 2 keys
     let tx = gen_tx_with_grouped_args(&mut data_loader, vec![(config.gen_args(), 2)], &mut config);
-    let tx = sign_tx_by_input_group(tx, 0, 2, &mut config);
+    let tx = sign_tx_by_input_group(&mut data_loader, tx, 0, 2, &mut config);
     let mut witnesses: Vec<_> = Unpack::<Vec<_>>::unpack(&tx.witnesses());
     // append junk data to first witness
     let mut witness = Vec::new();
@@ -341,7 +341,7 @@ fn test_sighash_all_witness_args_ambiguity() {
     let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, false);
 
     let tx = gen_tx_with_grouped_args(&mut data_loader, vec![(config.gen_args(), 2)], &mut config);
-    let tx = sign_tx_by_input_group(tx, 0, 2, &mut config);
+    let tx = sign_tx_by_input_group(&mut data_loader, tx, 0, 2, &mut config);
     let witnesses: Vec<_> = Unpack::<Vec<_>>::unpack(&tx.witnesses());
     // move extra data to type_
     let witnesses: Vec<_> = witnesses
@@ -393,7 +393,7 @@ fn test_sighash_all_witnesses_ambiguity() {
             Bytes::from(vec![42]).pack(),
         ])
         .build();
-    let tx = sign_tx_by_input_group(tx, 0, 3, &mut config);
+    let tx = sign_tx_by_input_group(&mut data_loader, tx, 0, 3, &mut config);
 
     // exchange witness position
     let witness = Unpack::<Vec<_>>::unpack(&tx.witnesses()).remove(0);
@@ -432,7 +432,7 @@ fn test_sighash_all_cover_extra_witnesses() {
             Bytes::new().pack(),
         ])
         .build();
-    let tx = sign_tx_by_input_group(tx, 0, 3, &mut config);
+    let tx = sign_tx_by_input_group(&mut data_loader, tx, 0, 3, &mut config);
     assert!(tx.witnesses().len() > tx.inputs().len());
 
     // change last witness

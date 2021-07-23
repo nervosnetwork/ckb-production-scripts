@@ -365,7 +365,7 @@ pub fn blake160(message: &[u8]) -> Bytes {
 }
 
 pub fn sign_tx(
-    _dummy: &mut DummyDataLoader,
+    dummy: &mut DummyDataLoader,
     tx: TransactionView,
     config: &mut TestConfig,
 ) -> TransactionView {
@@ -375,7 +375,7 @@ pub fn sign_tx(
     } else {
         (0, tx.witnesses().len())
     };
-    sign_tx_by_input_group(tx, begin_index, witnesses_len, config)
+    sign_tx_by_input_group(dummy, tx, begin_index, witnesses_len, config)
 }
 
 fn build_proofs(proofs: Vec<Vec<u8>>, proof_masks: Vec<u8>) -> SmtProofEntryVec {
@@ -485,6 +485,7 @@ pub fn write_back_preimage_hash(dummy: &mut DummyDataLoader, flags: u8, hash: By
 }
 
 pub fn sign_tx_by_input_group(
+    dummy: &mut DummyDataLoader,
     tx: TransactionView,
     begin_index: usize,
     len: usize,
@@ -506,7 +507,13 @@ pub fn sign_tx_by_input_group(
                 blake2b.update(&tx_hash.raw_data());
                 // digest the first witness
                 let witness = WitnessArgs::new_unchecked(tx.witnesses().get(i).unwrap().unpack());
-                let zero_lock = gen_zero_witness_lock(config.use_rc, &proof_vec, &identity);
+                let zero_lock = gen_zero_witness_lock(
+                    config.use_rc,
+                    &proof_vec,
+                    &identity,
+                    config.sig_len,
+                    config.preimage_len,
+                );
 
                 let witness_for_digest = witness
                     .clone()
@@ -525,25 +532,31 @@ pub fn sign_tx_by_input_group(
                 blake2b.finalize(&mut message);
                 let message = CkbH256::from(message);
 
-                let witness_lock = if config.id.flags == IDENTITY_FLAGS_EXEC {
-                    let (sig, pubkey) = rsa_sign(message.as_bytes(), &config.rsa_private_key);
+                let witness_lock = if config.id.flags == IDENTITY_FLAGS_DL {
+                    let (sig, pubkey) = if config.use_rsa {
+                        rsa_sign(message.as_bytes(), &config.rsa_private_key)
+                    } else {
+                        // TODO: support ISO9796-2
+                        (Default::default(), Default::default())
+                    };
                     let hash = blake160(pubkey.as_ref());
                     let preimage = gen_exec_preimage(&config.rsa_script, &hash);
                     preimage_hash = blake160(preimage.as_ref());
 
                     let sig_bytes = Bytes::from(sig);
-                    gen_witness_lock(sig_bytes, config.use_rc, &proof_vec, &identity, preimage)
-                } else {
-                    let sig = config.private_key.sign_recoverable(&message).expect("sign");
-                    let sig_bytes = Bytes::from(sig.serialize());
                     gen_witness_lock(
                         sig_bytes,
                         config.use_rc,
                         &proof_vec,
                         &identity,
-                        Default::default(),
+                        Some(preimage),
                     )
-                };
+                } else {
+                    let sig = config.private_key.sign_recoverable(&message).expect("sign");
+                    let sig_bytes = Bytes::from(sig.serialize());
+                    gen_witness_lock(sig_bytes, config.use_rc, &proof_vec, &identity, None)
+                }; // TODO: IDENTITY_FLAGS_EXEC
+
                 witness
                     .as_builder()
                     .lock(Some(witness_lock).pack())
@@ -560,6 +573,9 @@ pub fn sign_tx_by_input_group(
     }
     if config.scheme2 == TestScheme2::NoWitness {
         signed_witnesses.clear();
+    }
+    if preimage_hash.len() == 20 {
+        write_back_preimage_hash(dummy, IDENTITY_FLAGS_DL, preimage_hash);
     }
     // calculate message
     tx.as_advanced_builder()
@@ -823,6 +839,7 @@ pub fn debug_printer(script: &Byte32, msg: &str) {
 pub const IDENTITY_FLAGS_PUBKEY_HASH: u8 = 0;
 pub const IDENTITY_FLAGS_OWNER_LOCK: u8 = 0xFC;
 pub const IDENTITY_FLAGS_EXEC: u8 = 0xFD;
+pub const IDENTITY_FLAGS_DL: u8 = 0xFE;
 
 pub struct Identity {
     pub flags: u8,
@@ -858,6 +875,11 @@ pub struct TestConfig {
     pub rsa_private_key: PKey<Private>,
     pub rsa_pubkey: PKey<Public>,
     pub rsa_script: Script,
+    // when this is on, sign by RSA
+    pub use_rsa: bool,
+
+    pub preimage_len: usize,
+    pub sig_len: usize,
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -897,12 +919,10 @@ impl TestConfig {
         let pubkey = private_key.pubkey().expect("pubkey");
         let pubkey_hash = blake160(&pubkey.serialize());
 
-        let blake160 = {
-            if flags == IDENTITY_FLAGS_PUBKEY_HASH {
-                pubkey_hash
-            } else {
-                Default::default()
-            }
+        let blake160 = if flags == IDENTITY_FLAGS_PUBKEY_HASH {
+            pubkey_hash
+        } else {
+            Bytes::from(&[0; 20][..])
         };
         let rc_root: Bytes = {
             let mut buf = BytesMut::new();
@@ -917,6 +937,15 @@ impl TestConfig {
         let public_key_pem: Vec<u8> = rsa_private_key.public_key_to_pem().unwrap();
         let rsa_pubkey = PKey::public_key_from_pem(&public_key_pem).unwrap();
 
+        let preimage_len = if flags == IDENTITY_FLAGS_DL {
+            53
+        } else if flags == IDENTITY_FLAGS_EXEC {
+            62
+        } else {
+            0
+        };
+        let sig_len = 65;
+
         TestConfig {
             id: Identity { flags, blake160 },
             use_rc,
@@ -930,11 +959,18 @@ impl TestConfig {
             rsa_private_key,
             rsa_pubkey,
             rsa_script: Default::default(),
+            sig_len,
+            preimage_len,
+            use_rsa: false,
         }
     }
 
     pub fn set_scheme(&mut self, scheme: TestScheme) {
         self.scheme = scheme;
+    }
+    pub fn set_rsa(&mut self) {
+        self.use_rsa = true;
+        self.sig_len = 264;
     }
 
     pub fn gen_args(&self) -> Bytes {
@@ -971,19 +1007,21 @@ pub fn gen_witness_lock(
     use_rc: bool,
     proofs: &SmtProofEntryVec,
     identity: &rc_lock::Identity,
-    preimage: Bytes,
+    preimage: Option<Bytes>,
 ) -> Bytes {
     let builder = RcLockWitnessLock::new_builder();
-    let rc_identity = rc_lock::RcIdentityBuilder::default()
-        .identity(identity.clone())
-        .proofs(proofs.clone())
-        .build();
 
-    let mut builder = builder
-        .signature(Some(sig).pack())
-        .preimage(Some(preimage).pack());
+    let mut builder = builder.signature(Some(sig).pack());
+
+    if let Some(p) = preimage {
+        builder = builder.preimage(Some(p).pack());
+    }
 
     if use_rc {
+        let rc_identity = rc_lock::RcIdentityBuilder::default()
+            .identity(identity.clone())
+            .proofs(proofs.clone())
+            .build();
         let opt = rc_lock::RcIdentityOpt::new_unchecked(rc_identity.as_bytes());
         builder = builder.rc_identity(opt);
     }
@@ -1039,11 +1077,20 @@ pub fn gen_zero_witness_lock(
     use_rc: bool,
     proofs: &SmtProofEntryVec,
     identity: &rc_lock::Identity,
+    sig_len: usize,
+    preimage_len: usize,
 ) -> Bytes {
     let mut zero = BytesMut::new();
-    zero.resize(65, 0);
-    let witness_lock =
-        gen_witness_lock(zero.freeze(), use_rc, proofs, identity, Default::default());
+    zero.resize(sig_len, 0);
+
+    let preimage = if preimage_len > 0 {
+        let mut zero2 = BytesMut::new();
+        zero2.resize(preimage_len, 0);
+        Some(zero2.freeze())
+    } else {
+        None
+    };
+    let witness_lock = gen_witness_lock(zero.freeze(), use_rc, proofs, identity, preimage);
 
     let mut res = BytesMut::new();
     res.resize(witness_lock.len(), 0);

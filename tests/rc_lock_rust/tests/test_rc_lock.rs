@@ -352,11 +352,11 @@ fn test_pubkey_hash_emergency_halt_mode() {
 }
 
 #[test]
-#[ignore]
-fn test_rsa_via_exec_unlock() {
+fn test_rsa_via_dl_unlock() {
     let mut data_loader = DummyDataLoader::new();
 
-    let mut config = TestConfig::new(IDENTITY_FLAGS_EXEC, false);
+    let mut config = TestConfig::new(IDENTITY_FLAGS_DL, false);
+    config.set_rsa();
 
     let tx = gen_tx(&mut data_loader, &mut config);
     let tx = sign_tx(&mut data_loader, tx, &mut config);
