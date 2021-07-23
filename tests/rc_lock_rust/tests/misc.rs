@@ -1,3 +1,7 @@
+use openssl::hash::MessageDigest;
+use openssl::pkey::{PKey, Private, Public};
+use openssl::rsa::Rsa;
+use openssl::sign::Signer;
 use std::collections::HashMap;
 
 use ckb_chain_spec::consensus::{Consensus, ConsensusBuilder};
@@ -71,6 +75,8 @@ lazy_static! {
         Bytes::from(&include_bytes!("../../../build/secp256k1_data")[..]);
     pub static ref ALWAYS_SUCCESS: Bytes =
         Bytes::from(&include_bytes!("../../../build/always_success")[..]);
+    pub static ref VALIDATE_SIGNATURE_RSA: Bytes =
+        Bytes::from(&include_bytes!("../../../build/validate_signature_rsa")[..]);
     pub static ref SMT_EXISTING: H256 = H256::from([
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0
@@ -450,6 +456,34 @@ pub fn append_input_lock_script_hash(
     (tx_builder, blake160)
 }
 
+// loop through all input cell's lock script,
+// check if its args's first byte is "flags", then replace the following
+// 20 bytes with preimage's hash
+pub fn write_back_preimage_hash(dummy: &mut DummyDataLoader, flags: u8, hash: Bytes) {
+    dummy.cells = dummy
+        .cells
+        .clone()
+        .into_iter()
+        .map(|(k, (mut cell, data))| {
+            let script = cell.lock();
+            let args = script.args();
+            if args.len() >= 21 {
+                let raw = args.raw_data();
+                if raw[0] == flags {
+                    let mut new_args = Vec::from(raw.as_ref());
+                    new_args[1..21].copy_from_slice(hash.as_ref());
+                    let new_script = script
+                        .as_builder()
+                        .args(Bytes::from(new_args).pack())
+                        .build();
+                    cell = cell.as_builder().lock(new_script).build();
+                }
+            }
+            (k, (cell, data))
+        })
+        .collect();
+}
+
 pub fn sign_tx_by_input_group(
     tx: TransactionView,
     begin_index: usize,
@@ -459,6 +493,8 @@ pub fn sign_tx_by_input_group(
     let proof_vec = build_proofs(config.proofs.clone(), config.proof_masks.clone());
     let identity = config.id.to_identity();
     let tx_hash = tx.hash();
+    let mut preimage_hash: Bytes = Default::default();
+
     let mut signed_witnesses: Vec<packed::Bytes> = tx
         .inputs()
         .into_iter()
@@ -488,10 +524,26 @@ pub fn sign_tx_by_input_group(
                 });
                 blake2b.finalize(&mut message);
                 let message = CkbH256::from(message);
-                let sig = config.private_key.sign_recoverable(&message).expect("sign");
-                let sig_bytes = Bytes::from(sig.serialize());
-                let witness_lock =
-                    gen_witness_lock(sig_bytes, config.use_rc, &proof_vec, &identity);
+
+                let witness_lock = if config.id.flags == IDENTITY_FLAGS_EXEC {
+                    let (sig, pubkey) = rsa_sign(message.as_bytes(), &config.rsa_private_key);
+                    let hash = blake160(pubkey.as_ref());
+                    let preimage = gen_exec_preimage(&config.rsa_script, &hash);
+                    preimage_hash = blake160(preimage.as_ref());
+
+                    let sig_bytes = Bytes::from(sig);
+                    gen_witness_lock(sig_bytes, config.use_rc, &proof_vec, &identity, preimage)
+                } else {
+                    let sig = config.private_key.sign_recoverable(&message).expect("sign");
+                    let sig_bytes = Bytes::from(sig.serialize());
+                    gen_witness_lock(
+                        sig_bytes,
+                        config.use_rc,
+                        &proof_vec,
+                        &identity,
+                        Default::default(),
+                    )
+                };
                 witness
                     .as_builder()
                     .lock(Some(witness_lock).pack())
@@ -616,6 +668,17 @@ pub fn gen_tx_with_grouped_args(
         )
         .output_data(Bytes::new().pack());
 
+    // validate_signature_rsa will be referenced by preimage in witness
+    let (b0, rsa_script) = build_script(
+        dummy,
+        tx_builder,
+        false,
+        &VALIDATE_SIGNATURE_RSA,
+        Default::default(),
+    );
+    tx_builder = b0;
+    config.rsa_script = rsa_script;
+
     if config.is_owner_lock() {
         // insert an "always success" script as first input script.
         let (b0, blake160) = append_input_lock_script_hash(dummy, tx_builder);
@@ -697,7 +760,13 @@ pub fn sign_tx_hash(tx: TransactionView, tx_hash: &[u8], config: &TestConfig) ->
     let message = CkbH256::from(message);
     let sig = config.private_key.sign_recoverable(&message).expect("sign");
     let proofs = SmtProofEntryVecBuilder::default().build();
-    let witness_lock = gen_witness_lock(sig.serialize().into(), config.use_rc, &proofs, &identity);
+    let witness_lock = gen_witness_lock(
+        sig.serialize().into(),
+        config.use_rc,
+        &proofs,
+        &identity,
+        Default::default(),
+    );
     let witness_args = WitnessArgsBuilder::default()
         .lock(Some(witness_lock).pack())
         .build();
@@ -753,6 +822,7 @@ pub fn debug_printer(script: &Byte32, msg: &str) {
 
 pub const IDENTITY_FLAGS_PUBKEY_HASH: u8 = 0;
 pub const IDENTITY_FLAGS_OWNER_LOCK: u8 = 0xFC;
+pub const IDENTITY_FLAGS_EXEC: u8 = 0xFD;
 
 pub struct Identity {
     pub flags: u8,
@@ -784,6 +854,10 @@ pub struct TestConfig {
     pub proof_masks: Vec<u8>,
     pub private_key: Privkey,
     pub pubkey: Pubkey,
+
+    pub rsa_private_key: PKey<Private>,
+    pub rsa_pubkey: PKey<Public>,
+    pub rsa_script: Script,
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -835,6 +909,13 @@ impl TestConfig {
             buf.resize(32, 0);
             buf.freeze()
         };
+        // rsa key
+        let bits = 1024;
+        let rsa = Rsa::generate(bits).unwrap();
+        let rsa_private_key = PKey::from_rsa(rsa).unwrap();
+
+        let public_key_pem: Vec<u8> = rsa_private_key.public_key_to_pem().unwrap();
+        let rsa_pubkey = PKey::public_key_from_pem(&public_key_pem).unwrap();
 
         TestConfig {
             id: Identity { flags, blake160 },
@@ -846,6 +927,9 @@ impl TestConfig {
             proof_masks: Default::default(),
             private_key,
             pubkey,
+            rsa_private_key,
+            rsa_pubkey,
+            rsa_script: Default::default(),
         }
     }
 
@@ -887,6 +971,7 @@ pub fn gen_witness_lock(
     use_rc: bool,
     proofs: &SmtProofEntryVec,
     identity: &rc_lock::Identity,
+    preimage: Bytes,
 ) -> Bytes {
     let builder = RcLockWitnessLock::new_builder();
     let rc_identity = rc_lock::RcIdentityBuilder::default()
@@ -894,12 +979,60 @@ pub fn gen_witness_lock(
         .proofs(proofs.clone())
         .build();
 
-    let mut builder = builder.signature(Some(sig).pack());
+    let mut builder = builder
+        .signature(Some(sig).pack())
+        .preimage(Some(preimage).pack());
+
     if use_rc {
         let opt = rc_lock::RcIdentityOpt::new_unchecked(rc_identity.as_bytes());
         builder = builder.rc_identity(opt);
     }
     builder.build().as_bytes()
+}
+
+/* generate the following structure:
+typedef struct RsaInfo {
+  uint8_t algorithm_id;
+  uint8_t key_size;
+  uint8_t padding;
+  uint8_t md_type;
+  uint32_t E;
+  uint8_t N[PLACEHOLDER_SIZE];
+  uint8_t sig[PLACEHOLDER_SIZE];
+} RsaInfo;
+*/
+pub fn rsa_sign(msg: &[u8], key: &PKey<Private>) -> (Vec<u8>, Vec<u8>) {
+    let pem: Vec<u8> = key.public_key_to_pem().unwrap();
+    let pubkey = PKey::public_key_from_pem(&pem).unwrap();
+
+    let mut sig = Vec::<u8>::new();
+    sig.push(1); // algorithm id
+    sig.push(1); // key size, 1024
+    sig.push(0); // padding, PKCS# 1.5
+    sig.push(6); // hash type SHA256
+
+    let pubkey2 = pubkey.rsa().unwrap();
+    let mut e = pubkey2.e().to_vec();
+    let mut n = pubkey2.n().to_vec();
+    e.reverse();
+    n.reverse();
+
+    while e.len() < 4 {
+        e.push(0);
+    }
+    while n.len() < 128 {
+        n.push(0);
+    }
+    sig.append(&mut e); // 4 bytes E
+    sig.append(&mut n); // N
+
+    let my_pubkey = sig.clone();
+
+    let mut signer = Signer::new(MessageDigest::sha256(), key).unwrap();
+    signer.update(&msg).unwrap();
+    sig.extend(signer.sign_to_vec().unwrap()); // sig
+
+    (sig, my_pubkey)
 }
 
 pub fn gen_zero_witness_lock(
@@ -909,13 +1042,22 @@ pub fn gen_zero_witness_lock(
 ) -> Bytes {
     let mut zero = BytesMut::new();
     zero.resize(65, 0);
-    let witness_lock = gen_witness_lock(zero.freeze(), use_rc, proofs, identity);
+    let witness_lock =
+        gen_witness_lock(zero.freeze(), use_rc, proofs, identity, Default::default());
 
     let mut res = BytesMut::new();
     res.resize(witness_lock.len(), 0);
     res.freeze()
 }
 
+pub fn gen_exec_preimage(script: &Script, blake160: &Bytes) -> Bytes {
+    let mut result = BytesMut::new();
+    result.put_slice(script.code_hash().as_slice());
+    result.put_slice(script.hash_type().as_slice());
+    result.put_slice(blake160.clone().as_ref());
+
+    result.freeze()
+}
 // first generate N RCE cells with each contained one RCRule
 // then collect all these RCE cell hash and create the final RCE cell.
 pub fn generate_rce_cell(
