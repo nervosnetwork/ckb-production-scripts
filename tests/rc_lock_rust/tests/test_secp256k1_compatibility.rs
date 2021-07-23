@@ -19,10 +19,10 @@ use lazy_static::lazy_static;
 use rand::{thread_rng, Rng, SeedableRng};
 
 use misc::{
-    blake160, build_resolved_tx, debug_printer, gen_tx, gen_tx_with_grouped_args, gen_witness_lock,
-    sign_tx, sign_tx_by_input_group, sign_tx_hash, DummyDataLoader, TestConfig, TestScheme,
-    ERROR_ENCODING, ERROR_PUBKEY_BLAKE160_HASH, ERROR_WITNESS_SIZE, IDENTITY_FLAGS_PUBKEY_HASH,
-    MAX_CYCLES,
+    assert_script_error, blake160, build_resolved_tx, debug_printer, gen_tx,
+    gen_tx_with_grouped_args, gen_witness_lock, sign_tx, sign_tx_by_input_group, sign_tx_hash,
+    DummyDataLoader, TestConfig, TestScheme, ERROR_ENCODING, ERROR_PUBKEY_BLAKE160_HASH,
+    ERROR_WITNESS_SIZE, IDENTITY_FLAGS_PUBKEY_HASH, MAX_CYCLES,
 };
 
 mod misc;
@@ -120,10 +120,7 @@ fn test_sighash_all_with_extra_witness_unlock() {
             TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
         let verify_result = verifier.verify(MAX_CYCLES);
-        assert!(verify_result
-            .unwrap_err()
-            .to_string()
-            .contains("error code -31"));
+        assert_script_error(verify_result.unwrap_err(), ERROR_PUBKEY_BLAKE160_HASH)
     }
 }
 
@@ -174,10 +171,7 @@ fn test_sighash_all_with_grouped_inputs_unlock() {
             TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
         let verify_result = verifier.verify(MAX_CYCLES);
-        assert!(verify_result
-            .unwrap_err()
-            .to_string()
-            .contains("error code -31"));
+        assert_script_error(verify_result.unwrap_err(), ERROR_PUBKEY_BLAKE160_HASH)
     }
 }
 
@@ -222,10 +216,7 @@ fn test_signing_with_wrong_key() {
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert!(verify_result
-        .unwrap_err()
-        .to_string()
-        .contains("error code -31"));
+    assert_script_error(verify_result.unwrap_err(), ERROR_PUBKEY_BLAKE160_HASH)
 }
 
 #[test]
@@ -248,10 +239,7 @@ fn test_signing_wrong_tx_hash() {
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert!(verify_result
-        .unwrap_err()
-        .to_string()
-        .contains("error code -31"));
+    assert_script_error(verify_result.unwrap_err(), ERROR_PUBKEY_BLAKE160_HASH)
 }
 
 #[test]
@@ -339,10 +327,7 @@ fn test_sighash_all_witness_append_junk_data() {
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert!(verify_result
-        .unwrap_err()
-        .to_string()
-        .contains("error code -31"));
+    assert_script_error(verify_result.unwrap_err(), ERROR_PUBKEY_BLAKE160_HASH)
 }
 
 #[test]
@@ -385,10 +370,7 @@ fn test_sighash_all_witness_args_ambiguity() {
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert!(verify_result
-        .unwrap_err()
-        .to_string()
-        .contains("error code -31"));
+    assert_script_error(verify_result.unwrap_err(), ERROR_PUBKEY_BLAKE160_HASH)
 }
 
 #[test]
@@ -432,10 +414,7 @@ fn test_sighash_all_witnesses_ambiguity() {
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert!(verify_result
-        .unwrap_err()
-        .to_string()
-        .contains("error code -31"));
+    assert_script_error(verify_result.unwrap_err(), ERROR_PUBKEY_BLAKE160_HASH)
 }
 
 #[test]
@@ -474,8 +453,5 @@ fn test_sighash_all_cover_extra_witnesses() {
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(60000000);
-    assert!(verify_result
-        .unwrap_err()
-        .to_string()
-        .contains("error code -31"));
+    assert_script_error(verify_result.unwrap_err(), ERROR_PUBKEY_BLAKE160_HASH)
 }

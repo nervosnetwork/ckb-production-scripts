@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use ckb_chain_spec::consensus::{Consensus, ConsensusBuilder};
 use ckb_crypto::secp::{Generator, Privkey, Pubkey};
+use ckb_error::Error;
 use ckb_hash::{Blake2b, Blake2bBuilder};
 use ckb_script::TxVerifyEnv;
 use ckb_traits::{CellDataProvider, HeaderProvider};
@@ -1061,6 +1062,12 @@ pub fn generate_single_proof(scheme: TestScheme, smt_key: &Vec<[u8; 32]>) -> (Ve
 
     let rc_data = build_rc_rule(&smt_root.into(), is_black_list, is_emergency_halt);
     (proof, rc_data)
+}
+
+pub fn assert_script_error(err: Error, err_code: i8) {
+    assert!(err
+        .to_string()
+        .contains(format!("error code {}", err_code).as_str()));
 }
 
 pub fn gen_consensus() -> Consensus {
