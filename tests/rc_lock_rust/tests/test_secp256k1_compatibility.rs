@@ -1,10 +1,20 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
+use ckb_chain_spec::consensus::ConsensusBuilder;
 use ckb_crypto::secp::Generator;
 use ckb_error::assert_error_eq;
-use ckb_script::{ScriptError, TransactionScriptsVerifier};
-use ckb_types::{bytes::Bytes, bytes::BytesMut, packed::WitnessArgs, prelude::*, H256};
+use ckb_script::{ScriptError, TransactionScriptsVerifier, TxVerifyEnv};
+use ckb_types::{
+    bytes::Bytes,
+    bytes::BytesMut,
+    core::{
+        cell::ResolvedTransaction, hardfork::HardForkSwitch, EpochNumberWithFraction, HeaderView,
+    },
+    packed::WitnessArgs,
+    prelude::*,
+    H256,
+};
 use lazy_static::lazy_static;
 use rand::{thread_rng, Rng, SeedableRng};
 
@@ -29,7 +39,24 @@ fn test_sighash_all_unlock() {
     let tx = sign_tx(&mut data_loader, tx, &mut config);
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
+        .as_builder()
+        .rfc_0232(200)
+        .build()
+        .unwrap();
+    let consensus = ConsensusBuilder::default()
+        .hardfork_switch(hardfork_switch)
+        .build();
+    let epoch = EpochNumberWithFraction::new(300, 0, 1);
+    let tx_env = {
+        let header = HeaderView::new_advanced_builder()
+            .epoch(epoch.pack())
+            .build();
+        TxVerifyEnv::new_commit(&header)
+    };
+    let mut verifier =
+        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
     verify_result.expect("pass verification");
@@ -45,7 +72,24 @@ fn test_sighash_all_unlock_with_args() {
     let tx = sign_tx(&mut data_loader, tx, &mut config);
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
+        .as_builder()
+        .rfc_0232(200)
+        .build()
+        .unwrap();
+    let consensus = ConsensusBuilder::default()
+        .hardfork_switch(hardfork_switch)
+        .build();
+    let epoch = EpochNumberWithFraction::new(300, 0, 1);
+    let tx_env = {
+        let header = HeaderView::new_advanced_builder()
+            .epoch(epoch.pack())
+            .build();
+        TxVerifyEnv::new_commit(&header)
+    };
+    let mut verifier =
+        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
     verify_result.expect("pass verification");
@@ -69,8 +113,26 @@ fn test_sighash_all_with_extra_witness_unlock() {
     {
         let tx = sign_tx(&mut data_loader, tx.clone(), &mut config);
         let resolved_tx = build_resolved_tx(&data_loader, &tx);
-        let verify_result =
-            TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
+
+        let hardfork_switch = HardForkSwitch::new_without_any_enabled()
+            .as_builder()
+            .rfc_0232(200)
+            .build()
+            .unwrap();
+        let consensus = ConsensusBuilder::default()
+            .hardfork_switch(hardfork_switch)
+            .build();
+        let epoch = EpochNumberWithFraction::new(300, 0, 1);
+        let tx_env = {
+            let header = HeaderView::new_advanced_builder()
+                .epoch(epoch.pack())
+                .build();
+            TxVerifyEnv::new_commit(&header)
+        };
+        let verifier =
+            TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+        let verify_result = verifier.verify(MAX_CYCLES);
         verify_result.expect("pass verification");
     }
     {
@@ -90,11 +152,35 @@ fn test_sighash_all_with_extra_witness_unlock() {
             .set_witnesses(vec![wrong_witness.as_bytes().pack()])
             .build();
         let resolved_tx = build_resolved_tx(&data_loader, &tx);
-        let verify_result =
-            TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
+
+        let hardfork_switch = HardForkSwitch::new_without_any_enabled()
+            .as_builder()
+            .rfc_0232(200)
+            .build()
+            .unwrap();
+        let consensus = ConsensusBuilder::default()
+            .hardfork_switch(hardfork_switch)
+            .build();
+        let epoch = EpochNumberWithFraction::new(300, 0, 1);
+        let tx_env = {
+            let header = HeaderView::new_advanced_builder()
+                .epoch(epoch.pack())
+                .build();
+            TxVerifyEnv::new_commit(&header)
+        };
+        let verifier =
+            TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+        let verify_result = verifier.verify(MAX_CYCLES);
         assert_error_eq!(
             verify_result.unwrap_err(),
-            ScriptError::ValidationFailure(ERROR_PUBKEY_BLAKE160_HASH).input_lock_script(0)
+            ScriptError::ValidationFailure(
+                String::from(
+                    "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
+                ),
+                ERROR_PUBKEY_BLAKE160_HASH
+            )
+            .input_lock_script(0)
         );
     }
 }
@@ -110,8 +196,26 @@ fn test_sighash_all_with_grouped_inputs_unlock() {
     {
         let tx = sign_tx(&mut data_loader, tx.clone(), &mut config);
         let resolved_tx = build_resolved_tx(&data_loader, &tx);
-        let verify_result =
-            TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
+
+        let hardfork_switch = HardForkSwitch::new_without_any_enabled()
+            .as_builder()
+            .rfc_0232(200)
+            .build()
+            .unwrap();
+        let consensus = ConsensusBuilder::default()
+            .hardfork_switch(hardfork_switch)
+            .build();
+        let epoch = EpochNumberWithFraction::new(300, 0, 1);
+        let tx_env = {
+            let header = HeaderView::new_advanced_builder()
+                .epoch(epoch.pack())
+                .build();
+            TxVerifyEnv::new_commit(&header)
+        };
+        let verifier =
+            TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+        let verify_result = verifier.verify(MAX_CYCLES);
         verify_result.expect("pass verification");
     }
     {
@@ -134,11 +238,35 @@ fn test_sighash_all_with_grouped_inputs_unlock() {
             ])
             .build();
         let resolved_tx = build_resolved_tx(&data_loader, &tx);
-        let verify_result =
-            TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
+
+        let hardfork_switch = HardForkSwitch::new_without_any_enabled()
+            .as_builder()
+            .rfc_0232(200)
+            .build()
+            .unwrap();
+        let consensus = ConsensusBuilder::default()
+            .hardfork_switch(hardfork_switch)
+            .build();
+        let epoch = EpochNumberWithFraction::new(300, 0, 1);
+        let tx_env = {
+            let header = HeaderView::new_advanced_builder()
+                .epoch(epoch.pack())
+                .build();
+            TxVerifyEnv::new_commit(&header)
+        };
+        let verifier =
+            TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+        let verify_result = verifier.verify(MAX_CYCLES);
         assert_error_eq!(
             verify_result.unwrap_err(),
-            ScriptError::ValidationFailure(ERROR_PUBKEY_BLAKE160_HASH).input_lock_script(0)
+            ScriptError::ValidationFailure(
+                String::from(
+                    "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
+                ),
+                ERROR_PUBKEY_BLAKE160_HASH
+            )
+            .input_lock_script(0)
         );
     }
 }
@@ -158,8 +286,25 @@ fn test_sighash_all_with_2_different_inputs_unlock() {
     let tx = sign_tx_by_input_group(tx, 2, 2, &mut config2);
 
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
-    let verify_result =
-        TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
+
+    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
+        .as_builder()
+        .rfc_0232(200)
+        .build()
+        .unwrap();
+    let consensus = ConsensusBuilder::default()
+        .hardfork_switch(hardfork_switch)
+        .build();
+    let epoch = EpochNumberWithFraction::new(300, 0, 1);
+    let tx_env = {
+        let header = HeaderView::new_advanced_builder()
+            .epoch(epoch.pack())
+            .build();
+        TxVerifyEnv::new_commit(&header)
+    };
+    let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+    let verify_result = verifier.verify(MAX_CYCLES);
     verify_result.expect("pass verification");
 }
 
@@ -174,11 +319,34 @@ fn test_signing_with_wrong_key() {
     let tx = gen_tx(&mut data_loader, &mut config);
     let tx = sign_tx(&mut data_loader, tx, &mut config);
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
-    let verify_result =
-        TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
+
+    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
+        .as_builder()
+        .rfc_0232(200)
+        .build()
+        .unwrap();
+    let consensus = ConsensusBuilder::default()
+        .hardfork_switch(hardfork_switch)
+        .build();
+    let epoch = EpochNumberWithFraction::new(300, 0, 1);
+    let tx_env = {
+        let header = HeaderView::new_advanced_builder()
+            .epoch(epoch.pack())
+            .build();
+        TxVerifyEnv::new_commit(&header)
+    };
+    let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+    let verify_result = verifier.verify(MAX_CYCLES);
     assert_error_eq!(
         verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(ERROR_PUBKEY_BLAKE160_HASH).input_lock_script(0)
+        ScriptError::ValidationFailure(
+            String::from(
+                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
+            ),
+            ERROR_PUBKEY_BLAKE160_HASH
+        )
+        .input_lock_script(0)
     );
 }
 
@@ -196,11 +364,34 @@ fn test_signing_wrong_tx_hash() {
         sign_tx_hash(tx, &rand_tx_hash[..], &config)
     };
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
-    let verify_result =
-        TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
+
+    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
+        .as_builder()
+        .rfc_0232(200)
+        .build()
+        .unwrap();
+    let consensus = ConsensusBuilder::default()
+        .hardfork_switch(hardfork_switch)
+        .build();
+    let epoch = EpochNumberWithFraction::new(300, 0, 1);
+    let tx_env = {
+        let header = HeaderView::new_advanced_builder()
+            .epoch(epoch.pack())
+            .build();
+        TxVerifyEnv::new_commit(&header)
+    };
+    let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+    let verify_result = verifier.verify(MAX_CYCLES);
     assert_error_eq!(
         verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(ERROR_PUBKEY_BLAKE160_HASH).input_lock_script(0),
+        ScriptError::ValidationFailure(
+            String::from(
+                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
+            ),
+            ERROR_PUBKEY_BLAKE160_HASH
+        )
+        .input_lock_script(0),
     );
 }
 
@@ -215,7 +406,24 @@ fn test_super_long_witness() {
     let tx = sign_tx(&mut data_loader, tx, &mut config);
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
+        .as_builder()
+        .rfc_0232(200)
+        .build()
+        .unwrap();
+    let consensus = ConsensusBuilder::default()
+        .hardfork_switch(hardfork_switch)
+        .build();
+    let epoch = EpochNumberWithFraction::new(300, 0, 1);
+    let tx_env = {
+        let header = HeaderView::new_advanced_builder()
+            .epoch(epoch.pack())
+            .build();
+        TxVerifyEnv::new_commit(&header)
+    };
+    let mut verifier =
+        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
     verify_result.expect("pass verification");
@@ -240,7 +448,25 @@ fn test_sighash_all_2_in_2_out_cycles() {
     let tx = sign_tx_by_input_group(tx, 1, 1, &config2);
 
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
-    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+
+    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
+        .as_builder()
+        .rfc_0232(200)
+        .build()
+        .unwrap();
+    let consensus = ConsensusBuilder::default()
+        .hardfork_switch(hardfork_switch)
+        .build();
+    let epoch = EpochNumberWithFraction::new(300, 0, 1);
+    let tx_env = {
+        let header = HeaderView::new_advanced_builder()
+            .epoch(epoch.pack())
+            .build();
+        TxVerifyEnv::new_commit(&header)
+    };
+    let mut verifier =
+        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
     let cycles = verify_result.expect("pass verification");
@@ -274,11 +500,34 @@ fn test_sighash_all_witness_append_junk_data() {
         .build();
 
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
-    let verify_result =
-        TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
+
+    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
+        .as_builder()
+        .rfc_0232(200)
+        .build()
+        .unwrap();
+    let consensus = ConsensusBuilder::default()
+        .hardfork_switch(hardfork_switch)
+        .build();
+    let epoch = EpochNumberWithFraction::new(300, 0, 1);
+    let tx_env = {
+        let header = HeaderView::new_advanced_builder()
+            .epoch(epoch.pack())
+            .build();
+        TxVerifyEnv::new_commit(&header)
+    };
+    let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+    let verify_result = verifier.verify(MAX_CYCLES);
     assert_error_eq!(
         verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(ERROR_PUBKEY_BLAKE160_HASH).input_lock_script(0)
+        ScriptError::ValidationFailure(
+            String::from(
+                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
+            ),
+            ERROR_PUBKEY_BLAKE160_HASH
+        )
+        .input_lock_script(0)
     );
 }
 
@@ -316,11 +565,34 @@ fn test_sighash_all_witness_args_ambiguity() {
         .build();
 
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
-    let verify_result =
-        TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
+
+    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
+        .as_builder()
+        .rfc_0232(200)
+        .build()
+        .unwrap();
+    let consensus = ConsensusBuilder::default()
+        .hardfork_switch(hardfork_switch)
+        .build();
+    let epoch = EpochNumberWithFraction::new(300, 0, 1);
+    let tx_env = {
+        let header = HeaderView::new_advanced_builder()
+            .epoch(epoch.pack())
+            .build();
+        TxVerifyEnv::new_commit(&header)
+    };
+    let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+    let verify_result = verifier.verify(MAX_CYCLES);
     assert_error_eq!(
         verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(ERROR_PUBKEY_BLAKE160_HASH).input_lock_script(0),
+        ScriptError::ValidationFailure(
+            String::from(
+                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
+            ),
+            ERROR_PUBKEY_BLAKE160_HASH
+        )
+        .input_lock_script(0),
     );
 }
 
@@ -359,11 +631,34 @@ fn test_sighash_all_witnesses_ambiguity() {
 
     assert_eq!(tx.witnesses().len(), tx.inputs().len());
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
-    let verify_result =
-        TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
+
+    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
+        .as_builder()
+        .rfc_0232(200)
+        .build()
+        .unwrap();
+    let consensus = ConsensusBuilder::default()
+        .hardfork_switch(hardfork_switch)
+        .build();
+    let epoch = EpochNumberWithFraction::new(300, 0, 1);
+    let tx_env = {
+        let header = HeaderView::new_advanced_builder()
+            .epoch(epoch.pack())
+            .build();
+        TxVerifyEnv::new_commit(&header)
+    };
+    let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+    let verify_result = verifier.verify(MAX_CYCLES);
     assert_error_eq!(
         verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(ERROR_PUBKEY_BLAKE160_HASH).input_lock_script(0),
+        ScriptError::ValidationFailure(
+            String::from(
+                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
+            ),
+            ERROR_PUBKEY_BLAKE160_HASH
+        )
+        .input_lock_script(0),
     );
 }
 
@@ -397,10 +692,33 @@ fn test_sighash_all_cover_extra_witnesses() {
         .build();
 
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
-    let verify_result =
-        TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(60000000);
+
+    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
+        .as_builder()
+        .rfc_0232(200)
+        .build()
+        .unwrap();
+    let consensus = ConsensusBuilder::default()
+        .hardfork_switch(hardfork_switch)
+        .build();
+    let epoch = EpochNumberWithFraction::new(300, 0, 1);
+    let tx_env = {
+        let header = HeaderView::new_advanced_builder()
+            .epoch(epoch.pack())
+            .build();
+        TxVerifyEnv::new_commit(&header)
+    };
+    let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+    let verify_result = verifier.verify(60000000);
     assert_error_eq!(
         verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(ERROR_PUBKEY_BLAKE160_HASH).input_lock_script(0),
+        ScriptError::ValidationFailure(
+            String::from(
+                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
+            ),
+            ERROR_PUBKEY_BLAKE160_HASH
+        )
+        .input_lock_script(0),
     );
 }
