@@ -974,7 +974,7 @@ impl TestConfig {
         self.use_rsa = true;
         self.sig_len = 264;
     }
-    pub fn set_use_acp(&mut self, min_config: Option<(u8, u8)>) {
+    pub fn set_acp_config(&mut self, min_config: Option<(u8, u8)>) {
         self.acp_config = min_config;
     }
 
