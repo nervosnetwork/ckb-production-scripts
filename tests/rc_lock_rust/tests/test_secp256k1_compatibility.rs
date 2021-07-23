@@ -1,18 +1,28 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
+use ckb_chain_spec::consensus::ConsensusBuilder;
 use ckb_crypto::secp::Generator;
 use ckb_error::assert_error_eq;
-use ckb_script::{ScriptError, TransactionScriptsVerifier};
-use ckb_types::{bytes::Bytes, bytes::BytesMut, packed::WitnessArgs, prelude::*, H256};
+use ckb_script::{ScriptError, TransactionScriptsVerifier, TxVerifyEnv};
+use ckb_types::{
+    bytes::Bytes,
+    bytes::BytesMut,
+    core::{
+        cell::ResolvedTransaction, hardfork::HardForkSwitch, EpochNumberWithFraction, HeaderView,
+    },
+    packed::WitnessArgs,
+    prelude::*,
+    H256,
+};
 use lazy_static::lazy_static;
 use rand::{thread_rng, Rng, SeedableRng};
 
 use misc::{
-    blake160, build_resolved_tx, debug_printer, gen_tx, gen_tx_with_grouped_args, gen_witness_lock,
-    sign_tx, sign_tx_by_input_group, sign_tx_hash, DummyDataLoader, TestConfig, TestScheme,
-    ERROR_ENCODING, ERROR_PUBKEY_BLAKE160_HASH, ERROR_WITNESS_SIZE, IDENTITY_FLAGS_PUBKEY_HASH,
-    MAX_CYCLES,
+    assert_script_error, blake160, build_resolved_tx, debug_printer, gen_tx,
+    gen_tx_with_grouped_args, gen_witness_lock, sign_tx, sign_tx_by_input_group, sign_tx_hash,
+    DummyDataLoader, TestConfig, TestScheme, ERROR_ENCODING, ERROR_PUBKEY_BLAKE160_HASH,
+    ERROR_WITNESS_SIZE, IDENTITY_FLAGS_PUBKEY_HASH, MAX_CYCLES,
 };
 
 mod misc;
@@ -29,7 +39,11 @@ fn test_sighash_all_unlock() {
     let tx = sign_tx(&mut data_loader, tx, &mut config);
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
+    let mut verifier =
+        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
     verify_result.expect("pass verification");
@@ -45,7 +59,11 @@ fn test_sighash_all_unlock_with_args() {
     let tx = sign_tx(&mut data_loader, tx, &mut config);
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
+    let mut verifier =
+        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
     verify_result.expect("pass verification");
@@ -69,8 +87,13 @@ fn test_sighash_all_with_extra_witness_unlock() {
     {
         let tx = sign_tx(&mut data_loader, tx.clone(), &mut config);
         let resolved_tx = build_resolved_tx(&data_loader, &tx);
-        let verify_result =
-            TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
+
+        let consensus = misc::gen_consensus();
+        let tx_env = misc::gen_tx_env();
+        let verifier =
+            TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+        let verify_result = verifier.verify(MAX_CYCLES);
         verify_result.expect("pass verification");
     }
     {
@@ -90,12 +113,14 @@ fn test_sighash_all_with_extra_witness_unlock() {
             .set_witnesses(vec![wrong_witness.as_bytes().pack()])
             .build();
         let resolved_tx = build_resolved_tx(&data_loader, &tx);
-        let verify_result =
-            TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
-        assert_error_eq!(
-            verify_result.unwrap_err(),
-            ScriptError::ValidationFailure(ERROR_PUBKEY_BLAKE160_HASH).input_lock_script(0)
-        );
+
+        let consensus = misc::gen_consensus();
+        let tx_env = misc::gen_tx_env();
+        let verifier =
+            TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+        let verify_result = verifier.verify(MAX_CYCLES);
+        assert_script_error(verify_result.unwrap_err(), ERROR_PUBKEY_BLAKE160_HASH)
     }
 }
 
@@ -110,8 +135,13 @@ fn test_sighash_all_with_grouped_inputs_unlock() {
     {
         let tx = sign_tx(&mut data_loader, tx.clone(), &mut config);
         let resolved_tx = build_resolved_tx(&data_loader, &tx);
-        let verify_result =
-            TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
+
+        let consensus = misc::gen_consensus();
+        let tx_env = misc::gen_tx_env();
+        let verifier =
+            TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+        let verify_result = verifier.verify(MAX_CYCLES);
         verify_result.expect("pass verification");
     }
     {
@@ -134,12 +164,14 @@ fn test_sighash_all_with_grouped_inputs_unlock() {
             ])
             .build();
         let resolved_tx = build_resolved_tx(&data_loader, &tx);
-        let verify_result =
-            TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
-        assert_error_eq!(
-            verify_result.unwrap_err(),
-            ScriptError::ValidationFailure(ERROR_PUBKEY_BLAKE160_HASH).input_lock_script(0)
-        );
+
+        let consensus = misc::gen_consensus();
+        let tx_env = misc::gen_tx_env();
+        let verifier =
+            TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+        let verify_result = verifier.verify(MAX_CYCLES);
+        assert_script_error(verify_result.unwrap_err(), ERROR_PUBKEY_BLAKE160_HASH)
     }
 }
 
@@ -158,8 +190,12 @@ fn test_sighash_all_with_2_different_inputs_unlock() {
     let tx = sign_tx_by_input_group(tx, 2, 2, &mut config2);
 
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
-    let verify_result =
-        TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
+
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
+    let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+    let verify_result = verifier.verify(MAX_CYCLES);
     verify_result.expect("pass verification");
 }
 
@@ -174,12 +210,13 @@ fn test_signing_with_wrong_key() {
     let tx = gen_tx(&mut data_loader, &mut config);
     let tx = sign_tx(&mut data_loader, tx, &mut config);
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
-    let verify_result =
-        TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(ERROR_PUBKEY_BLAKE160_HASH).input_lock_script(0)
-    );
+
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
+    let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+    let verify_result = verifier.verify(MAX_CYCLES);
+    assert_script_error(verify_result.unwrap_err(), ERROR_PUBKEY_BLAKE160_HASH)
 }
 
 #[test]
@@ -196,12 +233,13 @@ fn test_signing_wrong_tx_hash() {
         sign_tx_hash(tx, &rand_tx_hash[..], &config)
     };
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
-    let verify_result =
-        TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(ERROR_PUBKEY_BLAKE160_HASH).input_lock_script(0),
-    );
+
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
+    let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+    let verify_result = verifier.verify(MAX_CYCLES);
+    assert_script_error(verify_result.unwrap_err(), ERROR_PUBKEY_BLAKE160_HASH)
 }
 
 #[test]
@@ -215,7 +253,11 @@ fn test_super_long_witness() {
     let tx = sign_tx(&mut data_loader, tx, &mut config);
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
+    let mut verifier =
+        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
     verify_result.expect("pass verification");
@@ -240,7 +282,12 @@ fn test_sighash_all_2_in_2_out_cycles() {
     let tx = sign_tx_by_input_group(tx, 1, 1, &config2);
 
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
-    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
+    let mut verifier =
+        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
     let cycles = verify_result.expect("pass verification");
@@ -274,12 +321,13 @@ fn test_sighash_all_witness_append_junk_data() {
         .build();
 
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
-    let verify_result =
-        TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(ERROR_PUBKEY_BLAKE160_HASH).input_lock_script(0)
-    );
+
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
+    let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+    let verify_result = verifier.verify(MAX_CYCLES);
+    assert_script_error(verify_result.unwrap_err(), ERROR_PUBKEY_BLAKE160_HASH)
 }
 
 #[test]
@@ -316,12 +364,13 @@ fn test_sighash_all_witness_args_ambiguity() {
         .build();
 
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
-    let verify_result =
-        TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(ERROR_PUBKEY_BLAKE160_HASH).input_lock_script(0),
-    );
+
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
+    let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+    let verify_result = verifier.verify(MAX_CYCLES);
+    assert_script_error(verify_result.unwrap_err(), ERROR_PUBKEY_BLAKE160_HASH)
 }
 
 #[test]
@@ -359,12 +408,13 @@ fn test_sighash_all_witnesses_ambiguity() {
 
     assert_eq!(tx.witnesses().len(), tx.inputs().len());
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
-    let verify_result =
-        TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(ERROR_PUBKEY_BLAKE160_HASH).input_lock_script(0),
-    );
+
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
+    let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+    let verify_result = verifier.verify(MAX_CYCLES);
+    assert_script_error(verify_result.unwrap_err(), ERROR_PUBKEY_BLAKE160_HASH)
 }
 
 #[test]
@@ -397,10 +447,11 @@ fn test_sighash_all_cover_extra_witnesses() {
         .build();
 
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
-    let verify_result =
-        TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(60000000);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(ERROR_PUBKEY_BLAKE160_HASH).input_lock_script(0),
-    );
+
+    let consensus = misc::gen_consensus();
+    let tx_env = misc::gen_tx_env();
+    let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+    let verify_result = verifier.verify(60000000);
+    assert_script_error(verify_result.unwrap_err(), ERROR_PUBKEY_BLAKE160_HASH)
 }
