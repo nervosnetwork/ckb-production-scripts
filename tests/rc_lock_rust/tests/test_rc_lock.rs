@@ -33,6 +33,10 @@ fn test_simple_owner_lock() {
     let tx = sign_tx(&mut data_loader, tx, &mut config);
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
+    // For ckb 0.40.0
+    // let mut verifier =
+    //     TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+
     let consensus = gen_consensus();
     let tx_env = gen_tx_env();
     let mut verifier =

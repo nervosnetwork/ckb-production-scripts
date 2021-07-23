@@ -1065,6 +1065,14 @@ pub fn generate_single_proof(scheme: TestScheme, smt_key: &Vec<[u8; 32]>) -> (Ve
 }
 
 pub fn assert_script_error(err: Error, err_code: i8) {
+    // For ckb 0.40.0
+    // use ckb_error::assert_error_eq;
+    // use ckb_script::ScriptError;
+    // assert_error_eq!(
+    //     err,
+    //     ScriptError::ValidationFailure(err_code).input_lock_script(1)
+    // );
+
     assert!(err
         .to_string()
         .contains(format!("error code {}", err_code).as_str()));
