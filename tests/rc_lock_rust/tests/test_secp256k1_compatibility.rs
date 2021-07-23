@@ -172,16 +172,10 @@ fn test_sighash_all_with_extra_witness_unlock() {
             TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
         let verify_result = verifier.verify(MAX_CYCLES);
-        assert_error_eq!(
-            verify_result.unwrap_err(),
-            ScriptError::ValidationFailure(
-                String::from(
-                    "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
-                ),
-                ERROR_PUBKEY_BLAKE160_HASH
-            )
-            .input_lock_script(0)
-        );
+        assert!(verify_result
+            .unwrap_err()
+            .to_string()
+            .contains("error code -31"));
     }
 }
 
@@ -258,16 +252,10 @@ fn test_sighash_all_with_grouped_inputs_unlock() {
             TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
         let verify_result = verifier.verify(MAX_CYCLES);
-        assert_error_eq!(
-            verify_result.unwrap_err(),
-            ScriptError::ValidationFailure(
-                String::from(
-                    "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
-                ),
-                ERROR_PUBKEY_BLAKE160_HASH
-            )
-            .input_lock_script(0)
-        );
+        assert!(verify_result
+            .unwrap_err()
+            .to_string()
+            .contains("error code -31"));
     }
 }
 
@@ -338,16 +326,10 @@ fn test_signing_with_wrong_key() {
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(
-            String::from(
-                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
-            ),
-            ERROR_PUBKEY_BLAKE160_HASH
-        )
-        .input_lock_script(0)
-    );
+    assert!(verify_result
+        .unwrap_err()
+        .to_string()
+        .contains("error code -31"));
 }
 
 #[test]
@@ -383,16 +365,10 @@ fn test_signing_wrong_tx_hash() {
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(
-            String::from(
-                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
-            ),
-            ERROR_PUBKEY_BLAKE160_HASH
-        )
-        .input_lock_script(0),
-    );
+    assert!(verify_result
+        .unwrap_err()
+        .to_string()
+        .contains("error code -31"));
 }
 
 #[test]
@@ -519,16 +495,10 @@ fn test_sighash_all_witness_append_junk_data() {
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(
-            String::from(
-                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
-            ),
-            ERROR_PUBKEY_BLAKE160_HASH
-        )
-        .input_lock_script(0)
-    );
+    assert!(verify_result
+        .unwrap_err()
+        .to_string()
+        .contains("error code -31"));
 }
 
 #[test]
@@ -584,16 +554,10 @@ fn test_sighash_all_witness_args_ambiguity() {
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(
-            String::from(
-                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
-            ),
-            ERROR_PUBKEY_BLAKE160_HASH
-        )
-        .input_lock_script(0),
-    );
+    assert!(verify_result
+        .unwrap_err()
+        .to_string()
+        .contains("error code -31"));
 }
 
 #[test]
@@ -650,16 +614,10 @@ fn test_sighash_all_witnesses_ambiguity() {
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(
-            String::from(
-                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
-            ),
-            ERROR_PUBKEY_BLAKE160_HASH
-        )
-        .input_lock_script(0),
-    );
+    assert!(verify_result
+        .unwrap_err()
+        .to_string()
+        .contains("error code -31"));
 }
 
 #[test]
@@ -711,14 +669,8 @@ fn test_sighash_all_cover_extra_witnesses() {
     let verifier = TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
 
     let verify_result = verifier.verify(60000000);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(
-            String::from(
-                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
-            ),
-            ERROR_PUBKEY_BLAKE160_HASH
-        )
-        .input_lock_script(0),
-    );
+    assert!(verify_result
+        .unwrap_err()
+        .to_string()
+        .contains("error code -31"));
 }

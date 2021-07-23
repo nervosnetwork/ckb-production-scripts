@@ -121,16 +121,10 @@ fn test_simple_owner_lock_mismatched() {
 
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(
-            String::from(
-                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
-            ),
-            ERROR_LOCK_SCRIPT_HASH_NOT_FOUND
-        )
-        .input_lock_script(1)
-    );
+    assert!(verify_result
+        .unwrap_err()
+        .to_string()
+        .contains("error code 70"));
 }
 
 #[test]
@@ -233,16 +227,10 @@ fn test_owner_lock_not_on_wl() {
 
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(
-            String::from(
-                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
-            ),
-            ERROR_NOT_ON_WHITE_LIST
-        )
-        .input_lock_script(1)
-    );
+    assert!(verify_result
+        .unwrap_err()
+        .to_string()
+        .contains("error code 59"));
 }
 
 #[test]
@@ -278,16 +266,10 @@ fn test_owner_lock_no_wl() {
 
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(
-            String::from(
-                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
-            ),
-            ERROR_NO_WHITE_LIST
-        )
-        .input_lock_script(1)
-    );
+    assert!(verify_result
+        .unwrap_err()
+        .to_string()
+        .contains("error code 83"));
 }
 
 #[test]
@@ -321,16 +303,10 @@ fn test_owner_lock_on_bl() {
 
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(
-            String::from(
-                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
-            ),
-            ERROR_ON_BLACK_LIST
-        )
-        .input_lock_script(1)
-    );
+    assert!(verify_result
+        .unwrap_err()
+        .to_string()
+        .contains("error code 57"));
 }
 
 #[test]
@@ -364,16 +340,10 @@ fn test_owner_lock_emergency_halt_mode() {
 
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(
-            String::from(
-                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
-            ),
-            ERROR_RCE_EMERGENCY_HALT
-        )
-        .input_lock_script(1)
-    );
+    assert!(verify_result
+        .unwrap_err()
+        .to_string()
+        .contains("error code 54"));
 }
 
 //
@@ -480,16 +450,10 @@ fn test_pubkey_hash_not_on_wl() {
 
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(
-            String::from(
-                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
-            ),
-            ERROR_NOT_ON_WHITE_LIST
-        )
-        .input_lock_script(0)
-    );
+    assert!(verify_result
+        .unwrap_err()
+        .to_string()
+        .contains("error code 59"));
 }
 
 #[test]
@@ -525,16 +489,10 @@ fn test_pubkey_hash_no_wl() {
 
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(
-            String::from(
-                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
-            ),
-            ERROR_NO_WHITE_LIST
-        )
-        .input_lock_script(0)
-    );
+    assert!(verify_result
+        .unwrap_err()
+        .to_string()
+        .contains("error code 83"));
 }
 
 #[test]
@@ -568,16 +526,10 @@ fn test_pubkey_hash_on_bl() {
 
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(
-            String::from(
-                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
-            ),
-            ERROR_ON_BLACK_LIST
-        )
-        .input_lock_script(0)
-    );
+    assert!(verify_result
+        .unwrap_err()
+        .to_string()
+        .contains("error code 57"));
 }
 
 #[test]
@@ -611,14 +563,8 @@ fn test_pubkey_hash_emergency_halt_mode() {
 
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(
-            String::from(
-                "by-data-hash/a64d38929bd22d4f0b6dc19b5befc05ea51254359d9e050210c738afdda160f8"
-            ),
-            ERROR_RCE_EMERGENCY_HALT
-        )
-        .input_lock_script(0)
-    );
+    assert!(verify_result
+        .unwrap_err()
+        .to_string()
+        .contains("error code 54"));
 }
