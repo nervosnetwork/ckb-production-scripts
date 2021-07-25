@@ -991,8 +991,8 @@ checksum = "0b8de496cf83d4ed58b6be86c3a275b8602f6ffe98d3024a869e124147a9a3ac"
 
 [[package]]
 name = "sparse-merkle-tree"
-version = "0.5.0-rc1"
-source = "git+https://github.com/nervosnetwork/sparse-merkle-tree.git?branch=master#df02a884c69df6731e2f0c64d5ba02df806235af"
+version = "0.5.0-rc2"
+source = "git+https://github.com/nervosnetwork/sparse-merkle-tree.git?rev=36fdfd2#36fdfd2a06d2c1bff0fbbecfd9def74e96e23d5d"
 dependencies = [
  "blake2b-rs",
  "cfg-if 0.1.10",
