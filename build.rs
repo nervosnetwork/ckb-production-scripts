@@ -28,7 +28,15 @@ const BINARIES: &[(&str, &str)] = &[
     (
         "validate_signature_rsa",
         "a7d3c232c78a3dca841a997606e553f6fc6cab3d3e8e4e8984129752900512a2",
-    )
+    ),
+    (
+        "xudt_rce",
+        "bd590178388506307256c0c3e613df45984997aa0a2e8faf2fd54c096f28db6c",
+    ),
+    (
+        "rce_validator",
+        "15fd0de9058d52a07bc7fdae70af35803d7c0a5f50ff387f01035b6affd42a0d"
+    ),
 ];
 
 fn main() {
