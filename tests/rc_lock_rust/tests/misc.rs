@@ -68,6 +68,8 @@ pub const ERROR_NOT_ON_WHITE_LIST: i8 = 59;
 pub const ERROR_NO_WHITE_LIST: i8 = 83;
 pub const ERROR_ON_BLACK_LIST: i8 = 57;
 pub const ERROR_RCE_EMERGENCY_HALT: i8 = 54;
+pub const ERROR_RSA_VERIFY_FAILED: i8 = 42;
+pub const ERROR_INCORRECT_SINCE_VALUE: i8 = -24;
 
 lazy_static! {
     pub static ref RC_LOCK: Bytes = Bytes::from(&include_bytes!("../../../build/rc_lock")[..]);
@@ -533,12 +535,18 @@ pub fn sign_tx_by_input_group(
                 let message = CkbH256::from(message);
 
                 let witness_lock = if config.id.flags == IDENTITY_FLAGS_DL {
-                    let (sig, pubkey) = if config.use_rsa {
+                    let (mut sig, pubkey) = if config.use_rsa {
                         rsa_sign(message.as_bytes(), &config.rsa_private_key)
                     } else {
                         // TODO: support ISO9796-2
                         (Default::default(), Default::default())
                     };
+                    if config.scheme == TestScheme::RsaWrongSignature {
+                        let mut wrong_sig = sig.clone();
+                        let last_index = wrong_sig.len() - 1;
+                        wrong_sig[last_index] ^= 0x01;
+                        sig = wrong_sig;
+                    }
                     let hash = blake160(pubkey.as_ref());
                     let preimage = gen_exec_preimage(&config.rsa_script, &hash);
                     preimage_hash = blake160(preimage.as_ref());
@@ -757,8 +765,13 @@ pub fn gen_tx_with_grouped_args(
             let witness_args = WitnessArgsBuilder::default()
                 .input_type(Some(Bytes::copy_from_slice(&random_extra_witness[..])).pack())
                 .build();
+            let since = if config.use_since {
+                config.input_since
+            } else {
+                0
+            };
             tx_builder = tx_builder
-                .input(CellInput::new(previous_out_point, 0))
+                .input(CellInput::new(previous_out_point, since))
                 .witness(witness_args.as_bytes().pack());
         }
     }
@@ -881,6 +894,11 @@ pub struct TestConfig {
 
     pub preimage_len: usize,
     pub sig_len: usize,
+
+    //
+    pub use_since: bool,
+    pub args_since: u64,
+    pub input_since: u64,
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -900,6 +918,8 @@ pub enum TestScheme {
 
     OwnerLockMismatched,
     OwnerLockWithoutWitness,
+
+    RsaWrongSignature,
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -909,9 +929,7 @@ pub enum TestScheme2 {
 }
 
 const RC_ROOT_MASK: u8 = 1;
-#[allow(dead_code)]
 const ACP_MASK: u8 = 2;
-#[allow(dead_code)]
 const SINCE_MASK: u8 = 4;
 
 impl TestConfig {
@@ -964,6 +982,9 @@ impl TestConfig {
             sig_len,
             preimage_len,
             use_rsa: false,
+            use_since: false,
+            args_since: 0,
+            input_since: 0,
         }
     }
 
@@ -978,15 +999,15 @@ impl TestConfig {
         self.acp_config = min_config;
     }
 
+    pub fn set_since(&mut self, args_since: u64, input_since: u64) {
+        self.args_since = args_since;
+        self.input_since = input_since;
+        self.use_since = true;
+    }
+
     pub fn gen_args(&self) -> Bytes {
         let mut bytes = BytesMut::with_capacity(128);
         let mut rc_lock_flags: u8 = 0;
-        let acp_config_data = if let Some((ckb_min, udt_min)) = self.acp_config.clone() {
-            rc_lock_flags |= ACP_MASK;
-            vec![ckb_min, udt_min]
-        } else {
-            Vec::new()
-        };
 
         if self.use_rc {
             rc_lock_flags |= RC_ROOT_MASK;
@@ -997,9 +1018,28 @@ impl TestConfig {
         } else {
             bytes.put_u8(self.id.flags);
             bytes.put(self.id.blake160.as_ref());
-            bytes.put(&[rc_lock_flags][..]);
+
+            let mut rc_lock_args = Vec::<u8>::new();
+
+            // udt
+            if self.acp_config.is_some() {
+                rc_lock_flags |= ACP_MASK;
+            }
+            // since
+            if self.use_since {
+                rc_lock_flags |= SINCE_MASK;
+            }
+            rc_lock_args.push(rc_lock_flags);
+
+            if let Some((ckb_min, udt_min)) = self.acp_config {
+                rc_lock_args.push(ckb_min);
+                rc_lock_args.push(udt_min);
+            }
+            if self.use_since {
+                rc_lock_args.extend(self.args_since.to_le_bytes().iter());
+            }
+            bytes.put(rc_lock_args.as_slice());
         }
-        bytes.put(&acp_config_data[..]);
         bytes.freeze()
     }
 

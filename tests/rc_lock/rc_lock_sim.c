@@ -39,7 +39,7 @@ int hex2bin(uint8_t* buf, const char* src) {
 
 UTEST(pubkey_hash, pass) {
   init_input(&g_setting);
-  g_setting.flags = IdentityFlagsPubkeyHash;
+  g_setting.flags = IdentityFlagsCkb;
   convert_setting_to_states();
 
   int r = simulator_main();
@@ -48,7 +48,7 @@ UTEST(pubkey_hash, pass) {
 
 UTEST(pubkey_hash, wrong_signature) {
   init_input(&g_setting);
-  g_setting.flags = IdentityFlagsPubkeyHash;
+  g_setting.flags = IdentityFlagsCkb;
 
   g_setting.wrong_signature = true;
   convert_setting_to_states();
@@ -62,7 +62,7 @@ UTEST(pubkey_hash, wrong_signature) {
 
 UTEST(pubkey_hash, wrong_pubkey_hash) {
   init_input(&g_setting);
-  g_setting.flags = IdentityFlagsPubkeyHash;
+  g_setting.flags = IdentityFlagsCkb;
 
   g_setting.wrong_pubkey_hash = true;
   convert_setting_to_states();
@@ -364,7 +364,7 @@ UTEST(pubkey_hash_rc, on_wl_pass) {
   slice_t rcrule_slice = copy_slice(rcrule, sizeof(rcrule));
   uint8_t smt_flags = 0x2;  // white list
   g_setting.use_rc = true;
-  set_smt_settings(IdentityFlagsPubkeyHash, &rcrule_slice, &proof_slice,
+  set_smt_settings(IdentityFlagsCkb, &rcrule_slice, &proof_slice,
                    &smt_flags, 1);
 
   // blake160 of pubkey
@@ -406,7 +406,7 @@ UTEST(pubkey_hash_rc, on_wl_not_on_bl_pass) {
                            copy_slice(bl_proof, sizeof(bl_proof))};
   uint8_t smt_flags[] = {0x2, 0};
   g_setting.use_rc = true;
-  set_smt_settings(IdentityFlagsPubkeyHash, rcrule_slice, proof_slice,
+  set_smt_settings(IdentityFlagsCkb, rcrule_slice, proof_slice,
                    smt_flags, countof(smt_flags));
 
   // blake160 of pubkey
@@ -441,7 +441,7 @@ UTEST(pubkey_hash_rc, not_bl_not_pass) {
   slice_t proof_slice[] = {copy_slice(bl_proof, sizeof(bl_proof))};
   uint8_t smt_flags[] = {0};
   g_setting.use_rc = true;
-  set_smt_settings(IdentityFlagsPubkeyHash, rcrule_slice, proof_slice,
+  set_smt_settings(IdentityFlagsCkb, rcrule_slice, proof_slice,
                    smt_flags, countof(smt_flags));
 
   // blake160 of pubkey
@@ -487,7 +487,7 @@ UTEST(pubkey_hash_rc, on_wl_on_bl_not_pass) {
                            copy_slice(bl_proof, sizeof(bl_proof))};
   uint8_t smt_flags[] = {0x2, 0};
   g_setting.use_rc = true;
-  set_smt_settings(IdentityFlagsPubkeyHash, rcrule_slice, proof_slice,
+  set_smt_settings(IdentityFlagsCkb, rcrule_slice, proof_slice,
                    smt_flags, countof(smt_flags));
 
   // blake160 of pubkey
@@ -522,7 +522,7 @@ UTEST(pubkey_hash_rc, not_on_wl_not_pass) {
   slice_t rcrule_slice = copy_slice(rcrule, sizeof(rcrule));
   uint8_t smt_flags = 0x2;  // white list
   g_setting.use_rc = true;
-  set_smt_settings(IdentityFlagsPubkeyHash, &rcrule_slice, &proof_slice,
+  set_smt_settings(IdentityFlagsCkb, &rcrule_slice, &proof_slice,
                    &smt_flags, 1);
 
   // blake160 of pubkey
@@ -545,7 +545,7 @@ UTEST(pubkey_hash_rc, not_on_wl_not_pass) {
 UTEST(pubkey_hash_rc, no_rcrule_not_pass) {
   init_input(&g_setting);
   g_setting.use_rc = true;
-  g_setting.flags = IdentityFlagsPubkeyHash;
+  g_setting.flags = IdentityFlagsCkb;
 
   uint8_t blake160[20] = {11};
 
@@ -567,30 +567,32 @@ UTEST(exec, random) {
   CkbBinaryArgsType bin = {0};
   ckb_exec_reset(&bin);
   for (int i = 0; i < 64; i++) {
-    uint32_t len = i + 256;
+    uint32_t len = i;
     uint8_t buff[len];
     for (int j = 0; j < len; j++) {
       buff[j] = j & 0xFF;
     }
     err = ckb_exec_append(&bin, buff, len);
-    ASSERT(err != 0);
+    ASSERT_TRUE(err == 0);
   }
 
   CkbHexArgsType hex;
-  err = ckb_exec_encode(&bin, &hex);
-  ASSERT(err != 0);
+  err = ckb_exec_encode_params(&bin, &hex);
+  ASSERT_TRUE(err == 0);
 
-  CkbBinaryArgsType bin2 = {0};
-  err = ckb_exec_decode(hex.argc, hex.argv, &bin2);
-  ASSERT(err != 0);
-
-  ASSERT_EQ(bin.argc, bin2.argc);
-  ASSERT_EQ(bin.used_buff, bin2.used_buff);
-  for (uint32_t i = 0; i < bin.argc; i++) {
-    ASSERT_EQ(bin.len[i], bin2.len[i]);
-    int equal = memcmp(bin.args[i], bin2.args[i], bin.len[i]);
-    ASSERT_EQ(0, equal);
+  char* next_iterate_argv = hex.buff;
+  uint8_t* param = NULL;
+  uint32_t len = 0;
+  for (int i = 0; i < bin.count ; i++) {
+    err = ckb_exec_decode_params(next_iterate_argv, &param, &len, &next_iterate_argv);
+    ASSERT_EQ(err, 0);
+    ASSERT_EQ(len, bin.len[i]);
+    ASSERT_EQ( memcmp(param, bin.params[i], len), 0);
   }
+  ASSERT_EQ(next_iterate_argv, NULL);
+  err = ckb_exec_decode_params(next_iterate_argv, &param, &len, &next_iterate_argv);
+  ASSERT_EQ(len, 0);
+  ASSERT_TRUE(err !=0);
 }
 
 UTEST_MAIN();

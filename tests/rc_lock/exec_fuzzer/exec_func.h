@@ -29,7 +29,7 @@ int exec_func(uint8_t* data, size_t size) {
   }
 
   CkbHexArgsType hex;
-  err = ckb_exec_encode(&bin, &hex);
+  err = ckb_exec_encode_params(&bin, &hex);
   CkbBinaryArgsType bin2 = {0};
   err = ckb_exec_decode(hex.argc, hex.argv, &bin2);
 

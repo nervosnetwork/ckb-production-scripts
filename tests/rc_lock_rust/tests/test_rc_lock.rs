@@ -370,3 +370,71 @@ fn test_rsa_via_dl_unlock() {
     let verify_result = verifier.verify(MAX_CYCLES);
     verify_result.expect("pass verification");
 }
+
+#[test]
+fn test_rsa_via_dl_wrong_sig() {
+    let mut data_loader = DummyDataLoader::new();
+
+    let mut config = TestConfig::new(IDENTITY_FLAGS_DL, false);
+    config.set_rsa();
+    config.scheme = TestScheme::RsaWrongSignature;
+
+    let tx = gen_tx(&mut data_loader, &mut config);
+    let tx = sign_tx(&mut data_loader, tx, &mut config);
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+
+    let consensus = gen_consensus();
+    let tx_env = gen_tx_env();
+    let mut verifier =
+        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    assert_script_error(verify_result.unwrap_err(), ERROR_RSA_VERIFY_FAILED);
+}
+
+#[test]
+fn test_rsa_via_dl_unlock_with_time_lock() {
+    let mut data_loader = DummyDataLoader::new();
+
+    let args_since = 0x2000_0000_0000_0000u64 + 200;
+    let input_since = 0x2000_0000_0000_0000u64 + 200;
+    let mut config = TestConfig::new(IDENTITY_FLAGS_DL, false);
+    config.set_rsa();
+    config.set_since(args_since, input_since);
+
+    let tx = gen_tx(&mut data_loader, &mut config);
+    let tx = sign_tx(&mut data_loader, tx, &mut config);
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+
+    let consensus = gen_consensus();
+    let tx_env = gen_tx_env();
+    let mut verifier =
+        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    verify_result.expect("pass verification");
+}
+
+#[test]
+fn test_rsa_via_dl_unlock_with_time_lock_failed() {
+    let mut data_loader = DummyDataLoader::new();
+
+    let args_since = 0x2000_0000_0000_0000u64 + 200;
+    let input_since = 0x2000_0000_0000_0000u64 + 100;
+    let mut config = TestConfig::new(IDENTITY_FLAGS_DL, false);
+    config.set_rsa();
+    config.set_since(args_since, input_since);
+
+    let tx = gen_tx(&mut data_loader, &mut config);
+    let tx = sign_tx(&mut data_loader, tx, &mut config);
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+
+    let consensus = gen_consensus();
+    let tx_env = gen_tx_env();
+    let mut verifier =
+        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+
+    assert_script_error(verify_result.unwrap_err(), ERROR_INCORRECT_SINCE_VALUE);
+}

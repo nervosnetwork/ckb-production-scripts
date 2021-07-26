@@ -156,7 +156,7 @@ int parse_args(ArgsType *args) {
 
   // parse blake160
   CHECK2(is_memory_enough(seg, cur, 20), ERROR_ARGS_FORMAT);
-  memcpy(args->id.blake160, cur, BLAKE160_SIZE);
+  memcpy(args->id.id, cur, BLAKE160_SIZE);
   cur = safe_move_to(seg, cur, 20);
   CHECK2(cur != NULL, ERROR_ARGS_FORMAT);
 
@@ -262,7 +262,7 @@ int smt_verify_identity(CkbIdentityType *id, SmtProofEntryVecType *proofs,
 
   uint8_t key[SMT_KEY_BYTES] = {0};
   key[0] = id->flags;
-  memcpy(key + 1, id->blake160, BLAKE160_SIZE);
+  memcpy(key + 1, id->id, BLAKE160_SIZE);
 
   smt_pair_t entries[1];
   smt_state_t states;
@@ -328,7 +328,7 @@ int parse_witness_lock(WitnessLockType *witness_lock) {
     uint32_t read_len = mol2_read_at(&id_cur, buff, sizeof(buff));
     CHECK2(read_len == CKB_IDENTITY_LEN, ERROR_INVALID_MOL_FORMAT);
     witness_lock->id.flags = buff[0];
-    memcpy(witness_lock->id.blake160, buff + 1, CKB_IDENTITY_LEN - 1);
+    memcpy(witness_lock->id.id, buff + 1, CKB_IDENTITY_LEN - 1);
 
     witness_lock->proofs = rc_identity.t->proofs(&rc_identity);
   }
