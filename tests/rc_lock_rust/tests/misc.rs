@@ -863,6 +863,7 @@ impl Identity {
 
 pub struct TestConfig {
     pub id: Identity,
+    pub acp_config: Option<(u8, u8)>,
     pub use_rc: bool,
     pub scheme: TestScheme,
     pub scheme2: TestScheme2,
@@ -948,6 +949,7 @@ impl TestConfig {
 
         TestConfig {
             id: Identity { flags, blake160 },
+            acp_config: None,
             use_rc,
             rc_root,
             scheme: TestScheme::None,
@@ -972,10 +974,19 @@ impl TestConfig {
         self.use_rsa = true;
         self.sig_len = 264;
     }
+    pub fn set_acp_config(&mut self, min_config: Option<(u8, u8)>) {
+        self.acp_config = min_config;
+    }
 
     pub fn gen_args(&self) -> Bytes {
         let mut bytes = BytesMut::with_capacity(128);
         let mut rc_lock_flags: u8 = 0;
+        let acp_config_data = if let Some((ckb_min, udt_min)) = self.acp_config.clone() {
+            rc_lock_flags |= ACP_MASK;
+            vec![ckb_min, udt_min]
+        } else {
+            Vec::new()
+        };
 
         if self.use_rc {
             rc_lock_flags |= RC_ROOT_MASK;
@@ -988,6 +999,7 @@ impl TestConfig {
             bytes.put(self.id.blake160.as_ref());
             bytes.put(&[rc_lock_flags][..]);
         }
+        bytes.put(&acp_config_data[..]);
         bytes.freeze()
     }
 
@@ -999,6 +1011,9 @@ impl TestConfig {
     }
     pub fn is_rc(&self) -> bool {
         self.use_rc
+    }
+    pub fn is_acp(&self) -> bool {
+        self.acp_config.is_some()
     }
 }
 
