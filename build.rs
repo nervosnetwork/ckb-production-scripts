@@ -27,7 +27,7 @@ const BINARIES: &[(&str, &str)] = &[
     ),
     (
         "validate_signature_rsa",
-        "1a4301f6632a8bc43c2dac56ae1c8203ef6458d284be0a5a783e8c5c82b02a38",
+        "c6dd482c635f38ca0f26ba528d35d760540215e1459108a1ede7497282fc169d",
     )
 ];
 
