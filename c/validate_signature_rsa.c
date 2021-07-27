@@ -617,5 +617,5 @@ int validate_signature_iso9796_2_batch(void *_p, const uint8_t *sig_buf,
   }
 
 exit:
-  return 0;
+  return err;
 }

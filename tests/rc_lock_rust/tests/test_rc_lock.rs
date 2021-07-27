@@ -438,3 +438,25 @@ fn test_rsa_via_dl_unlock_with_time_lock_failed() {
 
     assert_script_error(verify_result.unwrap_err(), ERROR_INCORRECT_SINCE_VALUE);
 }
+
+// currently, the signature can only be signed via hardware.
+// Here we can only provide a failed case.
+#[test]
+fn test_iso9796_2_batch_via_dl_unlock_failed() {
+    let mut data_loader = DummyDataLoader::new();
+
+    let mut config = TestConfig::new(IDENTITY_FLAGS_DL, false);
+    config.set_iso9796_2();
+
+    let tx = gen_tx(&mut data_loader, &mut config);
+    let tx = sign_tx(&mut data_loader, tx, &mut config);
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+
+    let consensus = gen_consensus();
+    let tx_env = gen_tx_env();
+    let mut verifier =
+        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    assert_script_error(verify_result.unwrap_err(), ERROR_ISO97962_INVALID_ARG9);
+}

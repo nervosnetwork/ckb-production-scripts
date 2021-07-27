@@ -6,6 +6,26 @@
 #include "ckb_exec.h"
 
 
+int exec_func2(uint8_t* data, size_t size) {
+  int err = 0;
+
+  char buff[size];
+  memcpy(buff, data, size);
+
+  char* next = buff;
+  uint8_t* param = NULL;
+  uint32_t len = 0;
+
+  while (true) {
+    err = ckb_exec_decode_params(next, &param, &len, &next);
+    if (err != 0)
+      break;
+  }
+
+  return 0;
+}
+
+
 int exec_func(uint8_t* data, size_t size) {
   int err = 0;
 
@@ -30,21 +50,17 @@ int exec_func(uint8_t* data, size_t size) {
 
   CkbHexArgsType hex;
   err = ckb_exec_encode_params(&bin, &hex);
-  CkbBinaryArgsType bin2 = {0};
-  err = ckb_exec_decode(hex.argc, hex.argv, &bin2);
+  if (err != 0)
+    return err;
+  char* next = hex.buff;
 
-  // test ckb_exec_decode
-  uint8_t data2[size];
-  data2[size - 1] = 0;
-  memcpy(data2, data, size);
-
-  uint32_t argc = *data2 % 70;
-  char* argv[argc];
-  for (uint32_t i = 0; i < argc; i++) {
-    argv[i] = (char*)(data2 + i + 1);
+  uint8_t* param = NULL;
+  uint32_t len = 0;
+  while (true) {
+    err = ckb_exec_decode_params(next, &param, &len, &next);
+    if (err != 0)
+      break;
   }
-  CkbBinaryArgsType bin3;
-  ckb_exec_decode(argc, argv, &bin3);
 
   return 0;
 }

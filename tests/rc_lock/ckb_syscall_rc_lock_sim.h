@@ -775,6 +775,11 @@ void* ckb_dlsym(void* handle, const char* symbol) {
   return ret;
 }
 
+int ckb_exec_cell(const uint8_t* code_hash, uint8_t hash_type, uint32_t offset,
+                  uint32_t length, int argc, const char* argv[]) {
+  return 0;
+}
+
 #undef ASSERT
 #define ASSERT(s) (void)0
 

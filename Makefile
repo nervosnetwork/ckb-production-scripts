@@ -5,8 +5,10 @@ OBJCOPY := $(TARGET)-objcopy
 CFLAGS := -fPIC -O3 -fno-builtin-printf -fno-builtin-memcmp -nostdinc -nostdlib -nostartfiles -fvisibility=hidden -fdata-sections -ffunction-sections -I deps/secp256k1/src -I deps/secp256k1 -I deps/ckb-c-std-lib -I deps/ckb-c-std-lib/libc -I deps/ckb-c-std-lib/molecule -I c -I build -Wall -Werror -Wno-nonnull -Wno-nonnull-compare -Wno-unused-function -g
 LDFLAGS := -Wl,-static -fdata-sections -ffunction-sections -Wl,--gc-sections
 SECP256K1_SRC := deps/secp256k1/src/ecmult_static_pre_context.h
+SECP256K1_SRC_20210801 := deps/secp256k1-20210801/src/ecmult_static_pre_context.h
+
 XUDT_RCE_CFLAGS=$(subst ckb-c-std-lib,ckb-c-stdlib-20210713,$(CFLAGS)) -I deps/sparse-merkle-tree/c
-RC_LOCK_CFLAGS=$(subst ckb-c-std-lib,ckb-c-stdlib-add-identity,$(CFLAGS)) -I deps/sparse-merkle-tree/c
+RC_LOCK_CFLAGS=$(subst ckb-c-std-lib,ckb-c-stdlib-20210801,$(CFLAGS)) -I deps/sparse-merkle-tree/c
 
 PROTOCOL_HEADER := c/blockchain.h
 PROTOCOL_SCHEMA := c/blockchain.mol
@@ -47,15 +49,30 @@ build/always_success: c/always_success.c
 build/secp256k1_data_info.h: build/dump_secp256k1_data
 	$<
 
+build/secp256k1_data_info_20210801.h: build/dump_secp256k1_data_20210801
+	$<
+
 build/dump_secp256k1_data: c/dump_secp256k1_data.c $(SECP256K1_SRC)
 	mkdir -p build
 	gcc -I deps/secp256k1/src -I deps/secp256k1 -o $@ $<
+
+build/dump_secp256k1_data_20210801: c/dump_secp256k1_data_20210801.c $(SECP256K1_SRC_20210801)
+	mkdir -p build
+	gcc -I deps/secp256k1-20210801/src -I deps/secp256k1-20210801 -o $@ $<
+
 
 $(SECP256K1_SRC):
 	cd deps/secp256k1 && \
 		./autogen.sh && \
 		CC=$(CC) LD=$(LD) ./configure --with-bignum=no --enable-ecmult-static-precomputation --enable-endomorphism --enable-module-recovery --host=$(TARGET) && \
 		make src/ecmult_static_pre_context.h src/ecmult_static_context.h
+
+$(SECP256K1_SRC_20210801):
+	cd deps/secp256k1-20210801 && \
+		./autogen.sh && \
+		CC=$(CC) LD=$(LD) ./configure --with-bignum=no --enable-ecmult-static-precomputation --enable-endomorphism --enable-module-recovery --host=$(TARGET) && \
+		make src/ecmult_static_pre_context.h src/ecmult_static_context.h
+
 
 deps/mbedtls/library/libmbedcrypto.a:
 	cp deps/mbedtls-config-template.h deps/mbedtls/include/mbedtls/config.h
@@ -138,7 +155,7 @@ build/rce_validator: c/rce_validator.c c/rce.h
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
-build/rc_lock: c/rc_lock.c c/rc_lock_acp.h c/rce.h c/secp256k1_lock.h build/secp256k1_data_info.h $(SECP256K1_SRC) deps/ckb-c-stdlib-add-identity/ckb_identity.h
+build/rc_lock: c/rc_lock.c c/rc_lock_acp.h c/rce.h c/secp256k1_lock.h build/secp256k1_data_info_20210801.h $(SECP256K1_SRC_20210801) deps/ckb-c-stdlib-20210801/ckb_identity.h
 	$(CC) $(RC_LOCK_CFLAGS) $(LDFLAGS) -o $@ $<
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
@@ -165,12 +182,15 @@ clean:
 	rm -rf build/simple_udt
 	rm -rf build/anyone_can_pay
 	rm -rf build/secp256k1_data_info.h build/dump_secp256k1_data
+	rm -rf build/secp256k1_data_info_20210801.h build/dump_secp256k1_data_20210801
 	rm -rf build/secp256k1_data
+	rm -rf build/secp256k1_data_20210801
 	rm -rf build/*.debug
 	rm -f build/xudt_rce
 	rm -f build/rce_validator
 	rm -f build/rc_lock
 	cd deps/secp256k1 && [ -f "Makefile" ] && make clean
+	cd deps/secp256k1-20210801 && [ -f "Makefile" ] && make clean
 	make -C deps/mbedtls/library clean
 	rm -f build/validate_signature_rsa
 	rm -f build/validate_signature_rsa_sim

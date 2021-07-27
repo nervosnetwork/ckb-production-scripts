@@ -21,8 +21,9 @@ int ckb_exit(signed char);
 #else
 #include "ckb_syscalls.h"
 #endif
-// secp256k1_helper.h is not part of ckb-c-stdlib, can't be included in ckb_identity.h
-#include "secp256k1_helper.h"
+// secp256k1_helper_20210801.h is not part of ckb-c-stdlib, can't be included in ckb_identity.h
+// An upgraded version is provided.
+#include "secp256k1_helper_20210801.h"
 #include "ckb_swappable_signatures.h"
 #include "validate_signature_rsa.h"
 
@@ -45,6 +46,7 @@ int ckb_exit(signed char);
 #define RC_ROOT_MASK 1
 #define ACP_MASK (1 << 1)
 #define SINCE_MASK (1 << 2)
+#define MAX_CODE_SIZE (1024 * 400)
 
 enum RcLockErrorCode {
   // rc lock error code is starting from 80
@@ -362,6 +364,12 @@ int simulator_main() {
 #else
 int main() {
 #endif
+  // don't move code_buff into global variable. It doesn't work.
+  // it's a ckb-vm bug: the global variable will be freezed:
+  // https://github.com/nervosnetwork/ckb-vm/blob/d43f58d6bf8cc6210721fdcdb6e5ecba513ade0c/src/machine/elf_adaptor.rs#L28-L32
+  // The code can't be loaded into frozen memory.
+  uint8_t code_buff[MAX_CODE_SIZE] __attribute__((aligned(RISCV_PGSIZE)));
+
   int err = 0;
 
   WitnessLockType witness_lock = {0};
@@ -412,7 +420,7 @@ int main() {
       return check_payment_unlock(min_ckb_amount, min_udt_amount);
     }
   }
-
+  ckb_identity_init_code_buffer(code_buff, MAX_CODE_SIZE);
   err = ckb_verify_identity(&identity, witness_lock.signature,
                             witness_lock.signature_size, witness_lock.preimage,
                             witness_lock.preimage_size);

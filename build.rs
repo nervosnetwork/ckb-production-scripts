@@ -25,11 +25,10 @@ const BINARIES: &[(&str, &str)] = &[
         "simple_udt",
         "e1e354d6d643ad42724d40967e334984534e0367405c5ae42a9d7d63d77df419",
     ),
-    // TODO: change it when it's stable
-    // (
-    //     "validate_signature_rsa",
-    //     "b8df475af96ac2a5ea6c235cf45fff119c66fd9a0f6dd029bdc789139976599d",
-    // )
+    (
+        "validate_signature_rsa",
+        "1a4301f6632a8bc43c2dac56ae1c8203ef6458d284be0a5a783e8c5c82b02a38",
+    )
 ];
 
 fn main() {

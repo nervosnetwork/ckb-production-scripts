@@ -16,16 +16,16 @@ LLVM_COV=llvm-cov
 
 CORPUS_DIR=corpus
 
-FUZZER_FLAGS=-g -O1 -fsanitize=fuzzer,address,undefined -fsanitize-recover=address -I ../../../c -I ../../../deps/ckb-c-stdlib-add-identity
+FUZZER_FLAGS=-g -O1 -fsanitize=fuzzer,address,undefined -fsanitize-recover=address -I ../../../c -I ../../../deps/ckb-c-stdlib-20210801
 
 COVERAGE_DIR=coverage
-COVERAGE_FLAGS=-fprofile-instr-generate -fcoverage-mapping -I ../../../c -I ../../../deps/ckb-c-stdlib-add-identity
+COVERAGE_FLAGS=-fprofile-instr-generate -fcoverage-mapping -I ../../../c -I ../../../deps/ckb-c-stdlib-20210801
 
 ifeq ($(OS),MacOS)
 	COVERAGE_FLAGS+=-Wl,-U,_LLVMFuzzerCustomMutator -Wl,-U,_LLVMFuzzerInitialize
 endif
 
-EXTERNAL_HEADERS=../../../deps/ckb-c-stdlib-add-identity/ckb_exec.h
+EXTERNAL_HEADERS=../../../deps/ckb-c-stdlib-20210801/ckb_exec.h
 
 all: fuzzer coverage
 

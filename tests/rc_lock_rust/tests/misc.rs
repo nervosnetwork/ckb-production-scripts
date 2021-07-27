@@ -70,11 +70,12 @@ pub const ERROR_ON_BLACK_LIST: i8 = 57;
 pub const ERROR_RCE_EMERGENCY_HALT: i8 = 54;
 pub const ERROR_RSA_VERIFY_FAILED: i8 = 42;
 pub const ERROR_INCORRECT_SINCE_VALUE: i8 = -24;
+pub const ERROR_ISO97962_INVALID_ARG9: i8 = 61;
 
 lazy_static! {
     pub static ref RC_LOCK: Bytes = Bytes::from(&include_bytes!("../../../build/rc_lock")[..]);
     pub static ref SECP256K1_DATA_BIN: Bytes =
-        Bytes::from(&include_bytes!("../../../build/secp256k1_data")[..]);
+        Bytes::from(&include_bytes!("../../../build/secp256k1_data_20210801")[..]);
     pub static ref ALWAYS_SUCCESS: Bytes =
         Bytes::from(&include_bytes!("../../../build/always_success")[..]);
     pub static ref VALIDATE_SIGNATURE_RSA: Bytes =
@@ -538,8 +539,11 @@ pub fn sign_tx_by_input_group(
                     let (mut sig, pubkey) = if config.use_rsa {
                         rsa_sign(message.as_bytes(), &config.rsa_private_key)
                     } else {
-                        // TODO: support ISO9796-2
-                        (Default::default(), Default::default())
+                        if config.use_iso9796_2 {
+                            iso9796_2_batch_sign(message.as_bytes(), &config.rsa_private_key)
+                        } else {
+                            (Default::default(), Default::default())
+                        }
                     };
                     if config.scheme == TestScheme::RsaWrongSignature {
                         let mut wrong_sig = sig.clone();
@@ -892,6 +896,9 @@ pub struct TestConfig {
     // when this is on, sign by RSA
     pub use_rsa: bool,
 
+    // when this is on, sign by ISO9796-2
+    pub use_iso9796_2: bool,
+
     pub preimage_len: usize,
     pub sig_len: usize,
 
@@ -985,6 +992,7 @@ impl TestConfig {
             use_since: false,
             args_since: 0,
             input_since: 0,
+            use_iso9796_2: false,
         }
     }
 
@@ -995,6 +1003,11 @@ impl TestConfig {
         self.use_rsa = true;
         self.sig_len = 264;
     }
+    pub fn set_iso9796_2(&mut self) {
+        self.use_iso9796_2 = true;
+        self.sig_len = 648;
+    }
+
     pub fn set_acp_config(&mut self, min_config: Option<(u8, u8)>) {
         self.acp_config = min_config;
     }
@@ -1123,6 +1136,61 @@ pub fn rsa_sign(msg: &[u8], key: &PKey<Private>) -> (Vec<u8>, Vec<u8>) {
 
     let mut signer = Signer::new(MessageDigest::sha256(), key).unwrap();
     signer.update(&msg).unwrap();
+    sig.extend(signer.sign_to_vec().unwrap()); // sig
+
+    (sig, my_pubkey)
+}
+
+/*
+generate the following structure:
+typedef struct RsaInfo {
+    uint8_t algorithm_id;
+    uint8_t key_size;
+    uint8_t padding;
+    uint8_t md_type;
+    uint32_t E;
+    uint8_t N[PLACEHOLDER_SIZE];
+    uint8_t sig[PLACEHOLDER_SIZE];
+
+    // note, there are totally 4 signatures
+    uint8_t sig[PLACEHOLDER_SIZE];
+    uint8_t sig[PLACEHOLDER_SIZE];
+    uint8_t sig[PLACEHOLDER_SIZE];
+} RsaInfo;
+*/
+
+pub fn iso9796_2_batch_sign(msg: &[u8], key: &PKey<Private>) -> (Vec<u8>, Vec<u8>) {
+    let pem: Vec<u8> = key.public_key_to_pem().unwrap();
+    let pubkey = PKey::public_key_from_pem(&pem).unwrap();
+
+    let mut sig = Vec::<u8>::new();
+    sig.push(3); // algorithm id, CKB_VERIFY_ISO9796_2_BATCH
+    sig.push(1); // key size, 1024
+    sig.push(0); // padding, PKCS# 1.5
+    sig.push(6); // hash type SHA256
+
+    let pubkey2 = pubkey.rsa().unwrap();
+    let mut e = pubkey2.e().to_vec();
+    let mut n = pubkey2.n().to_vec();
+    e.reverse();
+    n.reverse();
+
+    while e.len() < 4 {
+        e.push(0);
+    }
+    while n.len() < 128 {
+        n.push(0);
+    }
+    sig.append(&mut e); // 4 bytes E
+    sig.append(&mut n); // N
+
+    let my_pubkey = sig.clone();
+
+    let mut signer = Signer::new(MessageDigest::sha256(), key).unwrap();
+    signer.update(&msg).unwrap();
+    sig.extend(signer.sign_to_vec().unwrap()); // sig
+    sig.extend(signer.sign_to_vec().unwrap()); // sig
+    sig.extend(signer.sign_to_vec().unwrap()); // sig
     sig.extend(signer.sign_to_vec().unwrap()); // sig
 
     (sig, my_pubkey)

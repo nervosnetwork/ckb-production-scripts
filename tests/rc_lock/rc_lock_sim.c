@@ -143,9 +143,9 @@ void set_smt_settings(uint8_t flags, slice_t* rc_rules, slice_t* proofs,
 UTEST(owner_lock_rc, on_wl_pass) {
   init_input(&g_setting);
 
-  uint8_t rcrule[] = {139, 110, 45,  98,  252, 190, 83,  246, 168, 167, 1,
-                      3,   115, 125, 229, 198, 236, 195, 46,  100, 235, 117,
-                      53,  192, 64,  138, 186, 153, 122, 170, 105, 255};
+  uint8_t rcrule[] = {159, 133, 75,  106, 72,  73,  103, 41,  196, 8,   212,
+                      55,  174, 168, 36,  255, 109, 95,  175, 167, 147, 30,
+                      228, 18,  129, 140, 100, 52,  22,  147, 205, 107};
   uint8_t proof[] = {76, 79, 0};
 
   slice_t proof_slice = copy_slice(proof, sizeof(proof));
@@ -231,18 +231,20 @@ UTEST(owner_lock_rc, one_white_list_not_pass) {
 UTEST(owner_lock_rc, on_wl_and_not_on_bl_pass) {
   init_input(&g_setting);
 
-  uint8_t wl_rcrule[] = {139, 110, 45,  98,  252, 190, 83,  246, 168, 167, 1,
-                         3,   115, 125, 229, 198, 236, 195, 46,  100, 235, 117,
-                         53,  192, 64,  138, 186, 153, 122, 170, 105, 255};
+  uint8_t wl_rcrule[] = {159, 133, 75,  106, 72,  73,  103, 41,  196, 8,   212,
+                         55,  174, 168, 36,  255, 109, 95,  175, 167, 147, 30,
+                         228, 18,  129, 140, 100, 52,  22,  147, 205, 107};
   uint8_t wl_proof[] = {76, 79, 0};
 
-  uint8_t bl_rcrule[] = {100, 251, 145, 169, 49,  159, 242, 179, 22, 159, 33,
-                         39,  181, 120, 27,  188, 1,   210, 146, 88, 225, 249,
-                         70,  64,  31,  239, 129, 46,  242, 24,  45, 235};
-  uint8_t bl_proof[] = {76,  79,  11,  80,  155, 119, 208, 214, 123, 234,
-                        234, 187, 167, 211, 156, 15,  105, 92,  178, 57,
-                        80,  173, 151, 49,  210, 21,  41,  37,  7,   254,
-                        10,  177, 132, 217, 251, 159, 79,  244};
+  uint8_t bl_rcrule[] = {168, 80,  89,  3,   35,  129, 5,   27,  65,  82, 213,
+                         117, 185, 162, 43,  149, 213, 164, 98,  184, 94, 65,
+                         91,  135, 214, 227, 189, 4,   220, 178, 227, 42};
+  uint8_t bl_proof[] = {
+      76,  79,  7,   81,  7,   63,  58,  65, 167, 46, 21,  220, 77,  188, 92,
+      185, 239, 12,  35,  148, 150, 255, 14, 165, 64, 239, 20,  200, 146, 49,
+      217, 63,  118, 168, 100, 220, 216, 0,  0,   0,  0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,  0,   0,  0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,   0,  0,   79, 248};
 
   slice_t rcrules[2] = {copy_slice(wl_rcrule, sizeof(wl_rcrule)),
                         copy_slice(bl_rcrule, sizeof(bl_rcrule))};
@@ -355,18 +357,19 @@ UTEST(owner_lock_rc, on_wl_and_on_bl_not_pass) {
 UTEST(pubkey_hash_rc, on_wl_pass) {
   init_input(&g_setting);
 
-  uint8_t rcrule[] = {86,  4,   51,  150, 173, 97,  193, 82,  123, 248, 54,
-                      167, 112, 185, 170, 116, 142, 241, 202, 71,  142, 213,
-                      135, 198, 56,  190, 227, 253, 37,  242, 16,  105};
+  uint8_t rcrule[] = {241, 250, 221, 178, 97,  206, 227, 76,  247, 86,  15,
+                      13,  224, 40,  106, 171, 39,  247, 249, 55,  102, 207,
+                      117, 5,   60,  58,  55,  240, 44,  60,  255, 96};
   uint8_t proof[] = {76, 79, 0};
 
   slice_t proof_slice = copy_slice(proof, sizeof(proof));
   slice_t rcrule_slice = copy_slice(rcrule, sizeof(rcrule));
   uint8_t smt_flags = 0x2;  // white list
   g_setting.use_rc = true;
-  set_smt_settings(IdentityFlagsCkb, &rcrule_slice, &proof_slice,
-                   &smt_flags, 1);
+  set_smt_settings(IdentityFlagsCkb, &rcrule_slice, &proof_slice, &smt_flags,
+                   1);
 
+  // verify "0, <blake160>" is on white list
   // blake160 of pubkey
   uint8_t blake160[20] = {184, 141, 45,  152, 205, 241, 253, 130, 123, 22,
                           22,  120, 131, 153, 185, 150, 222, 107, 17,  248};
@@ -387,18 +390,20 @@ UTEST(pubkey_hash_rc, on_wl_pass) {
 UTEST(pubkey_hash_rc, on_wl_not_on_bl_pass) {
   init_input(&g_setting);
 
-  uint8_t wl_rcrule[] = {86,  4,   51,  150, 173, 97,  193, 82,  123, 248, 54,
-                         167, 112, 185, 170, 116, 142, 241, 202, 71,  142, 213,
-                         135, 198, 56,  190, 227, 253, 37,  242, 16,  105};
+  uint8_t wl_rcrule[] = {241, 250, 221, 178, 97,  206, 227, 76,  247, 86,  15,
+                         13,  224, 40,  106, 171, 39,  247, 249, 55,  102, 207,
+                         117, 5,   60,  58,  55,  240, 44,  60,  255, 96};
   uint8_t wl_proof[] = {76, 79, 0};
 
-  uint8_t bl_rcrule[] = {100, 251, 145, 169, 49,  159, 242, 179, 22, 159, 33,
-                         39,  181, 120, 27,  188, 1,   210, 146, 88, 225, 249,
-                         70,  64,  31,  239, 129, 46,  242, 24,  45, 235};
-  uint8_t bl_proof[] = {76,  79,  167, 80,  205, 140, 177, 162, 11,  63,
-                        224, 144, 227, 3,   251, 104, 67,  243, 165, 93,
-                        9,   239, 70,  120, 65,  234, 182, 40,  245, 142,
-                        203, 49,  78,  68,  21,  11,  79,  88};
+  uint8_t bl_rcrule[] = {220, 30,  240, 125, 208, 148, 191, 239, 30,  182, 138,
+                         224, 75,  161, 67,  129, 152, 18,  247, 112, 183, 207,
+                         53,  232, 242, 129, 198, 64,  228, 117, 165, 107};
+  uint8_t bl_proof[] = {
+      76,  79,  167, 81,  167, 51,  82, 32, 99, 102, 127, 50,  182, 204, 35,
+      239, 150, 110, 13,  253, 100, 7,  66, 92, 124, 215, 234, 135, 21,  99,
+      3,   231, 190, 156, 195, 122, 79, 0,  0,  0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,  0,  0,  0,   0,   0,   0,   0,   0,
+      0,   0,   0,   0,   0,   0,   0,  0,  0,  79,  88};
 
   slice_t rcrule_slice[] = {copy_slice(wl_rcrule, sizeof(wl_rcrule)),
                             copy_slice(bl_rcrule, sizeof(bl_rcrule))};
@@ -406,9 +411,11 @@ UTEST(pubkey_hash_rc, on_wl_not_on_bl_pass) {
                            copy_slice(bl_proof, sizeof(bl_proof))};
   uint8_t smt_flags[] = {0x2, 0};
   g_setting.use_rc = true;
-  set_smt_settings(IdentityFlagsCkb, rcrule_slice, proof_slice,
-                   smt_flags, countof(smt_flags));
+  set_smt_settings(IdentityFlagsCkb, rcrule_slice, proof_slice, smt_flags,
+                   countof(smt_flags));
 
+  // verify "0, <blake160>" on white list
+  // verify "0, <blake160>" not on black list
   // blake160 of pubkey
   uint8_t blake160[20] = {184, 141, 45,  152, 205, 241, 253, 130, 123, 22,
                           22,  120, 131, 153, 185, 150, 222, 107, 17,  248};
@@ -441,8 +448,8 @@ UTEST(pubkey_hash_rc, not_bl_not_pass) {
   slice_t proof_slice[] = {copy_slice(bl_proof, sizeof(bl_proof))};
   uint8_t smt_flags[] = {0};
   g_setting.use_rc = true;
-  set_smt_settings(IdentityFlagsCkb, rcrule_slice, proof_slice,
-                   smt_flags, countof(smt_flags));
+  set_smt_settings(IdentityFlagsCkb, rcrule_slice, proof_slice, smt_flags,
+                   countof(smt_flags));
 
   // blake160 of pubkey
   uint8_t blake160[20] = {184, 141, 45,  152, 205, 241, 253, 130, 123, 22,
@@ -487,8 +494,8 @@ UTEST(pubkey_hash_rc, on_wl_on_bl_not_pass) {
                            copy_slice(bl_proof, sizeof(bl_proof))};
   uint8_t smt_flags[] = {0x2, 0};
   g_setting.use_rc = true;
-  set_smt_settings(IdentityFlagsCkb, rcrule_slice, proof_slice,
-                   smt_flags, countof(smt_flags));
+  set_smt_settings(IdentityFlagsCkb, rcrule_slice, proof_slice, smt_flags,
+                   countof(smt_flags));
 
   // blake160 of pubkey
   uint8_t blake160[20] = {184, 141, 45,  152, 205, 241, 253, 130, 123, 22,
@@ -522,8 +529,8 @@ UTEST(pubkey_hash_rc, not_on_wl_not_pass) {
   slice_t rcrule_slice = copy_slice(rcrule, sizeof(rcrule));
   uint8_t smt_flags = 0x2;  // white list
   g_setting.use_rc = true;
-  set_smt_settings(IdentityFlagsCkb, &rcrule_slice, &proof_slice,
-                   &smt_flags, 1);
+  set_smt_settings(IdentityFlagsCkb, &rcrule_slice, &proof_slice, &smt_flags,
+                   1);
 
   // blake160 of pubkey
   uint8_t blake160[20] = {184, 141, 45,  152, 205, 241, 253, 130, 123, 22,
@@ -583,16 +590,18 @@ UTEST(exec, random) {
   char* next_iterate_argv = hex.buff;
   uint8_t* param = NULL;
   uint32_t len = 0;
-  for (int i = 0; i < bin.count ; i++) {
-    err = ckb_exec_decode_params(next_iterate_argv, &param, &len, &next_iterate_argv);
+  for (int i = 0; i < bin.count; i++) {
+    err = ckb_exec_decode_params(next_iterate_argv, &param, &len,
+                                 &next_iterate_argv);
     ASSERT_EQ(err, 0);
     ASSERT_EQ(len, bin.len[i]);
-    ASSERT_EQ( memcmp(param, bin.params[i], len), 0);
+    ASSERT_EQ(memcmp(param, bin.params[i], len), 0);
   }
   ASSERT_EQ(next_iterate_argv, NULL);
-  err = ckb_exec_decode_params(next_iterate_argv, &param, &len, &next_iterate_argv);
+  err = ckb_exec_decode_params(next_iterate_argv, &param, &len,
+                               &next_iterate_argv);
   ASSERT_EQ(len, 0);
-  ASSERT_TRUE(err !=0);
+  ASSERT_TRUE(err != 0);
 }
 
 UTEST_MAIN();
