@@ -552,7 +552,7 @@ pub fn sign_tx_by_input_group(
                         sig = wrong_sig;
                     }
                     let hash = blake160(pubkey.as_ref());
-                    let preimage = gen_exec_preimage(&config.rsa_script, &hash);
+                    let preimage = gen_dl_preimage(&config.rsa_script, &hash);
                     preimage_hash = blake160(preimage.as_ref());
 
                     let sig_bytes = Bytes::from(sig);
@@ -1220,7 +1220,7 @@ pub fn gen_zero_witness_lock(
     res.freeze()
 }
 
-pub fn gen_exec_preimage(script: &Script, blake160: &Bytes) -> Bytes {
+pub fn gen_dl_preimage(script: &Script, blake160: &Bytes) -> Bytes {
     let mut result = BytesMut::new();
     result.put_slice(script.code_hash().as_slice());
     result.put_slice(script.hash_type().as_slice());

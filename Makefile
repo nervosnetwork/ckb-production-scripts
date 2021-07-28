@@ -21,12 +21,14 @@ MOLC_VERSION := 0.7.0
 CFLAGS_MBEDTLS := $(subst ckb-c-std-lib,ckb-c-stdlib-20210413,$(CFLAGS)) -I deps/mbedtls/include
 LDFLAGS_MBEDTLS := $(LDFLAGS)
 PASSED_MBEDTLS_CFLAGS := -O3 -fPIC -nostdinc -nostdlib -DCKB_DECLARATION_ONLY -I ../../ckb-c-stdlib-20210413/libc -fdata-sections -ffunction-sections
+# with exec
+CFLAGS_MBEDTLS_EXEC := $(subst ckb-c-std-lib,ckb-c-stdlib-20210801,$(CFLAGS)) -I deps/mbedtls/include
 
 # docker pull nervos/ckb-riscv-gnu-toolchain:gnu-bionic-20191012
 BUILDER_DOCKER := nervos/ckb-riscv-gnu-toolchain@sha256:aae8a3f79705f67d505d1f1d5ddc694a4fd537ed1c7e9622420a470d59ba2ec3
 CLANG_FORMAT_DOCKER := kason223/clang-format@sha256:3cce35b0400a7d420ec8504558a02bdfc12fd2d10e40206f140c4545059cd95d
 
-all: build/simple_udt build/anyone_can_pay build/always_success build/validate_signature_rsa build/xudt_rce build/rce_validator build/rc_lock
+all: build/simple_udt build/anyone_can_pay build/always_success build/validate_signature_rsa build/xudt_rce build/rce_validator build/rc_lock build/validate_signature_rsa_exec
 
 all-via-docker: ${PROTOCOL_HEADER}
 	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make"
@@ -89,6 +91,12 @@ build/validate_signature_rsa: c/validate_signature_rsa.c deps/mbedtls/library/li
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
+build/validate_signature_rsa_exec: c/validate_signature_rsa_exec.c deps/mbedtls/library/libmbedcrypto.a
+	$(CC) $(CFLAGS_MBEDTLS_EXEC) $(LDFLAGS_MBEDTLS) -o $@ $^
+	$(OBJCOPY) --only-keep-debug $@ $@.debug
+	$(OBJCOPY) --strip-debug --strip-all $@
+
+
 validate_signature_rsa_sim-via-docker:
 	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make build/validate_signature_rsa_sim"
 
@@ -114,7 +122,7 @@ ALL_C_SOURCE := $(wildcard c/rc_lock.c c/rc_lock_acp.h c/rc_lock_time_lock.h \
 	tests/rc_lock/rc_lock_sim.c tests/rc_lock/ckb_syscall_rc_lock_sim.h \
 	c/rce_validator.c /always_success.c c/rce.h c/xudt_rce.c \
 	c/rce_validator.c tests/xudt_rce/*.c tests/xudt_rce/*.h\
-	c/validate_signature_rsa.h c/validate_signature_rsa.c)
+	c/validate_signature_rsa.h c/validate_signature_rsa.c c/validate_signature_rsa_exec.c)
 
 fmt:
 	docker run --rm -v `pwd`:/code ${CLANG_FORMAT_DOCKER} bash -c "cd code && clang-format -i -style=Google $(ALL_C_SOURCE)"
