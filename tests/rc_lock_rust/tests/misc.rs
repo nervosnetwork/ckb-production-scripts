@@ -80,6 +80,8 @@ lazy_static! {
         Bytes::from(&include_bytes!("../../../build/always_success")[..]);
     pub static ref VALIDATE_SIGNATURE_RSA: Bytes =
         Bytes::from(&include_bytes!("../../../build/validate_signature_rsa")[..]);
+    pub static ref VALIDATE_SIGNATURE_RSA_EXEC: Bytes =
+        Bytes::from(&include_bytes!("../../../build/validate_signature_rsa_exec")[..]);
     pub static ref SMT_EXISTING: H256 = H256::from([
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0
@@ -535,7 +537,7 @@ pub fn sign_tx_by_input_group(
                 blake2b.finalize(&mut message);
                 let message = CkbH256::from(message);
 
-                let witness_lock = if config.id.flags == IDENTITY_FLAGS_DL {
+                let witness_lock = if config.id.flags == IDENTITY_FLAGS_DL || config.id.flags == IDENTITY_FLAGS_EXEC {
                     let (mut sig, pubkey) = if config.use_rsa {
                         rsa_sign(message.as_bytes(), &config.rsa_private_key)
                     } else {
@@ -552,7 +554,12 @@ pub fn sign_tx_by_input_group(
                         sig = wrong_sig;
                     }
                     let hash = blake160(pubkey.as_ref());
-                    let preimage = gen_dl_preimage(&config.rsa_script, &hash);
+                    let preimage = if config.id.flags == IDENTITY_FLAGS_DL {
+                        gen_dl_preimage(&config.rsa_script, &hash)
+                    } else {
+                        gen_exec_preimage(&config.rsa_exec_script, &hash)
+                    };
+
                     preimage_hash = blake160(preimage.as_ref());
 
                     let sig_bytes = Bytes::from(sig);
@@ -567,7 +574,7 @@ pub fn sign_tx_by_input_group(
                     let sig = config.private_key.sign_recoverable(&message).expect("sign");
                     let sig_bytes = Bytes::from(sig.serialize());
                     gen_witness_lock(sig_bytes, config.use_rc, &proof_vec, &identity, None)
-                }; // TODO: IDENTITY_FLAGS_EXEC
+                };
 
                 witness
                     .as_builder()
@@ -587,7 +594,8 @@ pub fn sign_tx_by_input_group(
         signed_witnesses.clear();
     }
     if preimage_hash.len() == 20 {
-        write_back_preimage_hash(dummy, IDENTITY_FLAGS_DL, preimage_hash);
+        write_back_preimage_hash(dummy, IDENTITY_FLAGS_DL, preimage_hash.clone());
+        write_back_preimage_hash(dummy, IDENTITY_FLAGS_EXEC, preimage_hash);
     }
     // calculate message
     tx.as_advanced_builder()
@@ -706,6 +714,16 @@ pub fn gen_tx_with_grouped_args(
     );
     tx_builder = b0;
     config.rsa_script = rsa_script;
+    // validate_signature_rsa_exec will be referenced by preimage in witness
+    let (b0, rsa_exec_script) = build_script(
+        dummy,
+        tx_builder,
+        false,
+        &VALIDATE_SIGNATURE_RSA_EXEC,
+        Default::default(),
+    );
+    tx_builder = b0;
+    config.rsa_exec_script = rsa_exec_script;
 
     if config.is_owner_lock() {
         // insert an "always success" script as first input script.
@@ -893,6 +911,8 @@ pub struct TestConfig {
     pub rsa_private_key: PKey<Private>,
     pub rsa_pubkey: PKey<Public>,
     pub rsa_script: Script,
+
+    pub rsa_exec_script: Script,
     // when this is on, sign by RSA
     pub use_rsa: bool,
 
@@ -986,6 +1006,7 @@ impl TestConfig {
             rsa_private_key,
             rsa_pubkey,
             rsa_script: Default::default(),
+            rsa_exec_script: Default::default(),
             sig_len,
             preimage_len,
             use_rsa: false,
@@ -1228,6 +1249,22 @@ pub fn gen_dl_preimage(script: &Script, blake160: &Bytes) -> Bytes {
 
     result.freeze()
 }
+
+pub fn gen_exec_preimage(script: &Script, blake160: &Bytes) -> Bytes {
+    let place : u8 = 0;
+    let bounds: u64 = 0;
+
+    let mut result = BytesMut::new();
+
+    result.put_slice(script.code_hash().as_slice());
+    result.put_slice(script.hash_type().as_slice());
+    result.put_slice(place.to_le_bytes().as_ref());
+    result.put_slice(bounds.to_le_bytes().as_ref());
+    result.put_slice(blake160.as_ref());
+
+    result.freeze()
+}
+
 // first generate N RCE cells with each contained one RCRule
 // then collect all these RCE cell hash and create the final RCE cell.
 pub fn generate_rce_cell(

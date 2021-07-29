@@ -1,3 +1,5 @@
+// uncomment to enable printf in CKB-VM
+//#define CKB_C_STDLIB_PRINTF
 
 // clang-format off
 #include "validate_signature_rsa.c"
@@ -5,6 +7,7 @@
 #include "ckb_exec.h"
 #include "ckb_syscalls.h"
 #include "string.h"
+#include <stdio.h>
 // clang-format on
 
 enum ValidateSignatureRsaErrorCode {
