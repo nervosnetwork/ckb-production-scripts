@@ -537,7 +537,9 @@ pub fn sign_tx_by_input_group(
                 blake2b.finalize(&mut message);
                 let message = CkbH256::from(message);
 
-                let witness_lock = if config.id.flags == IDENTITY_FLAGS_DL || config.id.flags == IDENTITY_FLAGS_EXEC {
+                let witness_lock = if config.id.flags == IDENTITY_FLAGS_DL
+                    || config.id.flags == IDENTITY_FLAGS_EXEC
+                {
                     let (mut sig, pubkey) = if config.use_rsa {
                         rsa_sign(message.as_bytes(), &config.rsa_private_key)
                     } else {
@@ -723,7 +725,11 @@ pub fn gen_tx_with_grouped_args(
         Default::default(),
     );
     tx_builder = b0;
-    config.rsa_exec_script = rsa_exec_script;
+    // The exec only accept data1 hash type
+    config.rsa_exec_script = rsa_exec_script
+        .as_builder()
+        .hash_type(ScriptHashType::Data1.into())
+        .build();
 
     if config.is_owner_lock() {
         // insert an "always success" script as first input script.
@@ -762,10 +768,15 @@ pub fn gen_tx_with_grouped_args(
                 }
             };
             let previous_out_point = OutPoint::new(previous_tx_hash, 0);
+            let hash_type = if config.id.flags == IDENTITY_FLAGS_EXEC {
+                ScriptHashType::Data1
+            } else {
+                ScriptHashType::Data
+            };
             let script = Script::new_builder()
                 .args(args.pack())
                 .code_hash(sighash_all_cell_data_hash.clone())
-                .hash_type(ScriptHashType::Data.into())
+                .hash_type(hash_type.into())
                 .build();
             let previous_output_cell = CellOutput::new_builder()
                 .capacity(dummy_capacity.pack())
@@ -1251,7 +1262,7 @@ pub fn gen_dl_preimage(script: &Script, blake160: &Bytes) -> Bytes {
 }
 
 pub fn gen_exec_preimage(script: &Script, blake160: &Bytes) -> Bytes {
-    let place : u8 = 0;
+    let place: u8 = 0;
     let bounds: u64 = 0;
 
     let mut result = BytesMut::new();

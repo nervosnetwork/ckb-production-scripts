@@ -1,5 +1,6 @@
 // uncomment to enable printf in CKB-VM
 //#define CKB_C_STDLIB_PRINTF
+//#define CKB_C_STDLIB_PRINTF_BUFFER_SIZE 1024
 
 // clang-format off
 #include "validate_signature_rsa.c"

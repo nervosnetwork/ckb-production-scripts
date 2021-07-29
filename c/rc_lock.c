@@ -1,5 +1,6 @@
 // uncomment to enable printf in CKB-VM
-// #define CKB_C_STDLIB_PRINTF
+//#define CKB_C_STDLIB_PRINTF
+//#define CKB_C_STDLIB_PRINTF_BUFFER_SIZE 1024
 
 // it's used by blockchain-api2.h, the behavior when panic
 #ifndef MOL2_EXIT
