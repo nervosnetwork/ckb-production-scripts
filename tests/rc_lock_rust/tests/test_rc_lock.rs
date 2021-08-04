@@ -6,7 +6,7 @@ mod misc;
 use ckb_chain_spec::consensus::ConsensusBuilder;
 use ckb_crypto::secp::Generator;
 use ckb_error::assert_error_eq;
-use ckb_script::{ScriptError, TransactionScriptsVerifier, TxVerifyEnv};
+use ckb_script::{ScriptError, TransactionScriptsVerifier, TxVerifyEnv, ScriptGroupType, ScriptGroup};
 use ckb_types::{
     bytes::Bytes,
     bytes::BytesMut,
@@ -19,6 +19,9 @@ use ckb_types::{
 };
 use lazy_static::lazy_static;
 use misc::*;
+use ckb_script::ScriptVersion;
+#[cfg(feature = "pprof")]
+use ckb_vm_pprof::quick_start;
 
 //
 // owner lock section
@@ -501,3 +504,48 @@ fn test_rsa_via_exec_wrong_sig() {
     let verify_result = verifier.verify(MAX_CYCLES);
     assert_script_error(verify_result.unwrap_err(), ERROR_RSA_VERIFY_FAILED);
 }
+
+
+// Steps to use pprof in Rust test cases:
+// 1. add ckb-vm-pprof in Cargo.tom, e.g
+// ckb-vm-pprof = { path = "../../../ckb-vm-pprof" }
+// clone from https://github.com/nervosnetwork/ckb-vm-pprof
+// and enable feature:
+// #[features]
+// #pprof = []
+// 2. remove [ignore] and run the test case
+// 3. after "build/rc_lock.pprof-result" is generated, use
+// inferno-flamegraph build/rc_lock.pprof-result > build/rc_lock.svg
+// to generate to final plot
+#[test]
+#[ignore]
+#[cfg(feature = "pprof")]
+fn test_pubkey_hash_on_wl_pprof() {
+    let mut data_loader = DummyDataLoader::new();
+
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, true);
+    config.scheme = TestScheme::OnWhiteList;
+
+    let tx = gen_tx(&mut data_loader, &mut config);
+    let tx = sign_tx(&mut data_loader, tx, &mut config);
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+
+    let consensus = gen_consensus();
+    let tx_env = gen_tx_env();
+    let verifier =
+        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+    let mut pass = false;
+    for (_, _, script_group) in verifier.groups() {
+        let syscalls = verifier.generate_syscalls(ScriptVersion::V1, script_group);
+        let result = ckb_vm_pprof::quick_start(syscalls, "../../build/rc_lock.debug", Default::default(), "../../build/rc_lock.pprof-result");
+        result.expect("pass verification");
+        pass = true;
+        break;
+    }
+    assert!(pass);
+    // verifier.set_debug_printer(debug_printer);
+    // let verify_result = verifier.verify(MAX_CYCLES);
+    // verify_result.expect("pass verification");
+}
+
