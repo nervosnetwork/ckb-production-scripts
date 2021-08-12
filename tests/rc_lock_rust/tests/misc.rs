@@ -2,6 +2,7 @@ use openssl::hash::MessageDigest;
 use openssl::pkey::{PKey, Private, Public};
 use openssl::rsa::Rsa;
 use openssl::sign::Signer;
+use sha3::{Digest, Keccak256};
 use std::collections::HashMap;
 
 use ckb_chain_spec::consensus::{Consensus, ConsensusBuilder};
@@ -367,6 +368,22 @@ pub fn blake160(message: &[u8]) -> Bytes {
     Bytes::copy_from_slice(&r[..20])
 }
 
+pub fn keccak160(message: &[u8]) -> Bytes {
+    let mut hasher = Keccak256::new();
+    hasher.update(message);
+    let r = hasher.finalize();
+    Bytes::copy_from_slice(&r[12..])
+}
+
+pub fn convert_keccak256_hash(message: &[u8]) -> CkbH256 {
+    let eth_prefix: &[u8; 28] = b"\x19Ethereum Signed Message:\n32";
+    let mut hasher = Keccak256::new();
+    hasher.update(eth_prefix);
+    hasher.update(message);
+    let r = hasher.finalize();
+    CkbH256::from_slice(r.as_slice()).expect("convert_keccak256_hash")
+}
+
 pub fn sign_tx(
     dummy: &mut DummyDataLoader,
     tx: TransactionView,
@@ -533,7 +550,12 @@ pub fn sign_tx_by_input_group(
                     blake2b.update(&witness.raw_data());
                 });
                 blake2b.finalize(&mut message);
-                let message = CkbH256::from(message);
+
+                let message = if config.id.flags == IDENTITY_FLAGS_ETHEREUM {
+                    convert_keccak256_hash(&message)
+                } else {
+                    CkbH256::from(message)
+                };
 
                 let witness_lock = if config.id.flags == IDENTITY_FLAGS_DL {
                     let (mut sig, pubkey) = if config.use_rsa {
@@ -854,6 +876,8 @@ pub fn debug_printer(script: &Byte32, msg: &str) {
 }
 
 pub const IDENTITY_FLAGS_PUBKEY_HASH: u8 = 0;
+pub const IDENTITY_FLAGS_ETHEREUM: u8 = 1;
+
 pub const IDENTITY_FLAGS_OWNER_LOCK: u8 = 0xFC;
 pub const IDENTITY_FLAGS_EXEC: u8 = 0xFD;
 pub const IDENTITY_FLAGS_DL: u8 = 0xFE;
@@ -947,9 +971,12 @@ impl TestConfig {
 
         let blake160 = if flags == IDENTITY_FLAGS_PUBKEY_HASH {
             pubkey_hash
+        } else if flags == IDENTITY_FLAGS_ETHEREUM {
+            keccak160(&pubkey.serialize()[1..])
         } else {
             Bytes::from(&[0; 20][..])
         };
+
         let rc_root: Bytes = {
             let mut buf = BytesMut::new();
             buf.resize(32, 0);

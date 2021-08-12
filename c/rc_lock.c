@@ -385,9 +385,11 @@ int main() {
   CHECK(err);
 
   if (args.has_rc_root) {
-    CHECK2(witness_lock.has_rc_identity, ERROR_INVALID_MOL_FORMAT);
-    identity = witness_lock.id;
-    // The unlock methods used in rc_identity should be chosen carefully.
+    if (witness_lock.has_rc_identity) {
+      identity = witness_lock.id;
+    } else {
+      identity = args.id;
+    }
   } else {
     identity = args.id;
   }
