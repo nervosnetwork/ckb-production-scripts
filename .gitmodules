@@ -26,6 +26,3 @@
 	path = deps/secp256k1-20210801
 	url = https://github.com/nervosnetwork/secp256k1.git
 	branch = schnorr
-[submodule "deps/sparse-merkle-tree-improved"]
-	path = deps/sparse-merkle-tree-improved
-	url = https://github.com/nervosnetwork/sparse-merkle-tree.git

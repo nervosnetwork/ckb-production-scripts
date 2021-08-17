@@ -31,11 +31,11 @@ const BINARIES: &[(&str, &str)] = &[
     ),
     (
         "xudt_rce",
-        "bd590178388506307256c0c3e613df45984997aa0a2e8faf2fd54c096f28db6c",
+        "8b4ecdfdb4279a5b27d55cc0c8362a0e135315ac387e600b043748dad2a247fb",
     ),
     (
         "rce_validator",
-        "15fd0de9058d52a07bc7fdae70af35803d7c0a5f50ff387f01035b6affd42a0d"
+        "8a359444a55b3bc8fcf77ef883939ea0fa9980629b66ad28e13b315728d29a08"
     ),
 ];
 

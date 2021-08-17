@@ -8,9 +8,11 @@ SECP256K1_SRC := deps/secp256k1/src/ecmult_static_pre_context.h
 SECP256K1_SRC_20210801 := deps/secp256k1-20210801/src/ecmult_static_pre_context.h
 
 XUDT_RCE_CFLAGS=$(subst ckb-c-std-lib,ckb-c-stdlib-20210713,$(CFLAGS)) -I deps/sparse-merkle-tree/c
-RC_LOCK_CFLAGS=$(subst ckb-c-std-lib,ckb-c-stdlib-20210801,$(CFLAGS)) -I deps/sparse-merkle-tree-improved/c
 
-TAPROOT_LOCK_CFLAGS := $(subst ckb-c-std-lib,ckb-c-stdlib-20210801,$(CFLAGS)) -I deps/sparse-merkle-tree-improved/c
+RC_LOCK_CFLAGS :=$(subst ckb-c-std-lib,ckb-c-stdlib-20210801,$(CFLAGS)) -I deps/sparse-merkle-tree/c
+RC_LOCK_CFLAGS := $(subst secp256k1,secp256k1-20210801,$(RC_LOCK_CFLAGS))
+
+TAPROOT_LOCK_CFLAGS := $(subst ckb-c-std-lib,ckb-c-stdlib-20210801,$(CFLAGS)) -I deps/sparse-merkle-tree/c
 TAPROOT_LOCK_CFLAGS := $(subst secp256k1,secp256k1-20210801,$(TAPROOT_LOCK_CFLAGS))
 
 PROTOCOL_HEADER := c/blockchain.h
@@ -205,7 +207,7 @@ clean:
 	rm -f build/xudt_rce
 	rm -f build/rce_validator
 	rm -f build/rc_lock
-	mr -f build/taproot_lock
+	rm -f build/taproot_lock
 	cd deps/secp256k1 && [ -f "Makefile" ] && make clean
 	cd deps/secp256k1-20210801 && [ -f "Makefile" ] && make clean
 	make -C deps/mbedtls/library clean
