@@ -1,0 +1,19 @@
+import blockchain;
+
+
+table TaprootScriptPath {
+    taproot_output_key: Byte32,
+    taproot_internal_key: Byte32,
+    smt_root: Byte32,
+    smt_proof: Bytes,
+    y_parity: byte,
+    exec_script: Script,
+    args2: Bytes,
+}
+
+option TaprootScriptPathOpt (TaprootScriptPath);
+
+table TaprootLockWitnessLock {
+    signature: BytesOpt,
+    script_path: TaprootScriptPathOpt,
+}

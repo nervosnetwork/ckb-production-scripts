@@ -18,3 +18,4 @@ tests/validate_signature_rsa/fuzz-*.log
 tests/rc_lock/exec_fuzzer/exec_fuzzer.dSYM
 fuzzer.profraw
 fuzzer.profdata
+tests/taproot_lock/simulator-build-debug
