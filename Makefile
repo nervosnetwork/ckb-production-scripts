@@ -120,7 +120,8 @@ ALL_C_SOURCE := $(wildcard c/rc_lock.c c/rc_lock_acp.h c/rc_lock_time_lock.h \
 	c/rce_validator.c /always_success.c c/rce.h c/xudt_rce.c \
 	c/rce_validator.c tests/xudt_rce/*.c tests/xudt_rce/*.h\
 	c/validate_signature_rsa.h c/validate_signature_rsa.c \
-	c/taproot_lock.c tests/taproot_lock/ckb_syscall_taproot_lock_sim.h tests/taproot_lock/taproot_lock_sim.c)
+	c/taproot_lock.c tests/taproot_lock/ckb_syscall_taproot_lock_sim.h tests/taproot_lock/taproot_lock_sim.c\
+	tests/taproot_lock/ckb_syscall_taproot_lock_impl.h)
 
 fmt:
 	docker run --rm -v `pwd`:/code ${CLANG_FORMAT_DOCKER} bash -c "cd code && clang-format -i -style=Google $(ALL_C_SOURCE)"

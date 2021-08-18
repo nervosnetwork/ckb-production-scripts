@@ -4,8 +4,11 @@
 
 int ckb_exit(signed char code);
 
+// clang-format off
 #include "taproot_lock.c"
+#include "ckb_syscall_taproot_lock_impl.h"
 #include "utest.h"
+// clang-format on
 
 void debug_print_hex(const char* prefix, const uint8_t* buf, size_t length) {
   printf("%s: ", prefix);
@@ -37,8 +40,9 @@ int hex2bin(uint8_t* buf, const char* src) {
 }
 
 UTEST(key_path_spending, success) {
-  init_input(&g_setting);
+  init_input();
   g_setting.flags = 6;
+  g_setting.key_path_spending = true;
   convert_setting_to_states();
 
   int r = simulator_main();
@@ -46,8 +50,9 @@ UTEST(key_path_spending, success) {
 }
 
 UTEST(key_path_spending, wrong_signature) {
-  init_input(&g_setting);
+  init_input();
   g_setting.flags = 6;
+  g_setting.key_path_spending = true;
   g_setting.wrong_signature = true;
   convert_setting_to_states();
 
@@ -56,13 +61,24 @@ UTEST(key_path_spending, wrong_signature) {
 }
 
 UTEST(key_path_spending, wrong_pubkey_hash) {
-  init_input(&g_setting);
+  init_input();
   g_setting.flags = 6;
+  g_setting.key_path_spending = true;
   g_setting.wrong_pubkey_hash = true;
   convert_setting_to_states();
 
   int r = simulator_main();
   ASSERT_EQ(ERROR_IDENTITY_PUBKEY_BLAKE160_HASH, r);
+}
+
+UTEST(script_path_spending, success) {
+  init_input();
+  g_setting.flags = 6;
+  g_setting.script_path_spending = true;
+  convert_setting_to_states();
+
+  int r = simulator_main();
+  ASSERT_EQ(0, r);
 }
 
 UTEST_MAIN();
