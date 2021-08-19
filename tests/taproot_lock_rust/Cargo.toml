@@ -27,3 +27,6 @@ rand = "0.6.5"
 sparse-merkle-tree = { git = "https://github.com/nervosnetwork/sparse-merkle-tree.git", rev = "2dce546"}
 openssl = "0.10.4"
 sha3 = "0.9.1"
+secp256k1 = "0.20.3"
+env_logger = "0.9.0"
+log = "0.4.14"

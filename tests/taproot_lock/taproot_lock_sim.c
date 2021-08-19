@@ -81,4 +81,15 @@ UTEST(script_path_spending, success) {
   ASSERT_EQ(0, r);
 }
 
+UTEST(script_path_spending, wrong_pubkey) {
+  init_input();
+  g_setting.flags = 6;
+  g_setting.script_path_spending = true;
+  g_setting.wrong_pubkey_hash = true;
+  convert_setting_to_states();
+
+  int r = simulator_main();
+  ASSERT_EQ(ERROR_MISMATCHED, r);
+}
+
 UTEST_MAIN();

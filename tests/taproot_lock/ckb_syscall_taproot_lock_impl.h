@@ -324,6 +324,10 @@ void convert_setting_to_states(void) {
     uint8_t script_args[1 + 20] = {0};
     script_args[0] = g_setting.flags;
     memcpy(script_args + 1, g_setting.blake160, 20);
+
+    if (g_setting.wrong_pubkey_hash) {
+      script_args[1] ^= 1;
+    }
     uint8_t code_hash2[32] = {0};
 
     mol_seg_t script2 = build_script(code_hash2, 0, script_args, 21);

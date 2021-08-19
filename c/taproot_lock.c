@@ -67,7 +67,6 @@ void debug_print_hex(const char *prefix, const uint8_t *buf, size_t length);
 #define SCHNORR_PUBKEY_SIZE 32
 #define MAX_ARGS_SIZE 32768
 #define MAX_PROOF_SIZE 32768
-#define MAX_SCRIPT_SIZE 32768
 
 enum TaprootLockErrorCode {
   // taproot lock error code is starting from 60
@@ -156,10 +155,10 @@ int parse_args(CkbIdentityType *identity) {
 
   mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
   mol_seg_t seg = MolReader_Bytes_raw_bytes(&args_seg);
-  CHECK2(seg.size == 21, ERROR_MOL);
+  CHECK2(seg.size == CKB_IDENTITY_LEN, ERROR_MOL);
 
   identity->flags = seg.ptr[0];
-  memcpy(identity->id, seg.ptr + 1, 20);
+  memcpy(identity->id, seg.ptr + 1, CKB_IDENTITY_LEN - 1);
 
 exit:
   return err;
@@ -269,7 +268,7 @@ int parse_witness_lock(WitnessLockType *witness_lock) {
     ScriptType exec_script = script_path.t->exec_script(&script_path);
 
     // calculate script hash for future use
-    CHECK2(exec_script.cur.size < MAX_SCRIPT_SIZE, ERROR_MOL);
+    CHECK2(exec_script.cur.size < SCRIPT_SIZE, ERROR_MOL);
     uint8_t script_bytes[exec_script.cur.size];
     read_len =
         mol2_read_at(&exec_script.cur, script_bytes, exec_script.cur.size);
@@ -317,6 +316,11 @@ int validate_signature_schnorr(void *prefilled_data, const uint8_t *sig,
   if (sig_len != SCHNORR_SIGNATURE_SIZE || msg_len != 32) {
     return ERROR_IDENTITY_ARGUMENTS_LEN;
   }
+#if 0
+  printf("validate_signature_schnorr msg = %d, %d", msg[0], msg[1]);
+  printf("validate_signature_schnorr pubkey = %d, %d", sig[0], sig[1]);
+  printf("validate_signature_schnorr sig = %d, %d", sig[SCHNORR_PUBKEY_SIZE], sig[SCHNORR_PUBKEY_SIZE+1]);
+#endif
 
   secp256k1_context ctx;
   uint8_t secp_data[CKB_SECP256K1_DATA_SIZE];
@@ -388,13 +392,37 @@ int ckb_bin2hex(uint8_t *bin, size_t bin_size, char *hex, size_t hex_size) {
   return 0;
 }
 
+int exec_script(uint8_t *code_hash, uint8_t hash_type, uint8_t *args,
+                uint32_t args_len, uint8_t *args2, uint32_t args2_len) {
+  int err = 0;
+  if (args_len >= MAX_ARGS_SIZE || args2_len >= MAX_ARGS_SIZE) {
+    return ERROR_ARGS;
+  }
+  size_t hex_args_len = args_len * 2 + 1;
+  char hex_args[args_len];
+  size_t hex_args2_len = args2_len * 2 + 1;
+  char hex_args2[args2_len];
+
+  err = ckb_bin2hex(args, args_len, hex_args, hex_args_len);
+  CHECK(err);
+
+  err = ckb_bin2hex(args2, args2_len, hex_args2, hex_args2_len);
+  CHECK(err);
+
+  // 5.1.2.2.1 Program startup
+  //...
+  //-- argv[argc] shall be a null pointer.
+  const char *argv[3] = {hex_args, hex_args2, 0};
+  err = ckb_exec_cell(code_hash, hash_type, 0, 0, 2, argv);
+  CHECK(err);
+
+exit:
+  return err;
+}
+
 int verify_script_path(WitnessLockType *witness_lock,
                        CkbIdentityType *identity) {
   int err = 0;
-  size_t args_len = witness_lock->args_len * 2 + 1;
-  char hex_args[args_len];
-  size_t args2_len = witness_lock->args2_len * 2 + 1;
-  char hex_args2[args2_len];
 
   uint8_t blake160[BLAKE160_SIZE];
   ckb_blake160(witness_lock->taproot_output_key, SCHNORR_PUBKEY_SIZE, blake160);
@@ -417,17 +445,6 @@ int verify_script_path(WitnessLockType *witness_lock,
                    witness_lock->smt_proof_len);
   CHECK(err);
 
-  err = ckb_bin2hex(witness_lock->args, witness_lock->args_len, hex_args,
-                    args_len);
-  CHECK(err);
-
-  err = ckb_bin2hex(witness_lock->args2, witness_lock->args2_len, hex_args2,
-                    args2_len);
-  CHECK(err);
-
-  const char *argv[3] = {hex_args, hex_args2, 0};
-  return ckb_exec_cell(witness_lock->code_hash, witness_lock->hash_type, 0, 0,
-                       2, argv);
 exit:
   return err;
 }
@@ -459,6 +476,10 @@ int main() {
   } else if (witness_lock.script_path_spending) {
     // script path spending
     err = verify_script_path(&witness_lock, &identity);
+    CHECK(err);
+    err = exec_script(witness_lock.code_hash, witness_lock.hash_type,
+                      witness_lock.args, witness_lock.args_len,
+                      witness_lock.args2, witness_lock.args2_len);
     CHECK(err);
   } else {
     CHECK2(false, ERROR_ARGS);
