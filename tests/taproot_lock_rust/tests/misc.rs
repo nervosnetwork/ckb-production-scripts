@@ -1,14 +1,12 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
-
-
+use log::debug;
 use std::convert::From;
-use log::{debug};
 use std::sync::Once;
 
+use secp256k1::schnorrsig::{KeyPair, PublicKey, Signature};
+use secp256k1::{All, Message, Secp256k1, SecretKey};
 use std::collections::HashMap;
-use secp256k1::schnorrsig::{KeyPair, PublicKey};
-use secp256k1::{SecretKey, Secp256k1, Message};
 
 use ckb_chain_spec::consensus::{Consensus, ConsensusBuilder};
 use ckb_error::Error;
@@ -39,7 +37,9 @@ use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::traits::Hasher;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 
-use taproot_lock_test::taproot_lock::TaprootLockWitnessLock;
+use taproot_lock_test::taproot_lock::{
+    TaprootLockWitnessLock, TaprootScriptPath, TaprootScriptPathOpt, TaprootScriptPathOptBuilder,
+};
 
 pub const BLAKE2B_KEY: &[u8] = &[];
 pub const BLAKE2B_LEN: usize = 32;
@@ -50,6 +50,11 @@ pub const SIGNATURE_SIZE: usize = 65;
 
 // errors
 pub const ERROR_ENCODING: i8 = -2;
+pub const ERROR_UNKNOWN_FLAGS: i8 = 60;
+pub const ERROR_MOL: i8 = 61;
+pub const ERROR_ARGS: i8 = 62;
+pub const ERROR_SCHNORR: i8 = 63;
+pub const ERROR_MISMATCHED: i8 = 64;
 
 lazy_static! {
     pub static ref TAPROOT_LOCK: Bytes =
@@ -58,11 +63,23 @@ lazy_static! {
         Bytes::from(&include_bytes!("../../../build/secp256k1_data_20210801")[..]);
     pub static ref ALWAYS_SUCCESS: Bytes =
         Bytes::from(&include_bytes!("../../../build/always_success")[..]);
+    pub static ref EXEC_SCRIPT_0: Bytes =
+        Bytes::from(&include_bytes!("../../../build/exec_script_0")[..]);
     pub static ref SMT_EXISTING: H256 = H256::from([
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0
     ]);
 }
+
+pub trait WitnessLockMaker {
+    fn make_witness_lock(&self) -> Bytes;
+    fn make_empty_witness_lock(&self) -> Bytes;
+}
+
+pub trait ScriptArgsMaker {
+    fn make_script_args(&self) -> Bytes;
+}
+
 pub struct CKBBlake2bHasher(Blake2b);
 
 impl Default for CKBBlake2bHasher {
@@ -99,7 +116,6 @@ pub fn new_smt(pairs: Vec<(H256, H256)>) -> SMT {
     smt
 }
 
-
 pub const IDENTITY_FLAGS_SCHNORR: u8 = 6;
 
 #[derive(Clone)]
@@ -127,13 +143,120 @@ impl From<Identity> for Bytes {
 }
 
 pub struct TestConfig {
+    // set by users
     pub id: Identity,
     pub scheme: TestScheme,
     pub scheme2: TestScheme2,
-    pub smt_root: Bytes,
-    pub smt_proof: Bytes,
-    pub key_pair: KeyPair,
-    pub pubkey: PublicKey,
+    pub script_path_spending: bool,
+
+    // intermedia states
+    smt_root: Bytes,
+    smt_proof: Bytes,
+    keypair: KeyPair,
+    internal_key: PublicKey,
+    tweaked_keypair: KeyPair,
+    output_key: PublicKey,
+    sig: Signature,
+    msg: Message,
+    y_parity: u8,
+    real_tweak32: Bytes,
+    exec_script: Script,
+
+    secp256k1_ctx: Secp256k1<All>,
+}
+
+impl WitnessLockMaker for TestConfig {
+    fn make_witness_lock(&self) -> Bytes {
+        if self.script_path_spending {
+            let output_key = Byte32::from_slice(&self.output_key.serialize()).unwrap();
+            let internal_key = Byte32::from_slice(&self.internal_key.serialize()).unwrap();
+            let smt_root = Byte32::from_slice(&self.smt_root).unwrap();
+
+            let script_path = TaprootScriptPath::new_builder()
+                .taproot_output_key(output_key)
+                .taproot_internal_key(internal_key)
+                .smt_root(smt_root)
+                .smt_proof(self.smt_proof.pack())
+                .y_parity(self.y_parity.into())
+                .exec_script(self.exec_script.clone())
+                .args2(Default::default())
+                .build();
+            let script_path2 = TaprootScriptPathOpt::new_builder()
+                .set(Some(script_path))
+                .build();
+            let builder = TaprootLockWitnessLock::new_builder().script_path(script_path2);
+            builder.build().as_bytes()
+        } else {
+            let mut b = BytesMut::new();
+            let pubkey = self.internal_key.serialize();
+            b.put_slice(pubkey.as_ref());
+            b.put_slice(self.sig.as_ref());
+
+            let builder = TaprootLockWitnessLock::new_builder();
+            let builder = builder.signature(Some(b.freeze()).pack());
+            builder.build().as_bytes()
+        }
+    }
+
+    fn make_empty_witness_lock(&self) -> Bytes {
+        if self.script_path_spending {
+            assert!(false);
+            Default::default()
+        } else {
+            let len = self.make_witness_lock().len();
+            let mut res = BytesMut::new();
+            res.resize(len, 0);
+            res.freeze()
+        }
+    }
+}
+
+impl ScriptArgsMaker for TestConfig {
+    fn make_script_args(&self) -> Bytes {
+        self.id.clone().into()
+    }
+}
+
+impl TestConfig {
+    pub fn new() -> TestConfig {
+        setup();
+        let flags = IDENTITY_FLAGS_SCHNORR;
+        let secp = Secp256k1::new();
+        let secret_key = SecretKey::from_slice(&[0xcd; 32]).expect("secret key");
+
+        let key_pair = KeyPair::from_secret_key(&secp, secret_key);
+        let pubkey = PublicKey::from_keypair(&secp, &key_pair);
+
+        let blake160 = blake160(&pubkey.serialize()[..]);
+        let sig = Signature::from_slice(&[0u8; 64]).expect("from_slice");
+        let msg = Message::from_slice(&[0u8; 32]).expect("from_slice");
+
+        TestConfig {
+            id: Identity { flags, blake160 },
+            smt_root: Default::default(),
+            smt_proof: Default::default(),
+            scheme: TestScheme::None,
+            scheme2: TestScheme2::None,
+            keypair: key_pair.clone(),
+            tweaked_keypair: key_pair.clone(),
+            output_key: pubkey.clone(),
+            msg,
+            y_parity: 100,
+            internal_key: pubkey.clone(),
+            sig,
+            secp256k1_ctx: secp,
+            exec_script: Default::default(),
+            real_tweak32: Default::default(),
+            script_path_spending: false,
+        }
+    }
+
+    pub fn set_scheme(&mut self, scheme: TestScheme) {
+        self.scheme = scheme;
+    }
+    pub fn set_script_path_spending(&mut self) {
+        self.script_path_spending = true;
+    }
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -141,15 +264,7 @@ pub enum TestScheme {
     None,
     LongWitness,
 
-    OnWhiteList,
-    NotOnWhiteList,
-    OnlyInputOnWhiteList,
-    OnlyOutputOnWhiteList,
-    BothOnWhiteList,
-    OnBlackList,
-    NotOnBlackList,
-    BothOn,
-    EmergencyHaltMode,
+    WrongOutputKey,
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -164,36 +279,6 @@ fn setup() {
     INIT_LOGGER.call_once(|| {
         env_logger::init();
     });
-}
-
-impl TestConfig {
-    pub fn new() -> TestConfig {
-        setup();
-        let flags = IDENTITY_FLAGS_SCHNORR;
-        let secp = Secp256k1::new();
-        let secret_key = SecretKey::from_slice(&[0xcd; 32]).expect("secret key");
-
-        let key_pair = KeyPair::from_secret_key(&secp, secret_key);
-        let pubkey = PublicKey::from_keypair(&secp, &key_pair);
-
-        let blake160 = blake160(&pubkey.serialize()[..]);
-        TestConfig {
-            id: Identity { flags, blake160 },
-            smt_root: Default::default(),
-            smt_proof: Default::default(),
-            scheme: TestScheme::None,
-            scheme2: TestScheme2::None,
-            key_pair,
-            pubkey,
-        }
-    }
-
-    pub fn set_scheme(&mut self, scheme: TestScheme) {
-        self.scheme = scheme;
-    }
-    pub fn gen_args(&self) -> Bytes {
-        self.id.clone().into()
-    }
 }
 
 pub fn gen_random_out_point(rng: &mut ThreadRng) -> OutPoint {
@@ -216,10 +301,11 @@ pub fn gen_random_out_point(rng: &mut ThreadRng) -> OutPoint {
 // * build extension script without upgrading, set is_type to false
 // * build RCE cell, is_type = true. Only the Script.code_hash is kept for further use.
 //   when in this case, to make "args" passed in unique
-fn build_script(
+pub fn build_script(
     dummy: &mut DummyDataLoader,
     tx_builder: TransactionBuilder,
     is_type: bool,
+    is_exec: bool,
     bin: &Bytes,
     args: Bytes,
 ) -> (TransactionBuilder, Script) {
@@ -263,7 +349,11 @@ fn build_script(
     let hash_type = if is_type {
         ScriptHashType::Type
     } else {
-        ScriptHashType::Data
+        if is_exec {
+            ScriptHashType::Data1
+        } else {
+            ScriptHashType::Data
+        }
     };
 
     let script = Script::new_builder()
@@ -276,7 +366,7 @@ fn build_script(
 }
 
 // return smt root and proof
-fn build_smt_on_wl(hashes: &Vec<[u8; 32]>, on: bool) -> (H256, Vec<u8>) {
+fn build_smt_on_wl(hashes: &Vec<[u8; 32]>) -> (H256, Vec<u8>) {
     let existing_pairs: Vec<(H256, H256)> = hashes
         .clone()
         .into_iter()
@@ -298,9 +388,7 @@ fn build_smt_on_wl(hashes: &Vec<[u8; 32]>, on: bool) -> (H256, Vec<u8>) {
         (key_on_wl1, SMT_EXISTING.clone()),
         (key_on_wl2, SMT_EXISTING.clone()),
     ];
-    if on {
-        pairs.extend(existing_pairs.clone());
-    }
+    pairs.extend(existing_pairs.clone());
 
     let smt = new_smt(pairs);
     let root = smt.root();
@@ -315,11 +403,8 @@ fn build_smt_on_wl(hashes: &Vec<[u8; 32]>, on: bool) -> (H256, Vec<u8>) {
     let test_on = compiled_proof
         .verify::<CKBBlake2bHasher>(root, existing_pairs.clone())
         .expect("verify compiled proof");
-    if on {
-        assert!(test_on);
-    } else {
-        assert!(!test_on);
-    }
+    assert!(test_on);
+
     return (root.clone(), compiled_proof.into());
 }
 
@@ -374,11 +459,19 @@ pub fn sign_tx(
     tx: TransactionView,
     config: &mut TestConfig,
 ) -> TransactionView {
-    let len = tx.witnesses().len();
-    sign_tx_by_input_group(dummy, tx, 0, len, config)
+    if config.script_path_spending {
+        tx
+    } else {
+        let len = tx.witnesses().len();
+        sign_tx_by_input_group(dummy, tx, 0, len, config)
+    }
 }
 
-pub fn generate_sighash_all(tx: &TransactionView, begin: usize) -> [u8; 32] {
+pub fn generate_sighash_all<M: WitnessLockMaker>(
+    m: &M,
+    tx: &TransactionView,
+    begin: usize,
+) -> [u8; 32] {
     let mut blake2b = ckb_hash::new_blake2b();
     let mut message = [0u8; 32];
     let tx_hash = tx.hash();
@@ -386,7 +479,7 @@ pub fn generate_sighash_all(tx: &TransactionView, begin: usize) -> [u8; 32] {
     blake2b.update(&tx_hash.raw_data());
     // digest the first witness
     let witness = WitnessArgs::new_unchecked(tx.witnesses().get(begin).unwrap().unpack());
-    let zero_lock = gen_zero_witness_lock();
+    let zero_lock = m.make_empty_witness_lock();
 
     let witness_for_digest = witness
         .clone()
@@ -412,7 +505,7 @@ pub fn sign_tx_by_input_group(
     tx: TransactionView,
     begin_index: usize,
     _len: usize,
-    config: &TestConfig,
+    config: &mut TestConfig,
 ) -> TransactionView {
     let mut signed_witnesses: Vec<packed::Bytes> = tx
         .inputs()
@@ -420,22 +513,20 @@ pub fn sign_tx_by_input_group(
         .enumerate()
         .map(|(i, _)| {
             if i == begin_index {
-                let secp = Secp256k1::new();
+                let secp = &config.secp256k1_ctx;
 
                 let witness = WitnessArgs::new_unchecked(tx.witnesses().get(i).unwrap().unpack());
-                let message = generate_sighash_all(&tx, begin_index);
-                let msg = &Message::from_slice(&message[..]).expect("from_slice");
-                let sig = secp.schnorrsig_sign_no_aux_rand(msg, &config.key_pair);
-                let pubkey = config.pubkey.serialize();
-                debug!("msg = {:?}", &message[..4]);
-                debug!("pubkey = {:?}", &pubkey[..4]);
-                debug!("sig = {:?}", &sig.as_ref()[..4]);
+                let message = generate_sighash_all(config, &tx, begin_index);
+                config.msg = Message::from_slice(&message[..]).expect("from_slice");
+                let sig = secp.schnorrsig_sign_no_aux_rand(&config.msg, &config.keypair);
+                config.sig = sig.clone();
+
+                debug!("msg = {:?}", &config.msg.as_ref()[..4]);
+                debug!("pubkey = {:?}", &config.output_key.serialize()[..4]);
+                debug!("sig = {:?}", &config.sig.as_ref()[..4]);
 
                 // schnorr signature is composed by pubkey(32 bytes) + sig(64 bytes)
-                let mut sig_bytes = BytesMut::new();
-                sig_bytes.put_slice(pubkey.as_ref());
-                sig_bytes.put_slice(sig.as_ref());
-                let witness_lock = gen_witness_lock(sig_bytes.freeze());
+                let witness_lock = config.make_witness_lock();
                 witness
                     .as_builder()
                     .lock(Some(witness_lock).pack())
@@ -456,9 +547,118 @@ pub fn sign_tx_by_input_group(
         .build()
 }
 
+pub fn ckb_tagged_hash_tweak(msg: &[u8]) -> Bytes {
+    let mut m: Vec<u8> = vec![];
+    let tag = b"TapTweak";
+    m.extend_from_slice(&tag[..]);
+    m.extend_from_slice(msg);
+    let hash = ckb_hash::blake2b_256(m.as_slice());
+    Bytes::copy_from_slice(&hash[..])
+}
+
 pub fn gen_tx(dummy: &mut DummyDataLoader, config: &mut TestConfig) -> TransactionView {
-    let lock_args = config.gen_args();
-    gen_tx_with_grouped_args(dummy, vec![(lock_args, 1)], config)
+    let mut rng = thread_rng();
+    let dummy_capacity = Capacity::shannons(42);
+    let mut tx_builder = TransactionBuilder::default()
+        .output(
+            CellOutput::new_builder()
+                .capacity(dummy_capacity.pack())
+                .build(),
+        )
+        .output_data(Bytes::new().pack());
+
+    let (b0, _) = build_script(
+        dummy,
+        tx_builder,
+        false,
+        false,
+        &SECP256K1_DATA_BIN,
+        Default::default(),
+    );
+    tx_builder = b0;
+
+    if config.script_path_spending {
+        let (b0, s) = build_script(
+            dummy,
+            tx_builder,
+            false,
+            true,
+            &EXEC_SCRIPT_0,
+            Default::default(),
+        );
+        tx_builder = b0;
+        config.exec_script = s;
+
+        let hash = config.exec_script.calc_script_hash();
+        let mut hash32 = [0u8; 32];
+        hash32.copy_from_slice(hash.as_slice());
+        let (root, proof) = build_smt_on_wl(&vec![hash32]);
+
+        config.smt_root = Bytes::copy_from_slice(root.as_slice());
+        config.smt_proof = Bytes::copy_from_slice(proof.as_slice());
+
+        let mut tagged_msg = [0u8; 64];
+        tagged_msg[..32].copy_from_slice(&config.internal_key.serialize()[..]);
+        tagged_msg[32..].copy_from_slice(config.smt_root.as_ref());
+
+        config.real_tweak32 = ckb_tagged_hash_tweak(&tagged_msg);
+
+        let y_parity = config
+            .output_key
+            .tweak_add_assign(&config.secp256k1_ctx, config.real_tweak32.as_ref())
+            .unwrap();
+        if y_parity {
+            config.y_parity = 1;
+        } else {
+            config.y_parity = 0;
+        };
+        config
+            .tweaked_keypair
+            .tweak_add_assign(&config.secp256k1_ctx, config.real_tweak32.as_ref())
+            .expect("tweak_add_assign");
+
+        // verify
+        let pubkey = PublicKey::from_keypair(&config.secp256k1_ctx, &config.tweaked_keypair);
+        assert_eq!(pubkey, config.output_key);
+
+        if config.scheme == TestScheme::WrongOutputKey {
+            let _ = config
+                .output_key
+                .tweak_add_assign(&config.secp256k1_ctx, config.real_tweak32.as_ref())
+                .unwrap();
+        }
+        // update script args
+        config.id.blake160 = blake160(&config.output_key.serialize());
+    }
+
+    let args = config.make_script_args();
+    let (b0, script) = build_script(dummy, tx_builder, false, true, &TAPROOT_LOCK, args);
+    tx_builder = b0;
+
+    let out_point = add_lock_script(dummy, script.clone());
+
+    let mut random_extra_witness = Vec::<u8>::new();
+    let witness_len = if config.scheme == TestScheme::LongWitness {
+        40000
+    } else {
+        32
+    };
+    random_extra_witness.resize(witness_len, 0);
+    rng.fill(&mut random_extra_witness[..]);
+
+    let mut witness_builder = WitnessArgsBuilder::default()
+        .input_type(Some(Bytes::copy_from_slice(&random_extra_witness[..])).pack());
+
+    if config.script_path_spending {
+        let lock = config.make_witness_lock();
+        witness_builder = witness_builder.lock(Some(lock).pack());
+    }
+    let witness_args = witness_builder.build();
+    tx_builder = tx_builder
+        .input(CellInput::new(out_point, 0))
+        .witness(witness_args.as_bytes().pack());
+
+    tx_builder.build()
 }
 
 pub fn add_lock_script(dummy: &mut DummyDataLoader, lock_script: Script) -> OutPoint {
@@ -481,59 +681,6 @@ pub fn add_lock_script(dummy: &mut DummyDataLoader, lock_script: Script) -> OutP
     );
     previous_out_point
 }
-
-pub fn gen_tx_with_grouped_args(
-    dummy: &mut DummyDataLoader,
-    grouped_args: Vec<(Bytes, usize)>,
-    config: &mut TestConfig,
-) -> TransactionView {
-    let mut rng = thread_rng();
-    let dummy_capacity = Capacity::shannons(42);
-    let mut tx_builder = TransactionBuilder::default()
-        .output(
-            CellOutput::new_builder()
-                .capacity(dummy_capacity.pack())
-                .build(),
-        )
-        .output_data(Bytes::new().pack());
-
-    let (b0, _) = build_script(
-        dummy,
-        tx_builder,
-        false,
-        &SECP256K1_DATA_BIN,
-        Default::default(),
-    );
-    tx_builder = b0;
-
-    for (args, inputs_size) in grouped_args {
-        let (b0, script) = build_script(dummy, tx_builder, false, &TAPROOT_LOCK, args);
-        tx_builder = b0;
-
-        for _ in 0..inputs_size {
-            let out_point = add_lock_script(dummy, script.clone());
-
-            let mut random_extra_witness = Vec::<u8>::new();
-            let witness_len = if config.scheme == TestScheme::LongWitness {
-                40000
-            } else {
-                32
-            };
-            random_extra_witness.resize(witness_len, 0);
-            rng.fill(&mut random_extra_witness[..]);
-
-            let witness_args = WitnessArgsBuilder::default()
-                .input_type(Some(Bytes::copy_from_slice(&random_extra_witness[..])).pack())
-                .build();
-            tx_builder = tx_builder
-                .input(CellInput::new(out_point, 0))
-                .witness(witness_args.as_bytes().pack());
-        }
-    }
-
-    tx_builder.build()
-}
-
 pub fn build_resolved_tx(
     data_loader: &DummyDataLoader,
     tx: &TransactionView,
@@ -577,22 +724,6 @@ pub fn debug_printer(script: &Byte32, msg: &str) {
         slice[0], slice[1], slice[2], slice[3], slice[4]
     );
     debug!("{:?}: {}", str, msg);
-}
-
-pub fn gen_witness_lock(sig: Bytes) -> Bytes {
-    let builder = TaprootLockWitnessLock::new_builder();
-    let builder = builder.signature(Some(sig).pack());
-    builder.build().as_bytes()
-}
-
-pub fn gen_zero_witness_lock() -> Bytes {
-    let mut zero = BytesMut::new();
-    zero.resize(96, 0);
-    let witness_lock = gen_witness_lock(zero.freeze());
-
-    let mut res = BytesMut::new();
-    res.resize(witness_lock.len(), 0);
-    res.freeze()
 }
 
 pub fn assert_script_error(err: Error, err_code: i8) {

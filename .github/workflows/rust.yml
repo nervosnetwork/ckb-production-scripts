@@ -13,17 +13,7 @@ jobs:
       run: git submodule update --init
     - name: Build contract
       run: make all-via-docker
-    - name: Build test extensions
-      run: make -f tests/xudt_rce/extension_scripts.Makefile all-via-docker
-    - name: Run simulator tests
-      run: bash tests/validate_signature_rsa/run.sh
-    - name: Run tests
-      run: cargo test
-    - name: Run xudt tests
-      run: cd tests/xudt_rce_rust && cargo test
-    - name: Run xudt simulator tests
-      run: cd tests/xudt_rce && bash run.sh
-    - name: Run rc_lock tests
-      run: cd tests/rc_lock_rust && cargo test
-    - name: Run rc_lock simulator tests
-      run: cd tests/rc_lock && bash run.sh
+    - name: Build exec scripts
+      run: make -f tests/taproot_lock/exec_script.Makefile all-via-docker
+    - name: Run taproot lock tests
+      run: cd tests/taproot_lock_rust && cargo test
