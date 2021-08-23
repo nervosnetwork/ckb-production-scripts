@@ -39,6 +39,7 @@ int ckb_exit(signed char);
 
 #include "rc_lock_acp.h"
 #include "rc_lock_time_lock.h"
+#include "rc_lock_supply.h"
 
 // clang-format on
 
@@ -48,6 +49,8 @@ int ckb_exit(signed char);
 #define RC_ROOT_MASK 1
 #define ACP_MASK (1 << 1)
 #define SINCE_MASK (1 << 2)
+#define SUPPLY_MASK (1 << 3)
+
 #define MAX_CODE_SIZE (1024 * 400)
 
 enum RcLockErrorCode {
@@ -77,6 +80,9 @@ typedef struct ArgsType {
   bool has_acp;
   int ckb_minimum;  // Used for ACP
   int udt_minimum;  // used for ACP
+
+  bool has_supply;
+  uint8_t supply_cell[32];  // type script hash
 } ArgsType;
 
 // parsed from lock in witness
@@ -171,6 +177,7 @@ int parse_args(ArgsType *args) {
   args->has_rc_root = args->rc_lock_flags & RC_ROOT_MASK;
   args->has_acp = args->rc_lock_flags & ACP_MASK;
   args->has_since = args->rc_lock_flags & SINCE_MASK;
+  args->has_supply = args->has_supply & SUPPLY_MASK;
   uint32_t expected_size = 0;
   if (args->has_rc_root) {
     expected_size += 32;
@@ -180,6 +187,9 @@ int parse_args(ArgsType *args) {
   }
   if (args->has_since) {
     expected_size += 8;
+  }
+  if (args->has_supply) {
+    expected_size += 32;
   }
 
   if (expected_size == 0) {
@@ -199,6 +209,10 @@ int parse_args(ArgsType *args) {
     if (args->has_since) {
       args->since = *(uint64_t *)cur;
       cur += 8;
+    }
+    if (args->has_supply) {
+      memcpy(args->supply_cell, cur, 32);
+      cur += 32;
     }
     CHECK2(cur == (seg.ptr + seg.size), ERROR_INVALID_MOL_FORMAT);
   }
@@ -412,6 +426,10 @@ int main() {
     // time lock is not used for administrators
     if (args.has_since) {
       err = check_since(args.since);
+      CHECK(err);
+    }
+    if (args.has_supply) {
+      err = check_supply(args.supply_cell);
       CHECK(err);
     }
     // ACP without signature is not used for administrators

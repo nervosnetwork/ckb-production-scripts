@@ -113,7 +113,7 @@ ${PROTOCOL_SCHEMA}:
 	curl -L -o $@ ${PROTOCOL_URL}
 
 ALL_C_SOURCE := $(wildcard c/rc_lock.c c/rc_lock_acp.h c/rc_lock_time_lock.h \
-	tests/rc_lock/rc_lock_sim.c tests/rc_lock/ckb_syscall_rc_lock_sim.h \
+	tests/rc_lock/rc_lock_sim.c tests/rc_lock/ckb_syscall_rc_lock_sim.h tests/rc_lock/rc_lock_supply.h\
 	c/rce_validator.c /always_success.c c/rce.h c/xudt_rce.c \
 	c/rce_validator.c tests/xudt_rce/*.c tests/xudt_rce/*.h\
 	c/validate_signature_rsa.h c/validate_signature_rsa.c)
@@ -157,7 +157,7 @@ build/rce_validator: c/rce_validator.c c/rce.h
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
-build/rc_lock: c/rc_lock.c c/rc_lock_acp.h c/rce.h c/secp256k1_lock.h build/secp256k1_data_info_20210801.h $(SECP256K1_SRC_20210801) deps/ckb-c-stdlib-20210801/ckb_identity.h
+build/rc_lock: c/rc_lock.c c/rc_lock_supply.h c/rc_lock_acp.h c/rce.h c/secp256k1_lock.h build/secp256k1_data_info_20210801.h $(SECP256K1_SRC_20210801) deps/ckb-c-stdlib-20210801/ckb_identity.h
 	$(CC) $(RC_LOCK_CFLAGS) $(LDFLAGS) -o $@ $<
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
