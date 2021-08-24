@@ -82,7 +82,7 @@ typedef struct ArgsType {
   int udt_minimum;  // used for ACP
 
   bool has_supply;
-  uint8_t supply_cell[32];  // type script hash
+  uint8_t info_cell[32];  // type script hash
 } ArgsType;
 
 // parsed from lock in witness
@@ -177,7 +177,7 @@ int parse_args(ArgsType *args) {
   args->has_rc_root = args->rc_lock_flags & RC_ROOT_MASK;
   args->has_acp = args->rc_lock_flags & ACP_MASK;
   args->has_since = args->rc_lock_flags & SINCE_MASK;
-  args->has_supply = args->has_supply & SUPPLY_MASK;
+  args->has_supply = args->rc_lock_flags & SUPPLY_MASK;
   uint32_t expected_size = 0;
   if (args->has_rc_root) {
     expected_size += 32;
@@ -211,7 +211,7 @@ int parse_args(ArgsType *args) {
       cur += 8;
     }
     if (args->has_supply) {
-      memcpy(args->supply_cell, cur, 32);
+      memcpy(args->info_cell, cur, 32);
       cur += 32;
     }
     CHECK2(cur == (seg.ptr + seg.size), ERROR_INVALID_MOL_FORMAT);
@@ -429,7 +429,7 @@ int main() {
       CHECK(err);
     }
     if (args.has_supply) {
-      err = check_supply(args.supply_cell);
+      err = check_supply(args.info_cell);
       CHECK(err);
     }
     // ACP without signature is not used for administrators
