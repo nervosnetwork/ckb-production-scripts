@@ -7,6 +7,8 @@ typedef unsigned __int128 uint128_t;
 enum SupplyErrorCode {
   ERROR_EXCEED_SUPPLY = 90,
   ERROR_SUPPLY_AMOUNT,
+  ERROR_BURN,
+  ERROR_DUPLICATED_INFO_CELL,
 };
 
 // <1 byte version> <16 bytes current supply> <16 bytes max supply> <32 bytes sUDT script hash>
@@ -166,6 +168,10 @@ int check_supply(uint8_t* cell_id) {
   // locate the output info cell
   err = iterate_by_type_script_hash(cell_id, CKB_SOURCE_OUTPUT, locate_info_cell, &ctx);
   CHECK(err);
+
+  CHECK2(ctx.input_info_cell_count == 1, ERROR_DUPLICATED_INFO_CELL);
+  CHECK2(ctx.output_info_cell_count == 1, ERROR_DUPLICATED_INFO_CELL);
+
   // check input/output info cells are same beginning with special index
   err = compare_cells_data(ctx.input_info_cell_index, ctx.output_info_cell_index);
   CHECK(err);
@@ -203,11 +209,7 @@ int check_supply(uint8_t* cell_id) {
     CHECK(err);
     CHECK2(temp_amount == ctx.output_current_supply, ERROR_SUPPLY_AMOUNT);
   } else {
-    uint128_t burned_amount = ctx.input_amount - ctx.output_amount;
-    uint128_t temp_amount = ctx.input_current_supply;
-    err = minus_assign_amount(&temp_amount, &burned_amount);
-    CHECK(err);
-    CHECK2(temp_amount == ctx.output_current_supply, ERROR_SUPPLY_AMOUNT);
+    CHECK2(false, ERROR_BURN);
   }
 
 exit:

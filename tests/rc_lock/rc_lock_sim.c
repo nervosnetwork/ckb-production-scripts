@@ -666,7 +666,7 @@ UTEST(supply, issued_amount_not_correct) {
   ASSERT_EQ(ERROR_SUPPLY_AMOUNT, r);
 }
 
-UTEST(supply, burn_amount_passed) {
+UTEST(supply, burn_amount) {
   init_input(&g_setting);
   g_setting.flags = IdentityFlagsCkb;
   g_setting.use_supply = true;
@@ -680,7 +680,7 @@ UTEST(supply, burn_amount_passed) {
   convert_setting_to_states();
 
   int r = simulator_main();
-  ASSERT_EQ(0, r);
+  ASSERT_EQ(ERROR_BURN, r);
 }
 
 UTEST_MAIN();
