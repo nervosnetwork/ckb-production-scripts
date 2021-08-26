@@ -8,7 +8,7 @@ enum SupplyErrorCode {
   ERROR_EXCEED_SUPPLY = 90,
   ERROR_SUPPLY_AMOUNT,
   ERROR_BURN,
-  ERROR_DUPLICATED_INFO_CELL,
+  ERROR_NO_INFO_CELL,
 };
 
 // <1 byte version> <16 bytes current supply> <16 bytes max supply> <32 bytes sUDT script hash>
@@ -39,13 +39,6 @@ int add_assign_amount(uint128_t* sum, const uint128_t* delta) {
   } else {
     return 0;
   }
-}
-
-int minus_assign_amount(uint128_t* sum, const uint128_t* delta) {
-  if (*sum < *delta)
-    return ERROR_SUPPLY_AMOUNT;
-  *sum -= *delta;
-  return 0;
 }
 
 typedef int (iterate_func_t)(size_t index, size_t source, SupplyContextType* ctx);
@@ -169,8 +162,8 @@ int check_supply(uint8_t* cell_id) {
   err = iterate_by_type_script_hash(cell_id, CKB_SOURCE_OUTPUT, locate_info_cell, &ctx);
   CHECK(err);
 
-  CHECK2(ctx.input_info_cell_count == 1, ERROR_DUPLICATED_INFO_CELL);
-  CHECK2(ctx.output_info_cell_count == 1, ERROR_DUPLICATED_INFO_CELL);
+  CHECK2(ctx.input_info_cell_count == 1, ERROR_NO_INFO_CELL);
+  CHECK2(ctx.output_info_cell_count == 1, ERROR_NO_INFO_CELL);
 
   // check input/output info cells are same beginning with special index
   err = compare_cells_data(ctx.input_info_cell_index, ctx.output_info_cell_index);
