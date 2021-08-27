@@ -57,6 +57,7 @@ pub const MAX_CYCLES: u64 = std::u64::MAX;
 pub const SIGNATURE_SIZE: usize = 65;
 
 // errors
+pub const CKB_INVALID_DATA: i8 = 4;
 pub const ERROR_ENCODING: i8 = -2;
 pub const ERROR_WITNESS_SIZE: i8 = -22;
 pub const ERROR_PUBKEY_BLAKE160_HASH: i8 = -31;
@@ -72,9 +73,16 @@ pub const ERROR_RCE_EMERGENCY_HALT: i8 = 54;
 pub const ERROR_RSA_VERIFY_FAILED: i8 = 42;
 pub const ERROR_INCORRECT_SINCE_VALUE: i8 = -24;
 pub const ERROR_ISO97962_INVALID_ARG9: i8 = 61;
+// sudt supply errors
+pub const ERROR_EXCEED_SUPPLY: i8 = 90;
+pub const ERROR_SUPPLY_AMOUNT: i8 = 91;
+pub const ERROR_BURN: i8 = 92;
+pub const ERROR_NO_INFO_CELL: i8 = 93;
 
 lazy_static! {
     pub static ref RC_LOCK: Bytes = Bytes::from(&include_bytes!("../../../build/rc_lock")[..]);
+    pub static ref SIMPLE_UDT: Bytes =
+        Bytes::from(&include_bytes!("../../../build/simple_udt")[..]);
     pub static ref SECP256K1_DATA_BIN: Bytes =
         Bytes::from(&include_bytes!("../../../build/secp256k1_data_20210801")[..]);
     pub static ref ALWAYS_SUCCESS: Bytes =
@@ -416,6 +424,41 @@ fn build_proofs(proofs: Vec<Vec<u8>>, proof_masks: Vec<u8>) -> SmtProofEntryVec 
         builder = builder.push(temp.build());
     }
     builder.build()
+}
+
+pub fn build_always_success_script() -> Script {
+    let data_hash = CellOutput::calc_data_hash(&ALWAYS_SUCCESS);
+    Script::new_builder()
+        .code_hash(data_hash.clone())
+        .hash_type(ScriptHashType::Data.into())
+        .build()
+}
+
+pub fn build_rc_lock_script(config: &mut TestConfig, args: Bytes) -> Script {
+    let args = if config.is_owner_lock() {
+        if config.scheme == TestScheme::OwnerLockMismatched {
+            config.id.blake160 = {
+                let mut buf = BytesMut::new();
+                buf.resize(20, 0);
+                buf.freeze()
+            };
+            config.gen_args()
+        } else {
+            config.gen_args()
+        }
+    } else {
+        if config.is_rc() {
+            config.gen_args()
+        } else {
+            args
+        }
+    };
+    let sighash_all_cell_data_hash = CellOutput::calc_data_hash(&RC_LOCK);
+    Script::new_builder()
+        .args(args.pack())
+        .code_hash(sighash_all_cell_data_hash.clone())
+        .hash_type(ScriptHashType::Data.into())
+        .build()
 }
 
 pub fn append_rc(
@@ -926,10 +969,14 @@ pub struct TestConfig {
     pub preimage_len: usize,
     pub sig_len: usize,
 
-    //
+    // since
     pub use_since: bool,
     pub args_since: u64,
     pub input_since: u64,
+
+    // sudt supply
+    pub use_supply: bool,
+    pub info_cell: [u8; 32],
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -962,6 +1009,7 @@ pub enum TestScheme2 {
 const RC_ROOT_MASK: u8 = 1;
 const ACP_MASK: u8 = 2;
 const SINCE_MASK: u8 = 4;
+const SUPPLY_MASK: u8 = 8;
 
 impl TestConfig {
     pub fn new(flags: u8, use_rc: bool) -> TestConfig {
@@ -1020,6 +1068,8 @@ impl TestConfig {
             args_since: 0,
             input_since: 0,
             use_iso9796_2: false,
+            use_supply: false,
+            info_cell: Default::default(),
         }
     }
 
@@ -1045,6 +1095,11 @@ impl TestConfig {
         self.use_since = true;
     }
 
+    pub fn set_sudt_supply(&mut self, cell_id: [u8; 32]) {
+        self.info_cell = cell_id;
+        self.use_supply = true;
+    }
+
     pub fn gen_args(&self) -> Bytes {
         let mut bytes = BytesMut::with_capacity(128);
         let mut rc_lock_flags: u8 = 0;
@@ -1061,13 +1116,17 @@ impl TestConfig {
 
             let mut rc_lock_args = Vec::<u8>::new();
 
-            // udt
+            // acp
             if self.acp_config.is_some() {
                 rc_lock_flags |= ACP_MASK;
             }
             // since
             if self.use_since {
                 rc_lock_flags |= SINCE_MASK;
+            }
+            // sudt supply
+            if self.use_supply {
+                rc_lock_flags |= SUPPLY_MASK;
             }
             rc_lock_args.push(rc_lock_flags);
 
@@ -1077,6 +1136,9 @@ impl TestConfig {
             }
             if self.use_since {
                 rc_lock_args.extend(self.args_since.to_le_bytes().iter());
+            }
+            if self.use_supply {
+                rc_lock_args.extend(self.info_cell.iter());
             }
             bytes.put(rc_lock_args.as_slice());
         }
@@ -1412,9 +1474,13 @@ pub fn assert_script_error(err: Error, err_code: i8) {
     //     ScriptError::ValidationFailure(err_code).input_lock_script(1)
     // );
 
-    assert!(err
-        .to_string()
-        .contains(format!("error code {}", err_code).as_str()));
+    let error_string = err.to_string();
+    assert!(
+        error_string.contains(format!("error code {}", err_code).as_str()),
+        "error_string: {}, expected_error_code: {}",
+        error_string,
+        err_code
+    );
 }
 
 pub fn gen_consensus() -> Consensus {

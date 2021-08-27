@@ -604,4 +604,83 @@ UTEST(exec, random) {
   ASSERT_TRUE(err != 0);
 }
 
+UTEST(supply, pass) {
+  init_input(&g_setting);
+  g_setting.flags = IdentityFlagsCkb;
+  g_setting.use_supply = true;
+  g_setting.input_current_supply = 1;
+  g_setting.input_max_supply = 100;
+  g_setting.output_current_supply = 1;
+  g_setting.output_max_supply = 100;
+  convert_setting_to_states();
+
+  int r = simulator_main();
+  ASSERT_EQ(0, r);
+}
+
+UTEST(supply, max_supply_changed) {
+  init_input(&g_setting);
+  g_setting.flags = IdentityFlagsCkb;
+  g_setting.use_supply = true;
+  g_setting.input_current_supply = 1;
+  g_setting.input_max_supply = 101;
+  g_setting.output_current_supply = 1;
+  g_setting.output_max_supply = 100;
+  convert_setting_to_states();
+
+  int r = simulator_main();
+  ASSERT_EQ(CKB_INVALID_DATA, r);
+}
+
+UTEST(supply, exceed_max_supply) {
+  init_input(&g_setting);
+  g_setting.flags = IdentityFlagsCkb;
+  g_setting.use_supply = true;
+  g_setting.input_current_supply = 1;
+  g_setting.input_max_supply = 100;
+  g_setting.output_current_supply = 201;
+  g_setting.output_max_supply = 100;
+  // issue 200, more than max supply 100
+  g_setting.input_sudt = 0;
+  g_setting.output_sudt = 200;
+  convert_setting_to_states();
+
+  int r = simulator_main();
+  ASSERT_EQ(ERROR_EXCEED_SUPPLY, r);
+}
+
+UTEST(supply, issued_amount_not_correct) {
+  init_input(&g_setting);
+  g_setting.flags = IdentityFlagsCkb;
+  g_setting.use_supply = true;
+  g_setting.input_current_supply = 1;
+  g_setting.input_max_supply = 100;
+  g_setting.output_current_supply = 2;
+  g_setting.output_max_supply = 100;
+  // issue 9 but actually is 2
+  g_setting.input_sudt = 0;
+  g_setting.output_sudt = 9;
+  convert_setting_to_states();
+
+  int r = simulator_main();
+  ASSERT_EQ(ERROR_SUPPLY_AMOUNT, r);
+}
+
+UTEST(supply, burn_amount) {
+  init_input(&g_setting);
+  g_setting.flags = IdentityFlagsCkb;
+  g_setting.use_supply = true;
+  g_setting.input_current_supply = 19;
+  g_setting.input_max_supply = 100;
+  g_setting.output_current_supply = 10;
+  g_setting.output_max_supply = 100;
+  // burn 9
+  g_setting.input_sudt = 9;
+  g_setting.output_sudt = 0;
+  convert_setting_to_states();
+
+  int r = simulator_main();
+  ASSERT_EQ(ERROR_BURN, r);
+}
+
 UTEST_MAIN();
