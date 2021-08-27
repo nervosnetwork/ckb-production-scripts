@@ -15,50 +15,15 @@ use lazy_static::lazy_static;
 use rand::{thread_rng, Rng, SeedableRng};
 
 use misc::{
-    assert_script_error, blake160, build_resolved_tx, debug_printer, gen_tx,
-    gen_tx_with_grouped_args, gen_witness_lock, sign_tx, sign_tx_by_input_group, sign_tx_hash,
-    DummyDataLoader, TestConfig, TestScheme, ALWAYS_SUCCESS, ERROR_DUPLICATED_INPUTS,
-    ERROR_DUPLICATED_OUTPUTS, ERROR_ENCODING, ERROR_NO_PAIR, ERROR_OUTPUT_AMOUNT_NOT_ENOUGH,
-    ERROR_PUBKEY_BLAKE160_HASH, ERROR_WITNESS_SIZE, IDENTITY_FLAGS_PUBKEY_HASH, MAX_CYCLES,
-    RC_LOCK,
+    assert_script_error, blake160, build_always_success_script, build_rc_lock_script,
+    build_resolved_tx, debug_printer, gen_tx, gen_tx_with_grouped_args, gen_witness_lock, sign_tx,
+    sign_tx_by_input_group, sign_tx_hash, DummyDataLoader, TestConfig, TestScheme, ALWAYS_SUCCESS,
+    ERROR_DUPLICATED_INPUTS, ERROR_DUPLICATED_OUTPUTS, ERROR_ENCODING, ERROR_NO_PAIR,
+    ERROR_OUTPUT_AMOUNT_NOT_ENOUGH, ERROR_PUBKEY_BLAKE160_HASH, ERROR_WITNESS_SIZE,
+    IDENTITY_FLAGS_PUBKEY_HASH, MAX_CYCLES, RC_LOCK,
 };
 
 mod misc;
-
-fn build_rc_lock_script(config: &mut TestConfig, args: Bytes) -> Script {
-    let args = if config.is_owner_lock() {
-        if config.scheme == TestScheme::OwnerLockMismatched {
-            config.id.blake160 = {
-                let mut buf = BytesMut::new();
-                buf.resize(20, 0);
-                buf.freeze()
-            };
-            config.gen_args()
-        } else {
-            config.gen_args()
-        }
-    } else {
-        if config.is_rc() {
-            config.gen_args()
-        } else {
-            args
-        }
-    };
-    let sighash_all_cell_data_hash = CellOutput::calc_data_hash(&RC_LOCK);
-    Script::new_builder()
-        .args(args.pack())
-        .code_hash(sighash_all_cell_data_hash.clone())
-        .hash_type(ScriptHashType::Data.into())
-        .build()
-}
-
-fn build_udt_script() -> Script {
-    let data_hash = CellOutput::calc_data_hash(&ALWAYS_SUCCESS);
-    Script::new_builder()
-        .code_hash(data_hash.clone())
-        .hash_type(ScriptHashType::Data.into())
-        .build()
-}
 
 #[test]
 fn test_unlock_by_anyone() {
@@ -363,7 +328,7 @@ fn test_only_pay_ckb() {
     let (prev_output, _) = data_loader.cells.remove(&input.previous_output()).unwrap();
     let prev_output = prev_output
         .as_builder()
-        .type_(Some(build_udt_script()).pack())
+        .type_(Some(build_always_success_script()).pack())
         .build();
     let prev_data = 44u128.to_le_bytes().to_vec().into();
     data_loader
@@ -377,7 +342,7 @@ fn test_only_pay_ckb() {
             .as_builder()
             .lock(script)
             .capacity(44u64.pack())
-            .type_(Some(build_udt_script()).pack())
+            .type_(Some(build_always_success_script()).pack())
             .build()])
         .set_outputs_data(vec![Bytes::from(44u128.to_le_bytes().to_vec()).pack()])
         .build();
@@ -407,7 +372,7 @@ fn test_only_pay_udt() {
     let input_capacity = prev_output.capacity();
     let prev_output = prev_output
         .as_builder()
-        .type_(Some(build_udt_script()).pack())
+        .type_(Some(build_always_success_script()).pack())
         .build();
     let prev_data = 43u128.to_le_bytes().to_vec().into();
     data_loader
@@ -421,7 +386,7 @@ fn test_only_pay_udt() {
             .as_builder()
             .lock(script)
             .capacity(input_capacity)
-            .type_(Some(build_udt_script()).pack())
+            .type_(Some(build_always_success_script()).pack())
             .build()])
         .set_outputs_data(vec![Bytes::from(44u128.to_le_bytes().to_vec()).pack()])
         .build();
@@ -449,7 +414,7 @@ fn test_udt_unlock_by_anyone() {
     let (prev_output, _) = data_loader.cells.remove(&input.previous_output()).unwrap();
     let prev_output = prev_output
         .as_builder()
-        .type_(Some(build_udt_script()).pack())
+        .type_(Some(build_always_success_script()).pack())
         .build();
     let prev_data = 43u128.to_le_bytes().to_vec().into();
     data_loader
@@ -463,7 +428,7 @@ fn test_udt_unlock_by_anyone() {
             .as_builder()
             .lock(script)
             .capacity(43u64.pack())
-            .type_(Some(build_udt_script()).pack())
+            .type_(Some(build_always_success_script()).pack())
             .build()])
         .set_outputs_data(vec![Bytes::from(44u128.to_le_bytes().to_vec()).pack()])
         .build();
@@ -492,7 +457,7 @@ fn test_udt_overflow() {
     let (prev_output, _) = data_loader.cells.remove(&input.previous_output()).unwrap();
     let prev_output = prev_output
         .as_builder()
-        .type_(Some(build_udt_script()).pack())
+        .type_(Some(build_always_success_script()).pack())
         .build();
     let prev_data = 43u128.to_le_bytes().to_vec().into();
     data_loader
@@ -506,7 +471,7 @@ fn test_udt_overflow() {
             .as_builder()
             .lock(script)
             .capacity(44u64.pack())
-            .type_(Some(build_udt_script()).pack())
+            .type_(Some(build_always_success_script()).pack())
             .build()])
         .set_outputs_data(vec![Bytes::from(44u128.to_le_bytes().to_vec()).pack()])
         .build();
@@ -535,7 +500,7 @@ fn test_extended_udt() {
     let (prev_output, _) = data_loader.cells.remove(&input.previous_output()).unwrap();
     let prev_output = prev_output
         .as_builder()
-        .type_(Some(build_udt_script()).pack())
+        .type_(Some(build_always_success_script()).pack())
         .build();
     let mut prev_data = 43u128.to_le_bytes().to_vec();
     // push junk data
@@ -554,7 +519,7 @@ fn test_extended_udt() {
             .as_builder()
             .lock(script)
             .capacity(44u64.pack())
-            .type_(Some(build_udt_script()).pack())
+            .type_(Some(build_always_success_script()).pack())
             .build()])
         .set_outputs_data(vec![Bytes::from(output_udt).pack()])
         .build();
