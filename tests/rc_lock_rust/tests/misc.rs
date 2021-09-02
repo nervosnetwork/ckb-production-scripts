@@ -1020,7 +1020,7 @@ impl TestConfig {
         let blake160 = if flags == IDENTITY_FLAGS_PUBKEY_HASH {
             pubkey_hash
         } else if flags == IDENTITY_FLAGS_ETHEREUM {
-            keccak160(&pubkey.serialize()[1..])
+            keccak160(&pubkey.as_ref()[..])
         } else {
             Bytes::from(&[0; 20][..])
         };
