@@ -56,6 +56,7 @@ $(SECP256K1_SRC):
 
 deps/mbedtls/library/libmbedcrypto.a:
 	cp deps/mbedtls-config-template.h deps/mbedtls/include/mbedtls/config.h
+	cd deps/mbedtls && (git apply --reject --ignore-space-change ../../deps/bignum.c.patch || echo "applying patch...")
 	make -C deps/mbedtls/library CC=${CC} LD=${LD} CFLAGS="${PASSED_MBEDTLS_CFLAGS}" libmbedcrypto.a
 
 build/impl.o: deps/ckb-c-std-lib/libc/src/impl.c

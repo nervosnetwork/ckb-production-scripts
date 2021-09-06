@@ -551,3 +551,68 @@ exit:
   }
   return err;
 }
+
+// optimize RSA 
+#define ciL    (sizeof(mbedtls_mpi_uint))         /* chars in limb  */
+#define biL    (ciL << 3)               /* bits  in limb  */
+#define biH    (ciL << 2)               /* half limb size */
+typedef unsigned __int128 mbedtls_t_udbl;
+
+#define MULADDC_INIT                    \
+{                                       \
+    mbedtls_t_udbl r;                           \
+    mbedtls_mpi_uint r0, r1;
+
+#define MULADDC_CORE                    \
+    r   = *(s++) * (mbedtls_t_udbl) b;          \
+    r0  = (mbedtls_mpi_uint) r;                   \
+    r1  = (mbedtls_mpi_uint)( r >> biL );         \
+    r0 += c;  r1 += (r0 <  c);          \
+    r0 += *d; r1 += (r0 < *d);          \
+    c = r1; *(d++) = r0;
+
+#define MULADDC_STOP                    \
+    }
+
+void mpi_mul_hlp2( size_t i, mbedtls_mpi_uint *s, mbedtls_mpi_uint *d, mbedtls_mpi_uint b )
+{
+    mbedtls_mpi_uint c = 0, t = 0;
+    for( ; i >= 16; i -= 16 )
+    {
+        MULADDC_INIT
+        MULADDC_CORE   MULADDC_CORE
+        MULADDC_CORE   MULADDC_CORE
+        MULADDC_CORE   MULADDC_CORE
+        MULADDC_CORE   MULADDC_CORE
+
+        MULADDC_CORE   MULADDC_CORE
+        MULADDC_CORE   MULADDC_CORE
+        MULADDC_CORE   MULADDC_CORE
+        MULADDC_CORE   MULADDC_CORE
+        MULADDC_STOP
+    }
+
+    for( ; i >= 8; i -= 8 )
+    {
+        MULADDC_INIT
+        MULADDC_CORE   MULADDC_CORE
+        MULADDC_CORE   MULADDC_CORE
+
+        MULADDC_CORE   MULADDC_CORE
+        MULADDC_CORE   MULADDC_CORE
+        MULADDC_STOP
+    }
+
+    for( ; i > 0; i-- )
+    {
+        MULADDC_INIT
+        MULADDC_CORE
+        MULADDC_STOP
+    }
+    t++;
+
+    do {
+        *d += c; c = ( *d < c ); d++;
+    }
+    while( c != 0 );
+}

@@ -773,7 +773,30 @@ exit:
   return err;
 }
 
+int rsa_bench(void) {
+  const char* sig = "0101000601000100E16057C1EAAE0326729925DB9733B45A80401F9F876FF7B8F95EC77334F54FF0016D7554C8EE40F2DFC3807CA2160D674FE2ABC3FB598E083EE610238F9F3DB401A09686FF025A668943133DA102E9B9F6C9B845776941FD2EF57D4035500E50FA74AFD8D0160C0692B39D5EB1AFD5A165D526371E7036680FFC014C2AD46CB85F26A4BCC9FE598896E2AFC6762BF705142BCC70815C2AD1D0093B16EEBA99E11D3C9162414AB59481B353B0A3C98030DB1E5E33B443A93283B1A72066282998F1D8C5BBF0A6699446B912AD0B3F7D6C976F0CF6B3CF1ABC3708399E770AD7A093A7B4FE669DB53817E54E68CEB2CD7B3D1635BBA58D1680BCB69D04CCC9294F";
+  const char* msg = "0102030400000000000000000000000000000000000000000000000000000000";
+
+  int err = 0;
+  uint32_t sig_len = 0;
+  uint8_t sig_buf[1024 * 2];
+  uint32_t msg_len = 0;
+  uint8_t msg_buf[1024 * 2];
+  sig_len = read_string(sig, sig_buf, sizeof(sig_buf));
+  msg_len = read_string(msg, msg_buf, sizeof(msg_buf));
+  err = validate_signature(NULL, sig_buf, sig_len, msg_buf, msg_len, NULL,
+                           NULL);
+  CHECK(err);
+
+exit:
+  return err;
+}
+
 int main(int argc, const char* argv[]) {
+  if (argc >= 2 && strcmp(argv[1], "bench") == 0){
+    return rsa_bench();
+  }
+
   if (argc >= 2) {
     if (strcmp(argv[1], "ckbvm") == 0) {
       return ckbvm_main(argc, argv);

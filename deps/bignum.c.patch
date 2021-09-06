@@ -1,0 +1,15 @@
+diff --git a/library/bignum.c b/library/bignum.c
+index 9cc5d66e3..c49e6e115 100644
+--- a/library/bignum.c
++++ b/library/bignum.c
+@@ -1544,6 +1544,10 @@ __attribute__ ((noinline))
+ #endif
+ void mpi_mul_hlp( size_t i, mbedtls_mpi_uint *s, mbedtls_mpi_uint *d, mbedtls_mpi_uint b )
+ {
++    extern void mpi_mul_hlp2( size_t i, mbedtls_mpi_uint *s, mbedtls_mpi_uint *d, mbedtls_mpi_uint b );    
++    mpi_mul_hlp2(i, s, d, b);
++    return;
++
+     mbedtls_mpi_uint c = 0, t = 0;
+ 
+ #if defined(MULADDC_HUIT)
