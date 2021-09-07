@@ -792,6 +792,67 @@ exit:
   return err;
 }
 
+#if defined(RSA_FUZZER) || defined(RSA_COVERAGE)
+int fuzz_data(uint8_t *data, size_t size) {
+  if (size < (PLACEHOLDER_SIZE*2 + 32)) {
+    return 0;
+  }
+
+  RsaInfo rsa_info;
+  rsa_info.md_type = CKB_MD_SHA256;
+  rsa_info.key_size = CKB_KEYSIZE_1024;
+  rsa_info.algorithm_id = CKB_VERIFY_RSA;
+  rsa_info.padding = CKB_PKCS_15;
+  rsa_info.E = 65537;
+
+  uint8_t* sig_buf = (uint8_t*)&rsa_info;
+  uint32_t sig_len = sizeof(rsa_info);
+  uint8_t msg_buf[32];
+  uint32_t msg_len = 32;
+
+  memcpy(rsa_info.N, data, PLACEHOLDER_SIZE);
+  if (rsa_info.N[PLACEHOLDER_SIZE-1] == 0) {
+    rsa_info.N[PLACEHOLDER_SIZE-1] = 1;
+  }
+  memcpy(rsa_info.sig, data+PLACEHOLDER_SIZE, PLACEHOLDER_SIZE);
+  memcpy(msg_buf, data+PLACEHOLDER_SIZE*2, 32);
+
+  validate_signature(NULL, sig_buf, sig_len, msg_buf, msg_len, NULL,NULL);
+  return 0;
+}
+
+#if defined(RSA_FUZZER)
+int LLVMFuzzerTestOneInput(uint8_t *data, size_t size) {
+  return fuzz_data(data, size);
+}
+#elif defined(RSA_COVERAGE)
+#include <stdio.h>
+#include <stdlib.h>
+
+
+int main(int argc, char **argv) {
+  fprintf(stderr, "StandaloneFuzzTargetMain: running %d inputs\n", argc - 1);
+  for (int i = 1; i < argc; i++) {
+    fprintf(stderr, "Running: %s\n", argv[i]);
+    FILE *f = fopen(argv[i], "r");
+    assert(f);
+    fseek(f, 0, SEEK_END);
+    size_t len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    unsigned char *buf = (unsigned char *)malloc(len);
+    size_t n_read = fread(buf, 1, len, f);
+    fclose(f);
+    assert(n_read == len);
+    fuzz_data(buf, len);
+    free(buf);
+    fprintf(stderr, "Done:    %s: (%zd bytes)\n", argv[i], n_read);
+  }
+}
+#else
+#error "error"
+#endif
+
+#else
 int main(int argc, const char* argv[]) {
   if (argc >= 2 && strcmp(argv[1], "bench") == 0){
     return rsa_bench();
@@ -834,3 +895,4 @@ int main(int argc, const char* argv[]) {
 exit:
   return err;
 }
+#endif

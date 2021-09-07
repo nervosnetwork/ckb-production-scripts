@@ -3,5 +3,5 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 mkdir -p build.simulator
 cd build.simulator
 cmake -DCMAKE_C_COMPILER=clang ../../..
-make all
+make validate_signature_rsa
 ../build.simulator/validate_signature_rsa

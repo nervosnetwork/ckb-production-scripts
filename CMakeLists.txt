@@ -2,8 +2,15 @@ cmake_minimum_required(VERSION 3.12)
 project(ckb_production_scripts_simulator C)
 
 set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_COMPILER clang)
+
 # uncomment it for sanitize
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fsanitize=undefined")
+
+# uncomment it for fuzz
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-instr-generate -fcoverage-mapping")
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=fuzzer,address,undefined")
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O1")
 
 # uncomment it for coverage test
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage")
@@ -103,3 +110,14 @@ target_link_libraries(validate_signature_rsa mbedtls)
 add_executable(dlopen_sim tests/validate_signature_rsa/dlopen_sim.c)
 target_compile_definitions(dlopen_sim PUBLIC -D_FILE_OFFSET_BITS=64 -DCKB_DECLARATION_ONLY)
 #target_include_directories(dlopen_sim PUBLIC deps/ckb-c-stdlib-20210413/libc)
+
+
+add_executable(rsa_fuzzer tests/validate_signature_rsa/validate_signature_rsa_sim.c c/validate_signature_rsa.h)
+target_compile_definitions(rsa_fuzzer PUBLIC -D_FILE_OFFSET_BITS=64 -DCKB_DECLARATION_ONLY -DRSA_FUZZER)
+target_include_directories(rsa_fuzzer PUBLIC deps/ckb-c-stdlib-20210413/libc)
+target_link_libraries(rsa_fuzzer mbedtls)
+
+add_executable(rsa_coverage tests/validate_signature_rsa/validate_signature_rsa_sim.c c/validate_signature_rsa.h)
+target_compile_definitions(rsa_coverage PUBLIC -D_FILE_OFFSET_BITS=64 -DCKB_DECLARATION_ONLY -DRSA_COVERAGE)
+target_compile_options(rsa_coverage PUBLIC -fprofile-instr-generate -fcoverage-mapping)
+target_link_libraries(rsa_coverage mbedtls)

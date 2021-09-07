@@ -1,0 +1,6 @@
+cmake-build-debug
+fuzz-*.log
+corpus
+crash-*
+coverage
+default.profraw 
