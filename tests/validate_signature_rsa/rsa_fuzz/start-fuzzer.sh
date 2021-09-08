@@ -6,7 +6,7 @@ mkdir -p cmake-build-debug
 cd cmake-build-debug
 export CC=clang
 export CXX=clang
-cmake -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Debug ../../../..
+cmake -DCKB_USE_FUZZ=1 -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Debug ../../../..
 make rsa_fuzzer
 make rsa_coverage
 cd ..

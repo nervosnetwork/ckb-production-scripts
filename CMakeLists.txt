@@ -4,17 +4,24 @@ project(ckb_production_scripts_simulator C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_COMPILER clang)
 
-# uncomment it for sanitize
-#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fsanitize=undefined")
+# pass "-DCKB_USE_SANITIZE=1" to enable sanitize
+if(CKB_USE_SANITIZE)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fsanitize=undefined")
+endif()
 
-# uncomment it for fuzz
-#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-instr-generate -fcoverage-mapping")
-#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=fuzzer,address,undefined")
-#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O1")
+# pass "-DCKB_USE_FUZZ=1" to enable fuzz
+if(CKB_USE_FUZZ)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fprofile-instr-generate -fcoverage-mapping")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=fuzzer,address,undefined")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O1")
+endif()
 
-# uncomment it for coverage test
-#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage")
-#add_definitions(-DCKB_COVERAGE)
+# pass "-DCKB_USE_COVERAGE" to enable coverage test
+if(CKB_USE_COVERAGE)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage")
+    add_definitions(-DCKB_COVERAGE)
+endif()
+
 add_definitions(-DCKB_SIMULATOR)
 add_definitions(-D__SHARED_LIBRARY__)
 add_definitions(-DCKB_DECLARATION_ONLY)
