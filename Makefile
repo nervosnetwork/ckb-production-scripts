@@ -6,6 +6,8 @@ CFLAGS := -fPIC -O3 -fno-builtin-printf -fno-builtin-memcmp -nostdinc -nostdlib 
 LDFLAGS := -Wl,-static -fdata-sections -ffunction-sections -Wl,--gc-sections
 SECP256K1_SRC := deps/secp256k1/src/ecmult_static_pre_context.h
 XUDT_RCE_CFLAGS=$(subst ckb-c-std-lib,ckb-c-stdlib-20210713,$(CFLAGS)) -I deps/sparse-merkle-tree/c
+AUTH_CFLAGS=$(subst ckb-c-std-lib,ckb-c-stdlib-20210713,$(CFLAGS)) -I deps/mbedtls/include
+
 PROTOCOL_HEADER := c/blockchain.h
 PROTOCOL_SCHEMA := c/blockchain.mol
 PROTOCOL_VERSION := d75e4c56ffa40e17fd2fe477da3f98c5578edcd1
@@ -21,7 +23,7 @@ PASSED_MBEDTLS_CFLAGS := -O3 -fPIC -nostdinc -nostdlib -DCKB_DECLARATION_ONLY -I
 # docker pull nervos/ckb-riscv-gnu-toolchain:gnu-bionic-20191012
 BUILDER_DOCKER := nervos/ckb-riscv-gnu-toolchain@sha256:aae8a3f79705f67d505d1f1d5ddc694a4fd537ed1c7e9622420a470d59ba2ec3
 
-all: build/simple_udt build/anyone_can_pay build/always_success build/validate_signature_rsa build/xudt_rce build/rce_validator
+all: build/simple_udt build/anyone_can_pay build/always_success build/validate_signature_rsa build/xudt_rce build/rce_validator build/auth
 
 all-via-docker: ${PROTOCOL_HEADER}
 	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make"
@@ -86,6 +88,13 @@ validate_signature_rsa_clean:
 	make -C deps/mbedtls/library clean
 	rm -f build/validate_signature_rsa
 	rm -f build/*.o
+
+### Auth
+build/auth: c/auth.c deps/mbedtls/library/libmbedcrypto.a
+	$(CC) $(AUTH_CFLAGS) $(LDFLAGS) -D__SHARED_LIBRARY__ -fPIC -fPIE -pie -Wl,--dynamic-list c/rsa.syms -o $@ $^
+	$(OBJCOPY) --only-keep-debug $@ $@.debug
+	$(OBJCOPY) --strip-debug --strip-all $@
+
 
 ${PROTOCOL_SCHEMA}:
 	curl -L -o $@ ${PROTOCOL_URL}

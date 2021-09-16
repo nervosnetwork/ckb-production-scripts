@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "blake2b.h"
 #include "mbedtls/md.h"
 #include "mbedtls/md_internal.h"
 #include "mbedtls/memory_buffer_alloc.h"
@@ -20,9 +21,12 @@
 #define mbedtls_printf(x, ...) (void)0
 #endif
 
+#define BLAKE160_SIZE 20
+#define BLAKE2B_BLOCK_SIZE 32
+
 enum ErrorCode {
   // 0 is the only success code. We can use 0 directly.
-  CKB_SUCCESS = 0,
+  // CKB_SUCCESS = 0,
   // error code is starting from 40, to avoid conflict with
   // common error code in other scripts.
   ERROR_RSA_INVALID_PARAM1 = 40,
@@ -78,6 +82,10 @@ int validate_signature_iso9796_2(void *, const uint8_t *sig_buf,
                                  size_t sig_size, const uint8_t *msg_buf,
                                  size_t msg_size, uint8_t *out,
                                  size_t *out_len);
+int validate_signature_iso9796_2_batch(void *_p, const uint8_t *sig_buf,
+                                       size_t sig_len, const uint8_t *msg_buf,
+                                       size_t msg_len, uint8_t *out,
+                                       size_t *out_len);
 
 bool is_valid_iso97962_md_type(uint8_t md) {
   return md == CKB_MD_SHA1 || md == CKB_MD_SHA224 || md == CKB_MD_SHA256 ||
@@ -114,6 +122,21 @@ uint32_t get_key_size(uint8_t key_size_enum) {
     ASSERT(false);
     return 0;
   }
+}
+
+void get_pubkey_hash(RsaInfo *info, uint8_t *hash) {
+  uint8_t temp[BLAKE2B_BLOCK_SIZE];
+
+  uint32_t key_size = get_key_size(info->key_size);
+  uint32_t total = calculate_rsa_info_length(key_size);
+  uint32_t pubkey_size = total - key_size / 8;
+
+  blake2b_state ctx;
+  blake2b_init(&ctx, BLAKE2B_BLOCK_SIZE);
+  blake2b_update(&ctx, info, pubkey_size);
+  blake2b_final(&ctx, temp, BLAKE2B_BLOCK_SIZE);
+
+  memcpy(hash, temp, BLAKE160_SIZE);
 }
 
 int check_pubkey(mbedtls_mpi *N, mbedtls_mpi *E) {
@@ -173,7 +196,7 @@ __attribute__((visibility("default"))) int load_prefilled_data(void *data,
                                                                size_t *len) {
   (void)data;
   *len = 0;
-  return CKB_SUCCESS;
+  return 0;
 }
 
 uint8_t *get_rsa_signature(RsaInfo *info) {
@@ -192,8 +215,6 @@ int validate_signature_rsa(void *prefilled_data,
                            size_t msg_size, uint8_t *output,
                            size_t *output_len) {
   (void)prefilled_data;
-  (void)output;
-  (void)output_len;
   int err = ERROR_RSA_ONLY_INIT;
   uint8_t hash_buf[MBEDTLS_MD_MAX_SIZE] = {0};
   uint32_t hash_size = 0;
@@ -253,7 +274,12 @@ int validate_signature_rsa(void *prefilled_data,
     goto exit;
   }
 
-  err = CKB_SUCCESS;
+  if (output != NULL && output_len != NULL && *output_len >= BLAKE160_SIZE) {
+    get_pubkey_hash(input_info, output);
+    *output_len = BLAKE160_SIZE;
+  }
+
+  err = 0;
 
 exit:
   if (is_rsa_inited) mbedtls_rsa_free(&rsa);
@@ -289,6 +315,9 @@ __attribute__((visibility("default"))) int validate_signature(
   } else if (id == CKB_VERIFY_ISO9796_2) {
     return validate_signature_iso9796_2(prefilled_data, sig_buf, sig_len,
                                         msg_buf, msg_len, output, output_len);
+  } else if (id == CKB_VERIFY_ISO9796_2_BATCH) {
+    return validate_signature_iso9796_2_batch(
+        prefilled_data, sig_buf, sig_len, msg_buf, msg_len, output, output_len);
   } else {
     return ERROR_RSA_INVALID_ID;
   }
@@ -482,6 +511,7 @@ int validate_signature_iso9796_2(void *_p, const uint8_t *sig_buf,
   if (sig_len < sizeof(RsaInfo)) {
     return ERROR_ISO97962_INVALID_ARG12;
   }
+
   uint32_t key_size_byte = get_key_size(info->key_size) / 8;
 
   uint8_t *sig = NULL;
@@ -538,9 +568,10 @@ int validate_signature_iso9796_2(void *_p, const uint8_t *sig_buf,
                         new_msg, &new_msg_len);
   CHECK(err);
 
-  uint32_t copy_size = new_msg_len > *out_len ? *out_len : new_msg_len;
-  memcpy(out, new_msg, copy_size);
-  *out = copy_size;
+  if (out != NULL && out_len != NULL && *out_len >= BLAKE160_SIZE) {
+    get_pubkey_hash(info, out);
+    *out_len = BLAKE160_SIZE;
+  }
 
   err = 0;
 exit:
@@ -549,5 +580,42 @@ exit:
   } else {
     mbedtls_printf("validate_signature_iso9796_2() failed: %d\n", err);
   }
+  return err;
+}
+
+// It costs 4 calls to validate full 32-bytes message.
+// The layout of buffer "sig" should be:
+// RsaInfo + sig[key_size/8] + sig[key_size/8] + sig[key_size/8]
+int validate_signature_iso9796_2_batch(void *_p, const uint8_t *sig_buf,
+                                       size_t sig_len, const uint8_t *msg_buf,
+                                       size_t msg_len, uint8_t *out,
+                                       size_t *out_len) {
+  (void)_p;
+  int err = 0;
+
+  RsaInfo *info = (RsaInfo *)sig_buf;
+  uint32_t key_size = get_key_size(info->key_size);
+  CHECK2(key_size != 0, ERROR_ISO97962_INVALID_ARG9);
+  uint32_t one_sig_len = calculate_rsa_info_length(key_size);
+  uint32_t raw_sig_len = key_size / 8;
+
+  uint32_t expected_sig_len = one_sig_len + 3 * raw_sig_len;
+  CHECK2(sig_len == expected_sig_len, ERROR_ISO97962_INVALID_ARG9);
+
+  for (int index = 0; index < 4; index++) {
+    uint8_t sig_shard[one_sig_len];
+    const uint8_t *msg_shard = msg_buf + index * 8;
+    uint32_t sig_shard_len = one_sig_len;
+
+    memcpy(sig_shard, sig_buf, 8);
+    memcpy(sig_shard + 8, sig_buf + 8 + index * raw_sig_len, raw_sig_len);
+
+    err = validate_signature_iso9796_2(NULL, sig_shard, sig_shard_len,
+                                       msg_shard, 8, out, out_len);
+    CHECK(err);
+    CHECK2(*out_len >= BLAKE160_SIZE, ERROR_WRONG_PUBKEY);
+  }
+
+exit:
   return err;
 }
