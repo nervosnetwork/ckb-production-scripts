@@ -257,8 +257,7 @@ void export_public_key(const mbedtls_rsa_context* rsa, RsaInfo* info) {
   mbedtls_mpi_write_binary_le(&E, (unsigned char*)&info->E, sizeof(info->E));
 }
 
-int test_validate_signature(uint8_t key_size_enum, uint8_t md_type,
-                            uint8_t padding) {
+int test_rsa_each(uint8_t key_size_enum, uint8_t md_type, uint8_t padding) {
   int err = 0;
 
   int alloc_buff_size = 1024 * 1024;
@@ -287,34 +286,16 @@ int test_validate_signature(uint8_t key_size_enum, uint8_t md_type,
 
   export_public_key(&rsa, info);
 
-  uint8_t output[20];
-  size_t output_len = 20;
+  uint8_t pubkey_hash[20];
+  size_t pubkey_hash_size = 20;
 
-#if 0
-  printf("sig = ");
-  print_string(sig_buff, sig_buff_size);
-  printf("msg = ");
-  print_string(msg, sizeof(msg));
-#endif
-  err = validate_signature(NULL, sig_buff, sig_buff_size, msg, sizeof(msg),
-                           output, &output_len);
+  get_pubkey_hash(info, pubkey_hash);
+  err = ckb_auth_validate(AuthAlgorithmIdRsa, sig_buff, sig_buff_size, msg,
+                          sizeof(msg), pubkey_hash, pubkey_hash_size);
   CHECK(err);
 
   err = 0;
 exit:
-  if (err == 0) {
-    mbedtls_printf(
-        "test_validate_signature() passed: key size = %d, md_type = %d, "
-        "padding = "
-        "%d\n",
-        key_size, md_type, padding);
-  } else {
-    mbedtls_printf(
-        "test_validate_signature() failed: key size = %d, md_type = %d, "
-        "padding = "
-        "%d\n",
-        key_size, md_type, padding);
-  }
   return err;
 }
 
@@ -326,19 +307,15 @@ void reset_rsa_info(RsaInfo* info) {
 }
 
 // cover all test cases
-int validate_signature_all_test(void) {
+int test_rsa(void) {
   int err = 0;
-  uint8_t md_type_set[] = {CKB_MD_SHA224, CKB_MD_SHA256, CKB_MD_SHA384,
-                           CKB_MD_SHA512};
-  uint8_t key_size_set[] = {CKB_KEYSIZE_1024, CKB_KEYSIZE_2048,
-                            CKB_KEYSIZE_4096};
-  //  uint8_t key_size_set[] = {CKB_KEYSIZE_1024};
+  uint8_t md_type_set[] = {CKB_MD_SHA256};
+  uint8_t key_size_set[] = {CKB_KEYSIZE_1024, CKB_KEYSIZE_2048};
   uint8_t padding_set[] = {CKB_PKCS_15, CKB_PKCS_21};
   for (int i = 0; i < count_of(key_size_set); i++) {
     for (int j = 0; j < count_of(md_type_set); j++) {
       for (int k = 0; k < count_of(padding_set); k++) {
-        err = test_validate_signature(key_size_set[i], md_type_set[j],
-                                      padding_set[k]);
+        err = test_rsa_each(key_size_set[i], md_type_set[j], padding_set[k]);
         CHECK(err);
       }
     }
@@ -346,37 +323,74 @@ int validate_signature_all_test(void) {
   err = 0;
 exit:
   if (err == 0) {
-    mbedtls_printf("validate_signature_all_test() passed.\n");
+    printf("test_rsa() passed.\n");
   } else {
-    mbedtls_printf("validate_signature_all_test() failed.\n");
+    printf("test_rsa() failed.\n");
   }
   return err;
 }
 
-int iso97962_test(void) {
+int iso9796_2_sign(mbedtls_rsa_context* rsa, uint8_t* msg8, uint8_t* sig) {
   int err = 0;
   ISO97962Encoding enc = {0};
   iso97962_init(&enc, 128, MBEDTLS_MD_SHA1, false);
-  uint8_t msg[] = {1, 2, 3, 4, 5, 6, 7, 8};
-  uint32_t msg_len = sizeof(msg);
 
   uint8_t block[128] = {0};
-  err = iso97962_sign(&enc, msg, sizeof(msg), block, sizeof(block));
+  err = iso97962_sign(&enc, msg8, 8, block, sizeof(block));
   CHECK(err);
-  uint8_t new_msg[128];
-  uint32_t new_msg_len = 128;
-  err = iso97962_verify(&enc, block, sizeof(block), NULL, 0, new_msg,
-                        &new_msg_len);
-  CHECK(err);
-  ASSERT(new_msg_len == msg_len);
-  ASSERT(memcmp(msg, new_msg, msg_len) == 0);
 
-  err = 0;
+  mbedtls_test_rnd_pseudo_info rnd_info;
+  memset(&rnd_info, 0, sizeof(mbedtls_test_rnd_pseudo_info));
+  err = mbedtls_rsa_private(rsa, &mbedtls_test_rnd_pseudo_rand, &rnd_info,
+                            block, sig);
+  CHECK(err);
+exit:
+  return err;
+}
+
+int test_iso9796_2(void) {
+  // msg to sign
+  uint8_t msg[32] = {1, 2, 3, 4};
+  uint32_t sig_len = sizeof(RsaInfo) + 128 * 3;
+  // signature
+  uint8_t sig[sig_len];
+
+  int err = 0;
+
+  int alloc_buff_size = 1024 * 12;
+  unsigned char alloc_buff[alloc_buff_size];
+  mbedtls_memory_buffer_alloc_init(alloc_buff, alloc_buff_size);
+
+  RsaInfo* info = (RsaInfo*)sig;
+
+  mbedtls_rsa_context rsa;
+
+  info->algorithm_id = CKB_VERIFY_ISO9796_2_BATCH;
+  info->key_size = CKB_KEYSIZE_1024;
+  info->padding = CKB_PKCS_15;
+  info->md_type = MBEDTLS_MD_SHA1;
+
+  err = gen_rsa_key(1024, &rsa, info);
+  CHECK(err);
+  export_public_key(&rsa, info);
+
+  for (int i = 0; i < 4; i++) {
+    err = iso9796_2_sign(&rsa, msg + i * 8, sig + 8 + 128 + 128 * i);
+    CHECK(err);
+  }
+
+  uint8_t pubkey_hash[20];
+  get_pubkey_hash(info, pubkey_hash);
+
+  err = ckb_auth_validate(AuthAlgorithmIdIso97962, sig, sig_len, msg, 32,
+                          pubkey_hash, 20);
+  CHECK(err);
+
 exit:
   if (err == 0) {
-    mbedtls_printf("iso97962_test() passed.\n");
+    printf("test_iso9796_2() passed.\n");
   } else {
-    mbedtls_printf("iso97962_test() failed.\n");
+    printf("test_iso9796_2() failed.\n");
   }
   return err;
 }
@@ -434,51 +448,15 @@ exit:
   return err;
 }
 
-// validate_signature_rsa ckbvm <command> <arg1> <arg2> <arg3>
-// validate_signature_rsa ckbvm -iso97962_test2
-// validate_signature_rsa ckbvm -iso97962_test3
-// validate_signature_rsa ckbvm -rsa sig_buf_in_hex msg_buf_in_hex
-// validate_signature_rsa ckbvm -rsa sig_buf_in_hex msg_buf_in_hex
-// ...
-int ckbvm_main(int argc, const char* argv[]) {
-  int err = 0;
-  if (argc <= 2) {
-    return -1;
-  }
-
-  if (strcmp(argv[2], "-rsa") == 0) {
-    if (argc != 5) return -1;
-    uint32_t sig_len = 0;
-    uint8_t sig_buf[1024 * 2];
-    uint32_t msg_len = 0;
-    uint8_t msg_buf[1024 * 2];
-    sig_len = read_string(argv[3], sig_buf, sizeof(sig_buf));
-    msg_len = read_string(argv[4], msg_buf, sizeof(msg_buf));
-    err = validate_signature(NULL, sig_buf, sig_len, msg_buf, msg_len, NULL,
-                             NULL);
-    CHECK(err);
-  }
-
-  err = 0;
-exit:
-  return err;
-}
-
 int main(int argc, const char* argv[]) {
-  if (argc >= 2) {
-    if (strcmp(argv[1], "ckbvm") == 0) {
-      return ckbvm_main(argc, argv);
-    }
-  }
-
   int err = 0;
 
-  err = validate_signature_all_test();
+  err = test_rsa();
   CHECK(err);
 
-  err = iso97962_test();
+  err = test_iso9796_2();
   CHECK(err);
-  err = 0;
+
 exit:
   return err;
 }

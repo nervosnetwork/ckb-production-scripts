@@ -235,7 +235,7 @@ int rsa_sign(mbedtls_rsa_context* rsa, const uint8_t* msg_buf,
                                MBEDTLS_RSA_PRIVATE, md_type, hash_size,
                                hash_buf, sig);
   CHECK(err);
-  err = CKB_SUCCESS;
+  err = 0;
 exit:
   return err;
 }
@@ -289,7 +289,7 @@ int rsa_random(void) {
 
   err = 0;
 exit:
-  if (err == CKB_SUCCESS) {
+  if (err == 0) {
     mbedtls_printf("rsa_random() passed.\n");
   } else {
     mbedtls_printf("rsa_random() failed.\n");

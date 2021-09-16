@@ -435,9 +435,9 @@ exit:
 
 // dynamic linking entry
 int ckb_auth_validate(uint8_t auth_algorithm_id, const uint8_t *signature,
-                      size_t signature_size, const uint8_t *message,
-                      size_t message_size, uint8_t *pubkey_hash,
-                      size_t pubkey_hash_size) {
+                      uint32_t signature_size, const uint8_t *message,
+                      uint32_t message_size, uint8_t *pubkey_hash,
+                      uint32_t pubkey_hash_size) {
   int err = 0;
   CHECK2(signature != NULL, ERROR_INVALID_ARG);
   CHECK2(message != NULL, ERROR_INVALID_ARG);
