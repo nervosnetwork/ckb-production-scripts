@@ -94,7 +94,7 @@ add_library(mbedtls
     ../../deps/mbedtls/library/version_features.c
     ../../deps/mbedtls/library/xtea.c)
 
-add_executable(auth ../../tests/auth/auth_sim.c ../../tests/auth/ckb_syscall_auth_sim.h)
-target_compile_definitions(auth PUBLIC -D_FILE_OFFSET_BITS=64 -DCKB_DECLARATION_ONLY)
-target_include_directories(auth PUBLIC deps/ckb-c-stdlib-20210713/libc)
-target_link_libraries(auth mbedtls)
+add_executable(auth_simulator ../../tests/auth/auth_sim.c ../../tests/auth/ckb_syscall_auth_sim.h)
+target_compile_definitions(auth_simulator PUBLIC -D_FILE_OFFSET_BITS=64 -DCKB_DECLARATION_ONLY)
+target_include_directories(auth_simulator PUBLIC deps/ckb-c-stdlib-20210713/libc)
+target_link_libraries(auth_simulator mbedtls)

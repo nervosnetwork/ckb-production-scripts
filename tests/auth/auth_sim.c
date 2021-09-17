@@ -257,6 +257,45 @@ void export_public_key(const mbedtls_rsa_context* rsa, RsaInfo* info) {
   mbedtls_mpi_write_binary_le(&E, (unsigned char*)&info->E, sizeof(info->E));
 }
 
+bool g_switch_to_exec = false;
+int ckb_auth_validate_stub(uint8_t auth_algorithm_id, const uint8_t* signature,
+                           uint32_t signature_size, const uint8_t* message,
+                           uint32_t message_size, uint8_t* pubkey_hash,
+                           uint32_t pubkey_hash_size) {
+  int err = 0;
+  if (g_switch_to_exec) {
+    CkbBinaryArgsType bin = {0};
+    ckb_exec_reset(&bin);
+    uint8_t code_hash[32] = {0};
+    uint8_t hash_type = 0;
+    err = ckb_exec_append(&bin, code_hash, sizeof(code_hash));
+    CHECK(err);
+    err = ckb_exec_append(&bin, &hash_type, 1);
+    CHECK(err);
+    err = ckb_exec_append(&bin, &auth_algorithm_id, 1);
+    CHECK(err);
+    err = ckb_exec_append(&bin, (uint8_t*)signature, signature_size);
+    CHECK(err);
+    err = ckb_exec_append(&bin, (uint8_t*)message, message_size);
+    CHECK(err);
+    err = ckb_exec_append(&bin, pubkey_hash, pubkey_hash_size);
+    CHECK(err);
+
+    CkbHexArgsType hex = {0};
+    err = ckb_exec_encode_params(&bin, &hex);
+
+    char* argv[2] = {hex.buff, 0};
+    return simulator_main(1, argv);
+  } else {
+    return ckb_auth_validate(auth_algorithm_id, signature, signature_size,
+                             message, message_size, pubkey_hash,
+                             pubkey_hash_size);
+  }
+
+exit:
+  return err;
+}
+
 int test_rsa_each(uint8_t key_size_enum, uint8_t md_type, uint8_t padding) {
   int err = 0;
 
@@ -290,8 +329,8 @@ int test_rsa_each(uint8_t key_size_enum, uint8_t md_type, uint8_t padding) {
   size_t pubkey_hash_size = 20;
 
   get_pubkey_hash(info, pubkey_hash);
-  err = ckb_auth_validate(AuthAlgorithmIdRsa, sig_buff, sig_buff_size, msg,
-                          sizeof(msg), pubkey_hash, pubkey_hash_size);
+  err = ckb_auth_validate_stub(AuthAlgorithmIdRsa, sig_buff, sig_buff_size, msg,
+                               sizeof(msg), pubkey_hash, pubkey_hash_size);
   CHECK(err);
 
   err = 0;
@@ -382,8 +421,8 @@ int test_iso9796_2(void) {
   uint8_t pubkey_hash[20];
   get_pubkey_hash(info, pubkey_hash);
 
-  err = ckb_auth_validate(AuthAlgorithmIdIso97962, sig, sig_len, msg, 32,
-                          pubkey_hash, 20);
+  err = ckb_auth_validate_stub(AuthAlgorithmIdIso97962, sig, sig_len, msg, 32,
+                               pubkey_hash, 20);
   CHECK(err);
 
 exit:
@@ -448,13 +487,244 @@ exit:
   return err;
 }
 
-int main(int argc, const char* argv[]) {
+uint8_t SECP256k1_SECKEY[32] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11,
+                                12, 13, 14, 15, 16, 1,  2,  3,  4,  5,  6,
+                                7,  8,  9,  10, 11, 12, 13, 14, 15, 16};
+
+int secp256k1_sign(const uint8_t* key32, const uint8_t* msg32, uint8_t* raw_sig,
+                   int* recid, secp256k1_pubkey* pubkey) {
+  int ret = 0;
   int err = 0;
+
+  secp256k1_ecdsa_recoverable_signature sig;
+
+  secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN |
+                                                    SECP256K1_CONTEXT_VERIFY);
+  ret = secp256k1_ecdsa_sign_recoverable(ctx, &sig, msg32, key32, NULL, NULL);
+  CHECK2(ret, -1);
+
+  ret = secp256k1_ecdsa_recoverable_signature_serialize_compact(ctx, raw_sig,
+                                                                recid, &sig);
+  CHECK2(ret, -1);
+  ret = secp256k1_ec_pubkey_create(ctx, pubkey, key32);
+  CHECK2(ret, -1);
+
+exit:
+  return err;
+}
+
+int test_ckb(void) {
+  int err = 0;
+  uint8_t msg[32] = {1, 2, 3, 4};
+
+  uint8_t new_msg[32];
+  convert_copy(msg, sizeof(msg), new_msg, 32);
+  uint8_t raw_sig[65];
+  int recid;
+  secp256k1_pubkey pubkey;
+  err = secp256k1_sign(SECP256k1_SECKEY, new_msg, raw_sig, &recid, &pubkey);
+  CHECK(err);
+
+  // prepare signature
+  raw_sig[64] = (uint8_t)recid;
+  secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN |
+                                                    SECP256K1_CONTEXT_VERIFY);
+  // prepare pubkey hash
+  uint8_t serialized_pubkey[33];
+  size_t serialized_pubkey_len = 33;
+  err = secp256k1_ec_pubkey_serialize(ctx, serialized_pubkey,
+                                      &serialized_pubkey_len, &pubkey,
+                                      SECP256K1_EC_COMPRESSED);
+
+  uint8_t pubkey_hash[32];
+  blake2b_state blake2b_ctx;
+  blake2b_init(&blake2b_ctx, 32);
+  blake2b_update(&blake2b_ctx, serialized_pubkey, serialized_pubkey_len);
+  blake2b_final(&blake2b_ctx, pubkey_hash, 32);
+
+  uint8_t blake160[20];
+  memcpy(blake160, pubkey_hash, 20);
+
+  err = ckb_auth_validate_stub(AuthAlgorithmIdCkb, raw_sig, 65, new_msg, 32,
+                               blake160, 20);
+  CHECK(err);
+
+exit:
+  if (err == 0) {
+    printf("test_ckb() passed.\n");
+  } else {
+    printf("test_ckb() failed.\n");
+  }
+  return err;
+}
+
+static unsigned char g_alloc_buff[1024];
+
+int test_eth_series(uint8_t auth_algo_id) {
+  int err = 0;
+  uint8_t msg[32] = {1, 2, 3, 4};
+
+  uint8_t new_msg[32];
+
+  // for md_string
+  mbedtls_memory_buffer_alloc_init(g_alloc_buff, sizeof(g_alloc_buff));
+
+  if (auth_algo_id == AuthAlgorithmIdEthereum) {
+    convert_eth_message(msg, sizeof(msg), new_msg, 32);
+  } else if (auth_algo_id == AuthAlgorithmIdEos) {
+    convert_eos_message(msg, sizeof(msg), new_msg, 32);
+  } else if (auth_algo_id == AuthAlgorithmIdTron) {
+    convert_tron_message(msg, sizeof(msg), new_msg, 32);
+  } else {
+    return -2;
+  }
+  uint8_t raw_sig[65];
+  int recid;
+  secp256k1_pubkey pubkey;
+  err = secp256k1_sign(SECP256k1_SECKEY, new_msg, raw_sig, &recid, &pubkey);
+  CHECK(err);
+
+  // prepare signature
+  raw_sig[64] = (uint8_t)recid;
+  secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN |
+                                                    SECP256K1_CONTEXT_VERIFY);
+  // prepare pubkey hash
+  uint8_t serialized_pubkey[65];
+  size_t serialized_pubkey_len = 65;
+  err = secp256k1_ec_pubkey_serialize(ctx, serialized_pubkey,
+                                      &serialized_pubkey_len, &pubkey,
+                                      SECP256K1_EC_UNCOMPRESSED);
+
+  uint8_t pubkey_hash[32];
+
+  SHA3_CTX hash_ctx;
+  keccak_init(&hash_ctx);
+  keccak_update(&hash_ctx, serialized_pubkey + 1, serialized_pubkey_len - 1);
+  keccak_final(&hash_ctx, pubkey_hash);
+
+  uint8_t blake160[20];
+  memcpy(blake160, pubkey_hash + 12, 20);
+
+  err =
+      ckb_auth_validate_stub(auth_algo_id, raw_sig, 65, msg, 32, blake160, 20);
+  CHECK(err);
+
+exit:
+  if (err == 0) {
+    printf("test_eth_series(%d) passed.\n", auth_algo_id);
+  } else {
+    printf("test_eth_series(%d) failed.\n", auth_algo_id);
+  }
+  return err;
+}
+
+static unsigned char g_alloc_buff[1024];
+
+int test_btc_series(uint8_t auth_algo_id, bool compressed) {
+  int err = 0;
+  uint8_t msg[32] = {1, 2, 3, 4};
+
+  uint8_t new_msg[32];
+
+  // for md_string
+  mbedtls_memory_buffer_alloc_init(g_alloc_buff, sizeof(g_alloc_buff));
+
+  if (auth_algo_id == AuthAlgorithmIdBitcoin) {
+    convert_btc_message(msg, sizeof(msg), new_msg, 32);
+  } else if (auth_algo_id == AuthAlgorithmIdDogecoin) {
+    convert_doge_message(msg, sizeof(msg), new_msg, 32);
+  } else {
+    return -2;
+  }
+  uint8_t raw_sig[65];
+  int recid;
+  secp256k1_pubkey pubkey;
+  err = secp256k1_sign(SECP256k1_SECKEY, new_msg, raw_sig + 1, &recid, &pubkey);
+  CHECK(err);
+
+  // prepare signature
+  raw_sig[0] = (uint8_t)((recid & 3) + (compressed ? 4 : 0) + 27);
+  secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN |
+                                                    SECP256K1_CONTEXT_VERIFY);
+  // prepare pubkey hash
+  uint8_t serialized_pubkey[65];
+  size_t serialized_pubkey_len = 65;
+  err = secp256k1_ec_pubkey_serialize(
+      ctx, serialized_pubkey, &serialized_pubkey_len, &pubkey,
+      compressed ? SECP256K1_EC_COMPRESSED : SECP256K1_EC_UNCOMPRESSED);
+
+  uint8_t pubkey_hash[32];
+
+  const mbedtls_md_info_t* md_info =
+      mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+  err =
+      md_string(md_info, serialized_pubkey, serialized_pubkey_len, pubkey_hash);
+  CHECK(err);
+
+  md_info = mbedtls_md_info_from_type(MBEDTLS_MD_RIPEMD160);
+  err = md_string(md_info, pubkey_hash, SHA256_SIZE, pubkey_hash);
+  CHECK(err);
+
+  uint8_t blake160[20];
+  memcpy(blake160, pubkey_hash, 20);
+
+  err =
+      ckb_auth_validate_stub(auth_algo_id, raw_sig, 65, msg, 32, blake160, 20);
+  CHECK(err);
+
+exit:
+  if (err == 0) {
+    printf("test_btc_series(%d, compressed = %d) passed.\n", auth_algo_id,
+           compressed);
+  } else {
+    printf("test_btc_series(%d, compressed = %d) failed.\n", auth_algo_id,
+           compressed);
+  }
+  return err;
+}
+
+int entry(void) {
+  int err = 0;
+
+  err = test_ckb();
+  CHECK(err);
+
+  err = test_eth_series(AuthAlgorithmIdEthereum);
+  CHECK(err);
+  err = test_eth_series(AuthAlgorithmIdEos);
+  CHECK(err);
+  err = test_eth_series(AuthAlgorithmIdTron);
+  CHECK(err);
+
+  err = test_btc_series(AuthAlgorithmIdBitcoin, true);
+  CHECK(err);
+
+  err = test_btc_series(AuthAlgorithmIdBitcoin, false);
+  CHECK(err);
+
+  err = test_btc_series(AuthAlgorithmIdDogecoin, true);
+  CHECK(err);
+
+  err = test_btc_series(AuthAlgorithmIdDogecoin, false);
+  CHECK(err);
 
   err = test_rsa();
   CHECK(err);
 
   err = test_iso9796_2();
+  CHECK(err);
+exit:
+  return err;
+}
+
+int main(int argc, const char* argv[]) {
+  int err = 0;
+
+  err = entry();
+  CHECK(err);
+
+  g_switch_to_exec = true;
+  err = entry();
   CHECK(err);
 
 exit:
