@@ -439,6 +439,154 @@ exit:
   return err;
 }
 
+// origin:
+// https://github.com/nervosnetwork/ckb-system-scripts/blob/master/c/secp256k1_blake160_multisig_all.c
+// Script args validation errors
+#define ERROR_INVALID_RESERVE_FIELD -41
+#define ERROR_INVALID_PUBKEYS_CNT -42
+#define ERROR_INVALID_THRESHOLD -43
+#define ERROR_INVALID_REQUIRE_FIRST_N -44
+// Multi-sigining validation errors
+#define ERROR_MULTSIG_SCRIPT_HASH -51
+#define ERROR_VERIFICATION -52
+#define ERROR_WITNESS_SIZE -22
+#define ERROR_SECP_PARSE_SIGNATURE -14
+#define ERROR_SECP_RECOVER_PUBKEY -11
+#define ERROR_SECP_SERIALIZE_PUBKEY -15
+
+#define FLAGS_SIZE 4
+#define SIGNATURE_SIZE 65
+#define PUBKEY_SIZE 33
+
+int verify_multisig(const uint8_t *lock_bytes, size_t lock_bytes_len,
+                    const uint8_t *message, const uint8_t *hash) {
+  int ret;
+  uint8_t temp[BLAKE2B_BLOCK_SIZE];
+
+  // Extract multisig script flags.
+  uint8_t pubkeys_cnt = lock_bytes[3];
+  uint8_t threshold = lock_bytes[2];
+  uint8_t require_first_n = lock_bytes[1];
+  uint8_t reserved_field = lock_bytes[0];
+  if (reserved_field != 0) {
+    return ERROR_INVALID_RESERVE_FIELD;
+  }
+  if (pubkeys_cnt == 0) {
+    return ERROR_INVALID_PUBKEYS_CNT;
+  }
+  if (threshold > pubkeys_cnt) {
+    return ERROR_INVALID_THRESHOLD;
+  }
+  if (threshold == 0) {
+    return ERROR_INVALID_THRESHOLD;
+  }
+  if (require_first_n > threshold) {
+    return ERROR_INVALID_REQUIRE_FIRST_N;
+  }
+  // Based on the number of public keys and thresholds, we can calculate
+  // the required length of the lock field.
+  size_t multisig_script_len = FLAGS_SIZE + BLAKE160_SIZE * pubkeys_cnt;
+  size_t signatures_len = SIGNATURE_SIZE * threshold;
+  size_t required_lock_len = multisig_script_len + signatures_len;
+  if (lock_bytes_len != required_lock_len) {
+    return ERROR_WITNESS_SIZE;
+  }
+
+  // Perform hash check of the `multisig_script` part, notice the signature part
+  // is not included here.
+  blake2b_state blake2b_ctx;
+  blake2b_init(&blake2b_ctx, BLAKE2B_BLOCK_SIZE);
+  blake2b_update(&blake2b_ctx, lock_bytes, multisig_script_len);
+  blake2b_final(&blake2b_ctx, temp, BLAKE2B_BLOCK_SIZE);
+
+  if (memcmp(hash, temp, BLAKE160_SIZE) != 0) {
+    return ERROR_MULTSIG_SCRIPT_HASH;
+  }
+
+  // Verify threshold signatures, threshold is a uint8_t, at most it is
+  // 255, meaning this array will definitely have a reasonable upper bound.
+  // Also this code uses C99's new feature to allocate a variable length array.
+  uint8_t used_signatures[threshold];
+  memset(used_signatures, 0, threshold);
+
+  // We are using bitcoin's [secp256k1
+  // library](https://github.com/bitcoin-core/secp256k1) for signature
+  // verification here. To the best of our knowledge, this is an unmatched
+  // advantage of CKB: you can ship cryptographic algorithm within your smart
+  // contract, you don't have to wait for the foundation to ship a new
+  // cryptographic algorithm. You can just build and ship your own.
+  secp256k1_context context;
+  uint8_t secp_data[CKB_SECP256K1_DATA_SIZE];
+  ret = ckb_secp256k1_custom_verify_only_initialize(&context, secp_data);
+  if (ret != 0) return ret;
+
+  // We will perform *threshold* number of signature verifications here.
+  for (size_t i = 0; i < threshold; i++) {
+    // Load signature
+    secp256k1_ecdsa_recoverable_signature signature;
+    size_t signature_offset = multisig_script_len + i * SIGNATURE_SIZE;
+    if (secp256k1_ecdsa_recoverable_signature_parse_compact(
+            &context, &signature, &lock_bytes[signature_offset],
+            lock_bytes[signature_offset + RECID_INDEX]) == 0) {
+      return ERROR_SECP_PARSE_SIGNATURE;
+    }
+
+    // verify signature and Recover pubkey
+    secp256k1_pubkey pubkey;
+    if (secp256k1_ecdsa_recover(&context, &pubkey, &signature, message) != 1) {
+      return ERROR_SECP_RECOVER_PUBKEY;
+    }
+
+    // Calculate the blake160 hash of the derived public key
+    size_t pubkey_size = PUBKEY_SIZE;
+    if (secp256k1_ec_pubkey_serialize(&context, temp, &pubkey_size, &pubkey,
+                                      SECP256K1_EC_COMPRESSED) != 1) {
+      return ERROR_SECP_SERIALIZE_PUBKEY;
+    }
+
+    unsigned char calculated_pubkey_hash[BLAKE2B_BLOCK_SIZE];
+    blake2b_state blake2b_ctx;
+    blake2b_init(&blake2b_ctx, BLAKE2B_BLOCK_SIZE);
+    blake2b_update(&blake2b_ctx, temp, PUBKEY_SIZE);
+    blake2b_final(&blake2b_ctx, calculated_pubkey_hash, BLAKE2B_BLOCK_SIZE);
+
+    // Check if this signature is signed with one of the provided public key.
+    uint8_t matched = 0;
+    for (size_t i = 0; i < pubkeys_cnt; i++) {
+      if (used_signatures[i] == 1) {
+        continue;
+      }
+      if (memcmp(&lock_bytes[FLAGS_SIZE + i * BLAKE160_SIZE],
+                 calculated_pubkey_hash, BLAKE160_SIZE) != 0) {
+        continue;
+      }
+      matched = 1;
+      used_signatures[i] = 1;
+      break;
+    }
+
+    // If the signature doesn't match any of the provided public key, the script
+    // will exit with an error.
+    if (matched != 1) {
+      return ERROR_VERIFICATION;
+    }
+  }
+
+  // The above scheme just ensures that a *threshold* number of signatures have
+  // successfully been verified, and they all come from the provided public
+  // keys. However, the multisig script might also require some numbers of
+  // public keys to always be signed for the script to pass verification. This
+  // is indicated via the *required_first_n* flag. Here we also checks to see
+  // that this rule is also satisfied.
+  for (size_t i = 0; i < require_first_n; i++) {
+    if (used_signatures[i] != 1) {
+      return ERROR_VERIFICATION;
+    }
+  }
+
+  return 0;
+}
+
 // dynamic linking entry
 int ckb_auth_validate(uint8_t auth_algorithm_id, const uint8_t *signature,
                       uint32_t signature_size, const uint8_t *message,
@@ -478,6 +626,9 @@ int ckb_auth_validate(uint8_t auth_algorithm_id, const uint8_t *signature,
     err = verify(pubkey_hash, signature, signature_size, message, message_size,
                  validate_signature_btc, convert_doge_message);
     CHECK(err);
+  } else if (auth_algorithm_id == AuthAlgorithmIdCkbMultisig) {
+    err = verify_multisig(signature, signature_size, message, pubkey_hash);
+    CHECK(err);
   } else if (auth_algorithm_id == AuthAlgorithmIdSchnorr) {
     return ERROR_NOT_IMPLEMENTED;
   } else if (auth_algorithm_id == AuthAlgorithmIdRsa) {
@@ -492,8 +643,8 @@ int ckb_auth_validate(uint8_t auth_algorithm_id, const uint8_t *signature,
   } else if (auth_algorithm_id == AuthAlgorithmIdIso97962) {
     uint8_t hash[BLAKE160_SIZE];
     size_t len = BLAKE160_SIZE;
-    return validate_signature_iso9796_2_batch(
-        NULL, signature, signature_size, message, message_size, hash, &len);
+    err = validate_signature_iso9796_2_batch(NULL, signature, signature_size,
+                                             message, message_size, hash, &len);
     CHECK(err);
     CHECK2(len == BLAKE160_SIZE, ERROR_WRONG_STATE);
     int same = memcmp(hash, pubkey_hash, BLAKE160_SIZE);

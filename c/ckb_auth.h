@@ -2,6 +2,8 @@
 #define CKB_PRODUCTION_SCRIPTS_CKB_AUTH_H_
 
 #include "ckb_consts.h"
+#include "ckb_exec.h"
+#include "ckb_dlfcn.h"
 
 // TODO: when ready, move it into ckb-c-stdlib
 typedef struct CkbAuthType {
@@ -45,8 +47,8 @@ static uint8_t g_code_buff[120 * 1024];
 
 int ckb_auth(CkbEntryType *entry, CkbAuthType *id, uint8_t *signature,
              uint32_t signature_size, const uint8_t *message32) {
+  int err = 0;
   if (entry->entry_category == EntryCategoryDynamicLinking) {
-    int err = 0;
     void *handle = NULL;
     size_t consumed_size = 0;
     err = ckb_dlopen2(entry->code_hash, entry->hash_type, g_code_buff,
@@ -61,8 +63,27 @@ int ckb_auth(CkbEntryType *entry, CkbAuthType *id, uint8_t *signature,
     return func(id->algorithm_id, signature, signature_size, message32, 32,
                 id->content, 20);
   } else if (entry->entry_category == EntryCategoryExec) {
-    // TODO
-    return CKB_INVALID_DATA;
+    CkbBinaryArgsType bin = {0};
+    ckb_exec_reset(&bin);
+    err = ckb_exec_append(&bin, entry->code_hash, 32);
+    if (err != 0) return err;
+    err = ckb_exec_append(&bin, &entry->hash_type, 1);
+    if (err != 0) return err;
+    err = ckb_exec_append(&bin, &id->algorithm_id, 1);
+    if (err != 0) return err;
+    err = ckb_exec_append(&bin, (uint8_t *)signature, signature_size);
+    if (err != 0) return err;
+    err = ckb_exec_append(&bin, (uint8_t *)message32, 32);
+    if (err != 0) return err;
+    err = ckb_exec_append(&bin, id->content, 20);
+    if (err != 0) return err;
+
+    CkbHexArgsType hex = {.used_buff = 0};
+    err = ckb_exec_encode_params(&bin, &hex);
+    if (err != 0) return err;
+
+    const char *argv[2] = {hex.buff, 0};
+    return ckb_exec_cell(entry->code_hash, entry->hash_type, 0, 0, 1, argv);
   } else {
     return CKB_INVALID_DATA;
   }

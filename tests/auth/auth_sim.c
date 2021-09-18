@@ -490,6 +490,12 @@ exit:
 uint8_t SECP256k1_SECKEY[32] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11,
                                 12, 13, 14, 15, 16, 1,  2,  3,  4,  5,  6,
                                 7,  8,  9,  10, 11, 12, 13, 14, 15, 16};
+uint8_t SECP256k1_SECKEY2[32] = {2,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11,
+                                 12, 13, 14, 15, 16, 1,  2,  3,  4,  5,  6,
+                                 7,  8,  9,  10, 11, 12, 13, 14, 15, 16};
+uint8_t SECP256k1_SECKEY3[32] = {3,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11,
+                                 12, 13, 14, 15, 16, 1,  2,  3,  4,  5,  6,
+                                 7,  8,  9,  10, 11, 12, 13, 14, 15, 16};
 
 int secp256k1_sign(const uint8_t* key32, const uint8_t* msg32, uint8_t* raw_sig,
                    int* recid, secp256k1_pubkey* pubkey) {
@@ -513,40 +519,50 @@ exit:
   return err;
 }
 
+int sign_ckb_msg(uint8_t* sec_key, uint8_t* msg32, uint8_t* sig,
+                 uint8_t* pubkey_hash) {
+  int err = 0;
+
+  int recid;
+  secp256k1_pubkey pubkey;
+  err = secp256k1_sign(SECP256k1_SECKEY, msg32, sig, &recid, &pubkey);
+  CHECK(err);
+
+  // prepare signature
+  sig[64] = (uint8_t)recid;
+  secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN |
+                                                    SECP256K1_CONTEXT_VERIFY);
+  // prepare pubkey hash
+  uint8_t serialized_pubkey[33];
+  size_t serialized_pubkey_len = 33;
+  secp256k1_ec_pubkey_serialize(ctx, serialized_pubkey, &serialized_pubkey_len,
+                                &pubkey, SECP256K1_EC_COMPRESSED);
+
+  uint8_t temp[32];
+  blake2b_state blake2b_ctx;
+  blake2b_init(&blake2b_ctx, 32);
+  blake2b_update(&blake2b_ctx, serialized_pubkey, serialized_pubkey_len);
+  blake2b_final(&blake2b_ctx, temp, 32);
+
+  memcpy(pubkey_hash, temp, 20);
+
+exit:
+  return err;
+}
+
 int test_ckb(void) {
   int err = 0;
   uint8_t msg[32] = {1, 2, 3, 4};
 
   uint8_t new_msg[32];
   convert_copy(msg, sizeof(msg), new_msg, 32);
-  uint8_t raw_sig[65];
-  int recid;
-  secp256k1_pubkey pubkey;
-  err = secp256k1_sign(SECP256k1_SECKEY, new_msg, raw_sig, &recid, &pubkey);
+
+  uint8_t sig[65];
+  uint8_t pubkey_hash[20];
+  err = sign_ckb_msg(SECP256k1_SECKEY, new_msg, sig, pubkey_hash);
   CHECK(err);
-
-  // prepare signature
-  raw_sig[64] = (uint8_t)recid;
-  secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN |
-                                                    SECP256K1_CONTEXT_VERIFY);
-  // prepare pubkey hash
-  uint8_t serialized_pubkey[33];
-  size_t serialized_pubkey_len = 33;
-  err = secp256k1_ec_pubkey_serialize(ctx, serialized_pubkey,
-                                      &serialized_pubkey_len, &pubkey,
-                                      SECP256K1_EC_COMPRESSED);
-
-  uint8_t pubkey_hash[32];
-  blake2b_state blake2b_ctx;
-  blake2b_init(&blake2b_ctx, 32);
-  blake2b_update(&blake2b_ctx, serialized_pubkey, serialized_pubkey_len);
-  blake2b_final(&blake2b_ctx, pubkey_hash, 32);
-
-  uint8_t blake160[20];
-  memcpy(blake160, pubkey_hash, 20);
-
-  err = ckb_auth_validate_stub(AuthAlgorithmIdCkb, raw_sig, 65, new_msg, 32,
-                               blake160, 20);
+  err = ckb_auth_validate_stub(AuthAlgorithmIdCkb, sig, 65, new_msg, 32,
+                               pubkey_hash, 20);
   CHECK(err);
 
 exit:
@@ -554,6 +570,63 @@ exit:
     printf("test_ckb() passed.\n");
   } else {
     printf("test_ckb() failed.\n");
+  }
+  return err;
+}
+
+int test_ckb_multisig(void) {
+  int err = 0;
+  uint8_t msg[32] = {1, 2, 3, 4};
+
+  uint8_t new_msg[32];
+  convert_copy(msg, sizeof(msg), new_msg, 32);
+
+  uint8_t sig[65];
+  uint8_t pubkey_hash[20];
+  err = sign_ckb_msg(SECP256k1_SECKEY, new_msg, sig, pubkey_hash);
+  CHECK(err);
+
+  uint8_t sig2[65];
+  uint8_t pubkey_hash2[20];
+  err = sign_ckb_msg(SECP256k1_SECKEY2, new_msg, sig2, pubkey_hash2);
+  CHECK(err);
+
+  uint8_t sig3[65];
+  uint8_t pubkey_hash3[20];
+  err = sign_ckb_msg(SECP256k1_SECKEY3, new_msg, sig3, pubkey_hash3);
+  CHECK(err);
+
+  // multisig_script | Signature1 | Signature2 | ...
+  // multisig_script: S | R | M | N | PubKeyHash1 | PubKeyHash2 | ...
+  uint8_t final_signature[4 + 20 * 3 + 65 * 3];
+  final_signature[0] = 0;
+  final_signature[1] = 0;
+  final_signature[2] = 3;
+  final_signature[3] = 3;
+
+  memcpy(final_signature + 4, pubkey_hash, 20);
+  memcpy(final_signature + 4 + 20, pubkey_hash2, 20);
+  memcpy(final_signature + 4 + 20 + 20, pubkey_hash3, 20);
+
+  memcpy(final_signature + 64, sig, 65);
+  memcpy(final_signature + 64 + 65, sig, 65);
+  memcpy(final_signature + 64 + 65 + 65, sig, 65);
+
+  uint8_t hash[32] = {0};
+  blake2b_state ctx;
+  blake2b_init(&ctx, BLAKE2B_BLOCK_SIZE);
+  blake2b_update(&ctx, final_signature, 4 + 20 * 3);
+  blake2b_final(&ctx, hash, BLAKE2B_BLOCK_SIZE);
+
+  err = ckb_auth_validate_stub(AuthAlgorithmIdCkbMultisig, final_signature,
+                               sizeof(final_signature), new_msg, 32, hash, 20);
+  CHECK(err);
+
+exit:
+  if (err == 0) {
+    printf("test_ckb_multisig() passed.\n");
+  } else {
+    printf("test_ckb_multisig() failed: %d\n", err);
   }
   return err;
 }
@@ -689,10 +762,15 @@ int entry(void) {
   err = test_ckb();
   CHECK(err);
 
+  err = test_ckb_multisig();
+  CHECK(err);
+
   err = test_eth_series(AuthAlgorithmIdEthereum);
   CHECK(err);
+
   err = test_eth_series(AuthAlgorithmIdEos);
   CHECK(err);
+
   err = test_eth_series(AuthAlgorithmIdTron);
   CHECK(err);
 

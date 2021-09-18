@@ -2,6 +2,7 @@
 #define _CBK_C_STDLIB_CKB_EXEC_H_
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 
 #ifndef CKB_EXEC_MAX_ARGS_COUNT
 #define CKB_EXEC_MAX_ARGS_COUNT 64
@@ -156,6 +157,11 @@ int ckb_exec_encode_params(CkbBinaryArgsType* in, CkbHexArgsType* out) {
     if (err != 0) return err;
     out->used_buff += length;
   }
+  if (out->used_buff >= CKB_EXEC_MAX_BUFF_LEN) {
+    return ERROR_EXEC_OUT_OF_BOUNDS;
+  }
+  out->buff[out->used_buff] = 0;
+  out->used_buff++;
   return 0;
 }
 

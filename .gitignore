@@ -16,3 +16,4 @@ tests/validate_signature_rsa/coverage
 tests/validate_signature_rsa/fuzz-*.log
 
 tests/auth/simulator-build-debug
+vscode-cmake-build
