@@ -16,4 +16,7 @@ tests/validate_signature_rsa/coverage
 tests/validate_signature_rsa/fuzz-*.log
 
 tests/auth/simulator-build-debug
+
+tests/auth_rust/Cargo.lock
+
 vscode-cmake-build
