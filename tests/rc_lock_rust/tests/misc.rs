@@ -30,7 +30,9 @@ use ckb_types::{
 };
 use lazy_static::lazy_static;
 use rand::prelude::{thread_rng, ThreadRng};
+use rand::seq::SliceRandom;
 use rand::Rng;
+
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::traits::Hasher;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
@@ -628,11 +630,14 @@ pub fn sign_tx_by_input_group(
                         &identity,
                         Some(preimage),
                     )
+                } else if config.id.flags == IDENTITY_FLAGS_MULTISIG {
+                    let sig = config.multisig.sign(&message.into());
+                    gen_witness_lock(sig, config.use_rc, &proof_vec, &identity, None)
                 } else {
                     let sig = config.private_key.sign_recoverable(&message).expect("sign");
                     let sig_bytes = Bytes::from(sig.serialize());
                     gen_witness_lock(sig_bytes, config.use_rc, &proof_vec, &identity, None)
-                }; // TODO: IDENTITY_FLAGS_EXEC
+                };
 
                 witness
                     .as_builder()
@@ -920,6 +925,7 @@ pub fn debug_printer(script: &Byte32, msg: &str) {
 
 pub const IDENTITY_FLAGS_PUBKEY_HASH: u8 = 0;
 pub const IDENTITY_FLAGS_ETHEREUM: u8 = 1;
+pub const IDENTITY_FLAGS_MULTISIG: u8 = 6;
 
 pub const IDENTITY_FLAGS_OWNER_LOCK: u8 = 0xFC;
 pub const IDENTITY_FLAGS_EXEC: u8 = 0xFD;
@@ -945,6 +951,95 @@ impl Identity {
     }
 }
 
+pub struct MultisigTestConfig {
+    pub private_keys: Vec<Privkey>,
+    pub pubkeys: Vec<Pubkey>,
+    pub require_first_n: u8,
+    pub threshold: u8,
+    pub count: u8,
+}
+
+impl MultisigTestConfig {
+    pub fn set(&mut self, require_first_n: u8, threshold: u8, count: u8) {
+        let mut private_keys: Vec<Privkey> = vec![];
+        let mut pubkeys: Vec<Pubkey> = vec![];
+        for _ in 0..count {
+            let p = Generator::random_privkey();
+            pubkeys.push(p.pubkey().expect("pubkey"));
+            private_keys.push(p);
+        }
+        self.private_keys = private_keys;
+        self.pubkeys = pubkeys;
+        self.require_first_n = require_first_n;
+        self.threshold = threshold;
+        self.count = count;
+    }
+
+    fn gen_multisig_script(&self) -> Bytes {
+        let mut result = BytesMut::new();
+        result.put_u8(0);
+        result.put_u8(self.require_first_n);
+        result.put_u8(self.threshold);
+        result.put_u8(self.count);
+
+        for p in &self.pubkeys {
+            result.put_slice(&blake160(&p.serialize()));
+        }
+
+        result.freeze()
+    }
+    fn sign(&self, msg: &CkbH256) -> Bytes {
+        // println!("message = {:?}", msg);
+        let mut result = BytesMut::new();
+        // let sig = config.private_key.sign_recoverable(&message).expect("sign");
+        // let sig_bytes = Bytes::from(sig.serialize());
+        let multisig_script = self.gen_multisig_script();
+        result.put_slice(&multisig_script);
+
+        // require first N
+        let mut private_keys = self.private_keys.clone();
+        if self.require_first_n > 0 {
+            for i in 0..self.require_first_n as usize {
+                let sig = private_keys[i].sign_recoverable(msg).expect("sign");
+                result.put_slice(&sig.serialize());
+            }
+            for _ in 0..self.require_first_n {
+                private_keys.remove(0);
+            }
+        }
+        let remaining_threshold: usize = self.threshold as usize - self.require_first_n as usize;
+
+        // remaining with random order
+        private_keys.shuffle(&mut thread_rng());
+
+        for privkey in &private_keys[0..remaining_threshold] {
+            let sig = privkey.sign_recoverable(msg).expect("sign");
+            result.put_slice(&sig.serialize());
+        }
+        result.freeze()
+    }
+
+    pub fn gen_identity(&self) -> Identity {
+        let script = self.gen_multisig_script();
+        Identity {
+            flags: IDENTITY_FLAGS_MULTISIG,
+            blake160: blake160(&script),
+        }
+    }
+}
+
+impl Default for MultisigTestConfig {
+    fn default() -> Self {
+        MultisigTestConfig {
+            private_keys: Default::default(),
+            pubkeys: Default::default(),
+            require_first_n: 0,
+            threshold: 0,
+            count: 0,
+        }
+    }
+}
+
 pub struct TestConfig {
     pub id: Identity,
     pub acp_config: Option<(u8, u8)>,
@@ -956,6 +1051,8 @@ pub struct TestConfig {
     pub proof_masks: Vec<u8>,
     pub private_key: Privkey,
     pub pubkey: Pubkey,
+
+    pub multisig: MultisigTestConfig,
 
     pub rsa_private_key: PKey<Private>,
     pub rsa_pubkey: PKey<Public>,
@@ -1058,6 +1155,7 @@ impl TestConfig {
             proof_masks: Default::default(),
             private_key,
             pubkey,
+            multisig: Default::default(),
             rsa_private_key,
             rsa_pubkey,
             rsa_script: Default::default(),
@@ -1083,6 +1181,13 @@ impl TestConfig {
     pub fn set_iso9796_2(&mut self) {
         self.use_iso9796_2 = true;
         self.sig_len = 648;
+    }
+    pub fn set_multisig(&mut self, require_first_n: u8, threshold: u8, count: u8) {
+        self.multisig = Default::default();
+        self.multisig.set(require_first_n, threshold, count);
+        self.id = self.multisig.gen_identity();
+
+        self.sig_len = 4 + 20 * count as usize + 65 * threshold as usize;
     }
 
     pub fn set_acp_config(&mut self, min_config: Option<(u8, u8)>) {

@@ -85,6 +85,11 @@ typedef struct RceState {
   bool both_on_wl;
   bool input_on_wl;
   bool output_on_wl;
+
+  // when this flag is on,
+  // continue looking for rcrules in input cells
+  // after failed searching on dep cells.
+  bool rcrules_in_input_cell;
 } RceState;
 
 void rce_init_state(RceState* state) {
@@ -93,6 +98,7 @@ void rce_init_state(RceState* state) {
   state->both_on_wl = false;
   state->input_on_wl = false;
   state->output_on_wl = false;
+  state->rcrules_in_input_cell = false;
 }
 
 // molecule doesn't provide names
@@ -173,7 +179,7 @@ exit:
 static int rce_make_cursor_from_cell_data(uint8_t* data_source,
                                           uint32_t max_cache_size,
                                           mol2_cursor_t* cell_data,
-                                          size_t index) {
+                                          size_t index, size_t source) {
   int err = 0;
   uint64_t cell_data_len = 0;
   err = ckb_load_cell_data(NULL, &cell_data_len, 0, index, CKB_SOURCE_CELL_DEP);
@@ -189,7 +195,7 @@ static int rce_make_cursor_from_cell_data(uint8_t* data_source,
   ptr->total_size = cell_data_len;
   // pass index and source as args
   ptr->args[0] = (uintptr_t)index;
-  ptr->args[1] = CKB_SOURCE_CELL_DEP;
+  ptr->args[1] = source;
 
   ptr->cache_size = 0;
   ptr->start_point = 0;
@@ -202,6 +208,39 @@ exit:
   return err;
 }
 
+/*
+ * Look for input cell with specific data hash, data_hash should a buffer with
+ * 32 bytes.
+ */
+int ckb_look_for_input_with_hash2(const uint8_t* code_hash, uint8_t hash_type,
+                                  size_t* index) {
+  size_t current = 0;
+  size_t field =
+      (hash_type == 1) ? CKB_CELL_FIELD_TYPE_HASH : CKB_CELL_FIELD_DATA_HASH;
+  while (current < SIZE_MAX) {
+    uint64_t len = 32;
+    uint8_t hash[32];
+
+    int ret =
+        ckb_load_cell_by_field(hash, &len, 0, current, CKB_SOURCE_INPUT, field);
+    switch (ret) {
+      case CKB_ITEM_MISSING:
+        break;
+      case CKB_SUCCESS:
+        if (memcmp(code_hash, hash, 32) == 0) {
+          /* Found a match */
+          *index = current;
+          return CKB_SUCCESS;
+        }
+        break;
+      default:
+        return CKB_INDEX_OUT_OF_BOUND;
+    }
+    current++;
+  }
+  return CKB_INDEX_OUT_OF_BOUND;
+}
+
 // Note: RCRules is ordered as depth-first search
 int rce_gather_rcrules_recursively(RceState* rce_state,
                                    const uint8_t* rce_cell_hash, int depth) {
@@ -210,9 +249,22 @@ int rce_gather_rcrules_recursively(RceState* rce_state,
   if (depth > MAX_RECURSIVE_DEPTH) return ERROR_RCRULES_TOO_DEEP;
 
   size_t index = 0;
+  size_t source = CKB_SOURCE_CELL_DEP;
+
   // note: RCE Cell is with hash_type = 1
   err = ckb_look_for_dep_with_hash2(rce_cell_hash, 1, &index);
-  if (err != 0) return err;
+  if (err != 0) {
+    if (rce_state->rcrules_in_input_cell) {
+      err = ckb_look_for_input_with_hash2(rce_cell_hash, 1, &index);
+      if (err != 0) {
+        return err;
+      } else {
+        source = CKB_SOURCE_INPUT;
+      };
+    } else {
+      return err;
+    }
+  }
 
   // data_source's lifetime should be long enough, it can't be defined inside
   // rce_make_cursor_from_cell_data
@@ -221,7 +273,7 @@ int rce_gather_rcrules_recursively(RceState* rce_state,
 
   mol2_cursor_t cell_data;
   err = rce_make_cursor_from_cell_data(data_source_buff, max_cache_size,
-                                       &cell_data, index);
+                                       &cell_data, index, source);
   CHECK(err);
 
   RCDataType rc_data = make_RCData(&cell_data);

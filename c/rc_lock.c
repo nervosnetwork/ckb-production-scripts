@@ -414,6 +414,7 @@ int main() {
   if (args.has_rc_root) {
     RceState rce_state;
     rce_init_state(&rce_state);
+    rce_state.rcrules_in_input_cell = true;
     err = rce_gather_rcrules_recursively(&rce_state, args.rc_root, 0);
     CHECK(err);
     CHECK2(rce_state.rcrules_count > 0, ERROR_NO_RCRULE);
