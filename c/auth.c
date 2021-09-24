@@ -588,10 +588,10 @@ int verify_multisig(const uint8_t *lock_bytes, size_t lock_bytes_len,
 }
 
 // dynamic linking entry
-int ckb_auth_validate(uint8_t auth_algorithm_id, const uint8_t *signature,
-                      uint32_t signature_size, const uint8_t *message,
-                      uint32_t message_size, uint8_t *pubkey_hash,
-                      uint32_t pubkey_hash_size) {
+__attribute__((visibility("default"))) int ckb_auth_validate(
+    uint8_t auth_algorithm_id, const uint8_t *signature,
+    uint32_t signature_size, const uint8_t *message, uint32_t message_size,
+    uint8_t *pubkey_hash, uint32_t pubkey_hash_size) {
   int err = 0;
   CHECK2(signature != NULL, ERROR_INVALID_ARG);
   CHECK2(message != NULL, ERROR_INVALID_ARG);
@@ -714,7 +714,7 @@ exit:
 int simulator_main(int argc, char *argv[]) {
 #else
 // exec entry
-int main(int argc, char *argv[]) {
+__attribute__((visibility("default"))) int main(int argc, char *argv[]) {
 #endif
   int err = 0;
   uint8_t *param_ptr = NULL;

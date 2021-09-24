@@ -2,8 +2,8 @@
 #define CKB_PRODUCTION_SCRIPTS_CKB_AUTH_H_
 
 #include "ckb_consts.h"
-#include "ckb_exec.h"
 #include "ckb_dlfcn.h"
+#include "ckb_exec.h"
 
 // TODO: when ready, move it into ckb-c-stdlib
 typedef struct CkbAuthType {
@@ -43,7 +43,7 @@ typedef int (*ckb_auth_validate_t)(uint8_t auth_algorithm_id,
                                    uint32_t message_size, uint8_t *pubkey_hash,
                                    uint32_t pubkey_hash_size);
 
-static uint8_t g_code_buff[120 * 1024] __attribute__((aligned(RISCV_PGSIZE)));
+static uint8_t g_code_buff[300 * 1024] __attribute__((aligned(RISCV_PGSIZE)));
 
 int ckb_auth(CkbEntryType *entry, CkbAuthType *id, uint8_t *signature,
              uint32_t signature_size, const uint8_t *message32) {
