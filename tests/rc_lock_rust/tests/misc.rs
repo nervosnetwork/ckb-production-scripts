@@ -156,10 +156,12 @@ pub fn gen_random_out_point(rng: &mut ThreadRng) -> OutPoint {
 // * build extension script without upgrading, set is_type to false
 // * build RCE cell, is_type = true. Only the Script.code_hash is kept for further use.
 //   when in this case, to make "args" passed in unique
+// when in_input_cell is on, the cell is not in deps but in input.
 fn build_script(
     dummy: &mut DummyDataLoader,
     tx_builder: TransactionBuilder,
     is_type: bool,
+    in_input_cell: bool,
     bin: &Bytes,
     args: Bytes,
 ) -> (TransactionBuilder, Script) {
@@ -178,9 +180,11 @@ fn build_script(
     };
 
     // it not needed to set "type script" when is_type is false
+    let always_success = build_always_success_script();
     let capacity = bin.len() as u64;
     let cell = CellOutput::new_builder()
         .capacity(capacity.pack())
+        .lock(always_success)
         .type_(Some(type_script_in_code.clone()).pack())
         .build();
 
@@ -189,12 +193,20 @@ fn build_script(
 
     dummy.cells.insert(out_point.clone(), (cell, bin.clone()));
 
-    let tx_builder = tx_builder.cell_dep(
-        CellDep::new_builder()
-            .out_point(out_point.clone())
-            .dep_type(DepType::Code.into())
-            .build(),
-    );
+    let tx_builder = if in_input_cell {
+        let witness_args = WitnessArgsBuilder::default().build();
+        tx_builder
+            .input(CellInput::new(out_point.clone(), 0))
+            .witness(witness_args.as_bytes().pack())
+    } else {
+        tx_builder.cell_dep(
+            CellDep::new_builder()
+                .out_point(out_point.clone())
+                .dep_type(DepType::Code.into())
+                .build(),
+        )
+    };
+
     let code_hash = if is_type {
         ckb_hash::blake2b_256(type_script_in_code.as_slice())
     } else {
@@ -470,7 +482,7 @@ pub fn append_rc(
 ) -> TransactionBuilder {
     let smt_key = config.id.to_smt_key();
     let (proofs, rc_datas, proof_masks) = generate_proofs(config.scheme, &vec![smt_key]);
-    let (rc_root, b0) = generate_rce_cell(dummy, tx_builder, rc_datas);
+    let (rc_root, b0) = generate_rce_cell(dummy, tx_builder, rc_datas, config.smt_in_input);
 
     config.proofs = proofs;
     config.proof_masks = proof_masks;
@@ -771,6 +783,7 @@ pub fn gen_tx_with_grouped_args(
         dummy,
         tx_builder,
         false,
+        false,
         &VALIDATE_SIGNATURE_RSA,
         Default::default(),
     );
@@ -1053,6 +1066,7 @@ pub struct TestConfig {
     pub pubkey: Pubkey,
 
     pub multisig: MultisigTestConfig,
+    pub smt_in_input: bool,
 
     pub rsa_private_key: PKey<Private>,
     pub rsa_pubkey: PKey<Public>,
@@ -1156,6 +1170,7 @@ impl TestConfig {
             private_key,
             pubkey,
             multisig: Default::default(),
+            smt_in_input: false,
             rsa_private_key,
             rsa_pubkey,
             rsa_script: Default::default(),
@@ -1428,6 +1443,7 @@ pub fn generate_rce_cell(
     dummy: &mut DummyDataLoader,
     mut tx_builder: TransactionBuilder,
     rc_data: Vec<Bytes>,
+    smt_in_input: bool,
 ) -> (Byte32, TransactionBuilder) {
     let mut rng = thread_rng();
     let mut cell_vec_builder = RCCellVecBuilder::default();
@@ -1440,6 +1456,7 @@ pub fn generate_rce_cell(
             dummy,
             tx_builder,
             true,
+            smt_in_input,
             &rc_rule,
             Bytes::copy_from_slice(random_args.as_ref()),
         );
@@ -1467,6 +1484,7 @@ pub fn generate_rce_cell(
         dummy,
         tx_builder,
         true,
+        smt_in_input,
         &Bytes::copy_from_slice(bin),
         Bytes::copy_from_slice(random_args.as_ref()),
     );

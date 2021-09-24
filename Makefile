@@ -159,7 +159,7 @@ build/rce_validator: c/rce_validator.c c/rce.h
 
 build/rc_lock: c/rc_lock.c c/rc_lock_supply.h c/rc_lock_acp.h c/rce.h c/secp256k1_lock.h build/secp256k1_data_info_20210801.h $(SECP256K1_SRC_20210801) c/ckb_identity.h
 	$(CC) $(RC_LOCK_CFLAGS) $(LDFLAGS) -o $@ $<
-	$(OBJCOPY) --only-keep-debug $@ $@.debug
+	cp $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
 publish:

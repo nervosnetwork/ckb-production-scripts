@@ -182,7 +182,7 @@ static int rce_make_cursor_from_cell_data(uint8_t* data_source,
                                           size_t index, size_t source) {
   int err = 0;
   uint64_t cell_data_len = 0;
-  err = ckb_load_cell_data(NULL, &cell_data_len, 0, index, CKB_SOURCE_CELL_DEP);
+  err = ckb_load_cell_data(NULL, &cell_data_len, 0, index, source);
   CHECK(err);
   CHECK2(cell_data_len > 0, ERROR_INVALID_MOL_FORMAT);
 
