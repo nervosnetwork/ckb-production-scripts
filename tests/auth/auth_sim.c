@@ -20,6 +20,7 @@
 
 #undef CHECK
 #undef CHECK2
+#define RISCV_PGSIZE 4096
 #include "auth.c"
 // clang-format on
 
