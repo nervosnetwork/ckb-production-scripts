@@ -1,5 +1,5 @@
 use ckb_chain_spec::consensus::{Consensus, ConsensusBuilder};
-use ckb_crypto::secp::Privkey;
+use ckb_crypto::secp::{Generator, Privkey};
 use ckb_error::Error;
 use ckb_script::TxVerifyEnv;
 use ckb_traits::{CellDataProvider, HeaderProvider};
@@ -22,7 +22,8 @@ use lazy_static::lazy_static;
 use log::{Metadata, Record};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, mem::size_of, vec};
+use std::{collections::HashMap, mem::size_of, result, vec};
+use sha3::{Digest, Keccak256};
 
 pub const MAX_CYCLES: u64 = std::u64::MAX;
 pub const SIGNATURE_SIZE: usize = 65;
@@ -82,14 +83,13 @@ pub fn blake160(message: &[u8]) -> Bytes {
     Bytes::copy_from_slice(&r[..20])
 }
 
-pub fn sign_tx(tx: TransactionView, key: &Privkey, config: &TestConfig) -> TransactionView {
+pub fn sign_tx(tx: TransactionView, config: &TestConfig) -> TransactionView {
     let witnesses_len = tx.witnesses().len();
-    sign_tx_by_input_group(tx, key, config, 0, witnesses_len)
+    sign_tx_by_input_group(tx, config, 0, witnesses_len)
 }
 
 pub fn sign_tx_by_input_group(
     tx: TransactionView,
-    key: &Privkey,
     config: &TestConfig,
     begin_index: usize,
     len: usize,
@@ -130,11 +130,10 @@ pub fn sign_tx_by_input_group(
                 if config.incorrect_msg {
                     rng.fill(&mut message);
                 }
-                let message = H256::from(message);
-                let sig = key.sign_recoverable(&message).expect("sign").serialize();
+                let sig = config.auth.sign(&message);
                 witness
                     .as_builder()
-                    .lock(Some(Bytes::from(sig)).pack())
+                    .lock(Some(sig).pack())
                     .build()
                     .as_bytes()
                     .pack()
@@ -223,9 +222,10 @@ fn append_cells_deps<R: Rng>(
 
 pub fn gen_tx(
     dummy: &mut DummyDataLoader,
-    lock_args: Bytes,
     config: &TestConfig,
 ) -> TransactionView {
+    let lock_args = gen_args(&config);
+
     let mut rng = thread_rng();
     gen_tx_with_grouped_args(
         dummy,
@@ -317,10 +317,9 @@ pub enum AlgorithmType {
 }
 
 pub struct TestConfig {
-    pub algorithm_type: AlgorithmType,
+    pub auth: Box<dyn Auth>,
     pub entry_category_type: EntryCategoryType,
-    pub privkey: Privkey,
-
+    
     pub sign_size: i32,
 
     pub incorrect_pubkey: bool,
@@ -329,16 +328,14 @@ pub struct TestConfig {
 
 impl TestConfig {
     pub fn new(
-        algorithm_type: AlgorithmType,
+        auth: Box<dyn Auth>,
         entry_category_type: EntryCategoryType,
-        privkey: Privkey,
         sign_size: i32,
     ) -> TestConfig {
         assert!(sign_size > 0);
         TestConfig {
-            algorithm_type,
+            auth,
             entry_category_type,
-            privkey,
             sign_size,
             incorrect_pubkey: false,
             incorrect_msg: false,
@@ -348,7 +345,7 @@ impl TestConfig {
 
 pub fn gen_args(config: &TestConfig) -> Bytes {
     let mut ckb_auth_type = CkbAuthType {
-        algorithm_id: config.algorithm_type.clone() as u8,
+        algorithm_id: config.auth.get_algorithm_type(),
         content: [0; 20],
     };
 
@@ -359,12 +356,9 @@ pub fn gen_args(config: &TestConfig) -> Bytes {
     };
 
     if !config.incorrect_pubkey {
-        let mut blake2b = ckb_hash::new_blake2b();
-        let pubkey = config.privkey.pubkey().expect("pubkey");
-        blake2b.update(pubkey.serialize().as_slice());
-        let mut pub_hash: [u8; 32] = [0; 32];
-        blake2b.finalize(&mut pub_hash);
-        ckb_auth_type.content.copy_from_slice(&pub_hash[0..20]);
+        let pub_hash = config.auth.get_pub_key_hash();
+        assert_eq!(pub_hash.len(), 20);
+        ckb_auth_type.content.copy_from_slice(pub_hash.as_slice());
     } else {
         let mut rng = thread_rng();
         let incorrect_pubkey = {
@@ -487,4 +481,102 @@ pub fn assert_script_error(err: Error, err_code: AuthErrorCodeType) {
         error_string,
         err_code
     );
+}
+
+pub trait Auth {
+    fn get_pub_key_hash(&self) -> Vec<u8>;
+    fn get_algorithm_type(&self) -> u8;
+    fn sign(&self, msg: &[u8; 32]) -> Bytes;
+}
+
+pub fn auth_builder(t: AlgorithmType) -> result::Result<Box<dyn Auth>, i32> {
+    match t {
+        AlgorithmType::Ckb => {
+            return Ok(CKbAuth::new());
+        }
+        AlgorithmType::Ethereum => {
+            return Ok(EthereumAuth::new());
+        }
+        AlgorithmType::Eos => {}
+        AlgorithmType::Tron => {}
+        AlgorithmType::Bitcoin => {}
+        AlgorithmType::Dogecoin => {}
+        AlgorithmType::CkbMultisig => {}
+        AlgorithmType::SchnorrOrTaproot => {}
+        AlgorithmType::Iso9796_2 => {}
+        AlgorithmType::RSA => {}
+        AlgorithmType::OwnerLock => {}
+    }
+    assert!(false);
+    Err(1)
+}
+
+struct CKbAuth {
+    pub privkey: Privkey,
+}
+impl CKbAuth {
+    fn new() -> Box<dyn Auth> {
+        let privkey = Generator::random_privkey();
+
+        Box::new(CKbAuth {
+            privkey,
+        })
+    }
+}
+impl Auth for CKbAuth {
+    fn get_pub_key_hash(&self) -> Vec<u8> {
+        let pub_key = self.privkey.pubkey().expect("pubkey").serialize();
+        let mut blake2b = ckb_hash::new_blake2b();
+        blake2b.update(pub_key.as_slice());
+        let mut pub_hash: [u8; 32] = [0; 32];
+        blake2b.finalize(&mut pub_hash);
+        Vec::from(&pub_hash[0 .. 20])
+    }
+    fn get_algorithm_type(&self) -> u8 {
+        AlgorithmType::Ckb as u8
+    }
+    fn sign(&self, msg: &[u8; 32]) -> Bytes {
+        let message = H256::from(msg.clone());
+        let sig = self.privkey.sign_recoverable(&message).expect("sign").serialize();
+        Bytes::from(sig)
+    }
+}
+
+struct EthereumAuth {
+    pub privkey: Privkey,
+}
+impl EthereumAuth {
+    fn new() -> Box<dyn Auth> {
+        let privkey = Generator::random_privkey();
+        Box::new(EthereumAuth{
+            privkey,
+        })
+    }
+    fn convert_keccak256_hash(message: &[u8]) -> H256 {
+        let eth_prefix: &[u8; 28] = b"\x19Ethereum Signed Message:\n32";
+        let mut hasher = Keccak256::new();
+        hasher.update(eth_prefix);
+        hasher.update(message);
+        let r = hasher.finalize();
+        H256::from_slice(r.as_slice()).expect("convert_keccak256_hash")
+    }
+}
+impl Auth for EthereumAuth {
+    fn get_pub_key_hash(&self) ->  Vec<u8> {
+        let pub_key = self.privkey.pubkey().expect("pubkey");
+        let pub_key = pub_key.as_bytes();
+
+        let mut hasher = Keccak256::new();
+        hasher.update(pub_key);
+        let r = hasher.finalize();
+        Vec::from(&r[12..])
+    }
+    fn get_algorithm_type(&self) -> u8 {
+        AlgorithmType::Ethereum as u8
+    }
+    fn sign(&self, msg: &[u8; 32]) -> Bytes {
+        let message = H256::from(EthereumAuth::convert_keccak256_hash(msg));
+        let sig = self.privkey.sign_recoverable(&message).expect("sign").serialize();
+        Bytes::from(sig)
+    }
 }
