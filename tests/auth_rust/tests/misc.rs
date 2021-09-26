@@ -358,7 +358,7 @@ pub fn gen_args(config: &TestConfig) -> Bytes {
         entry_category: config.entry_category_type.clone() as u8,
     };
 
-    if config.incorrect_pubkey == false {
+    if !config.incorrect_pubkey {
         let mut blake2b = ckb_hash::new_blake2b();
         let pubkey = config.privkey.pubkey().expect("pubkey");
         blake2b.update(pubkey.serialize().as_slice());
