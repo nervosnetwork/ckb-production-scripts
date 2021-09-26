@@ -168,19 +168,28 @@ fn build_script(
     // this hash to make type script in code unique
     // then make "type script hash" unique, which will be code_hash in "type script"
     let hash = ckb_hash::blake2b_256(bin);
+    let always_success = build_always_success_script();
 
     let type_script_in_code = {
-        // this args can be anything
-        let args = vec![0u8; 32];
-        Script::new_builder()
-            .args(args.pack())
-            .code_hash(hash.pack())
-            .hash_type(ScriptHashType::Type.into())
-            .build()
+        if in_input_cell {
+            let hash: Bytes = Bytes::copy_from_slice(&hash);
+            always_success
+                .clone()
+                .as_builder()
+                .args(hash.pack())
+                .build()
+        } else {
+            // this args can be anything
+            let args = vec![0u8; 32];
+            Script::new_builder()
+                .args(args.pack())
+                .code_hash(hash.pack())
+                .hash_type(ScriptHashType::Type.into())
+                .build()
+        }
     };
 
     // it not needed to set "type script" when is_type is false
-    let always_success = build_always_success_script();
     let capacity = bin.len() as u64;
     let cell = CellOutput::new_builder()
         .capacity(capacity.pack())
@@ -415,7 +424,10 @@ pub fn sign_tx(
     let (begin_index, witnesses_len) = if config.is_owner_lock() {
         (1, tx.witnesses().len() - 1)
     } else {
-        (0, tx.witnesses().len())
+        (
+            config.leading_witness_count,
+            tx.witnesses().len() - config.leading_witness_count,
+        )
     };
     sign_tx_by_input_group(dummy, tx, begin_index, witnesses_len, config)
 }
@@ -487,7 +499,10 @@ pub fn append_rc(
     config.proofs = proofs;
     config.proof_masks = proof_masks;
     config.rc_root = rc_root.as_bytes();
-
+    if config.smt_in_input {
+        // one is RCCellVec, one is RCRule
+        config.leading_witness_count = 2;
+    }
     b0
 }
 
@@ -832,6 +847,7 @@ pub fn gen_tx_with_grouped_args(
                 .code_hash(sighash_all_cell_data_hash.clone())
                 .hash_type(ScriptHashType::Data.into())
                 .build();
+            config.running_script = script.clone();
             let previous_output_cell = CellOutput::new_builder()
                 .capacity(dummy_capacity.pack())
                 .lock(script)
@@ -1088,6 +1104,9 @@ pub struct TestConfig {
     // sudt supply
     pub use_supply: bool,
     pub info_cell: [u8; 32],
+
+    pub running_script: Script,
+    pub leading_witness_count: usize,
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -1183,6 +1202,8 @@ impl TestConfig {
             use_iso9796_2: false,
             use_supply: false,
             info_cell: Default::default(),
+            running_script: Default::default(),
+            leading_witness_count: 0,
         }
     }
 
