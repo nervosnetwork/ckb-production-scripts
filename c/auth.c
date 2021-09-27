@@ -716,7 +716,6 @@ int simulator_main(int argc, char *argv[]) {
 // exec entry
 __attribute__((visibility("default"))) int main(int argc, char *argv[]) {
 #endif
-  test_blake2b();
   int err = 0;
   uint8_t *param_ptr = NULL;
   uint32_t param_len = 0;

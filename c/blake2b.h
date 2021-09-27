@@ -19,7 +19,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include "debug.h"
 
 #if defined(_MSC_VER)
 #define BLAKE2_PACKED(x) __pragma(pack(push, 1)) x __pragma(pack(pop))
@@ -169,7 +168,7 @@ static BLAKE2_INLINE uint64_t rotr64( const uint64_t w, const unsigned c )
 /* prevents compiler optimizing out memset() */
 static BLAKE2_INLINE void secure_zero_memory(void *v, size_t n)
 {
-  void *(*const volatile memset_v)(void *, int, size_t) = &memset;
+  static void *(*const volatile memset_v)(void *, int, size_t) = &memset;
   memset_v(v, 0, n);
 }
 
@@ -277,10 +276,6 @@ int blake2b_init( blake2b_state *S, size_t outlen )
     (P->personal)[i] = DEFAULT_PERSONAL[i];
   }
   return blake2b_init_param( S, P );
-}
-
-void test_blake2b() {
-  PRINT_MEM(DEFAULT_PERSONAL);
 }
 
 

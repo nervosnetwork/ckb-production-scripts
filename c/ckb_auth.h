@@ -4,7 +4,6 @@
 #include "ckb_consts.h"
 #include "ckb_dlfcn.h"
 #include "ckb_exec.h"
-#include "debug.h"
 
 // TODO: when ready, move it into ckb-c-stdlib
 typedef struct CkbAuthType {
@@ -43,7 +42,6 @@ typedef int (*ckb_auth_validate_t)(uint8_t auth_algorithm_id,
                                    const uint8_t *message,
                                    uint32_t message_size, uint8_t *pubkey_hash,
                                    uint32_t pubkey_hash_size);
-typedef int (*ckb_auth_main_t)(int argc, char *argv[]);
 
 static uint8_t g_code_buff[300 * 1024] __attribute__((aligned(RISCV_PGSIZE)));
 
@@ -84,24 +82,8 @@ int ckb_auth(CkbEntryType *entry, CkbAuthType *id, uint8_t *signature,
     err = ckb_exec_encode_params(&bin, &hex);
     if (err != 0) return err;
 
-#if 1
-    char *argv[2] = {hex.buff, 0};
-    void *handle = NULL;
-    size_t consumed_size = 0;
-    err = ckb_dlopen2(entry->code_hash, entry->hash_type, g_code_buff,
-                      sizeof(g_code_buff), &handle, &consumed_size);
-    if (err != 0) return err;
-
-    ckb_auth_main_t func =
-        (ckb_auth_main_t)ckb_dlsym(handle, "main");
-    if (func == 0) {
-      return CKB_INVALID_DATA;
-    }
-    return func(1, argv);
-#else
     const char *argv[2] = {hex.buff, 0};
     return ckb_exec_cell(entry->code_hash, entry->hash_type, 0, 0, 1, argv);
-#endif
   } else {
     return CKB_INVALID_DATA;
   }
