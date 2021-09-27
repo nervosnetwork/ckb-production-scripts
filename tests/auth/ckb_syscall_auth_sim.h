@@ -124,9 +124,10 @@ int ckb_look_for_dep_with_hash2(const uint8_t* code_hash, uint8_t hash_type,
   return 0;
 }
 
+int simulator_main(int argc, char* argv[]);
 int ckb_exec_cell(const uint8_t* code_hash, uint8_t hash_type, uint32_t offset,
                   uint32_t length, int argc, const char* argv[]) {
-  return 0;
+  return simulator_main(argc, (char**)argv);
 }
 
 int ckb_dlopen2(const uint8_t* dep_cell_hash, uint8_t hash_type,

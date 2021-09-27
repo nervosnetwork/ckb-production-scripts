@@ -461,7 +461,7 @@ exit:
 int verify_multisig(const uint8_t *lock_bytes, size_t lock_bytes_len,
                     const uint8_t *message, const uint8_t *hash) {
   int ret;
-  uint8_t temp[BLAKE2B_BLOCK_SIZE];
+  uint8_t temp[PUBKEY_SIZE];
 
   // Extract multisig script flags.
   uint8_t pubkeys_cnt = lock_bytes[3];
@@ -662,13 +662,18 @@ exit:
 #define MAX_ENTRY_SIZE 128
 typedef struct ValidationEntry {
   uint8_t auth_algorithm_id;
+  bool has_auth_algorithm_id;
   uint8_t *pubkey_hash;
   uint32_t pubkey_hash_len;
+  bool has_pubkey;
 
   uint8_t *msg;
   uint32_t msg_len;
+  bool has_msg;
+
   uint8_t *sig;
   uint32_t sig_len;
+  bool has_sig;
 } ValidationEntry;
 
 int chained_continue(int argc, char *argv[]) {
@@ -714,7 +719,7 @@ exit:
 int simulator_main(int argc, char *argv[]) {
 #else
 // exec entry
-__attribute__((visibility("default"))) int main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) {
 #endif
   int err = 0;
   uint8_t *param_ptr = NULL;
@@ -748,6 +753,7 @@ __attribute__((visibility("default"))) int main(int argc, char *argv[]) {
       entry_index = (param_index - 2) / 4;
       CHECK2(entry_index < MAX_ENTRY_SIZE, CKB_INDEX_OUT_OF_BOUND);
       entries[entry_index].auth_algorithm_id = *param_ptr;
+      entries[entry_index].has_auth_algorithm_id = true;
     } else if ((param_index - 2) % 4 == 1) {
       // signature
       CHECK2(param_len > 0, ERROR_EXEC_INVALID_SIG);
@@ -755,6 +761,7 @@ __attribute__((visibility("default"))) int main(int argc, char *argv[]) {
       CHECK2(entry_index < MAX_ENTRY_SIZE, CKB_INDEX_OUT_OF_BOUND);
       entries[entry_index].sig = param_ptr;
       entries[entry_index].sig_len = param_len;
+      entries[entry_index].has_sig = true;
     } else if ((param_index - 2) % 4 == 2) {
       // message
       CHECK2(param_len > 0, ERROR_EXEC_INVALID_MSG);
@@ -762,6 +769,7 @@ __attribute__((visibility("default"))) int main(int argc, char *argv[]) {
       CHECK2(entry_index < MAX_ENTRY_SIZE, CKB_INDEX_OUT_OF_BOUND);
       entries[entry_index].msg = param_ptr;
       entries[entry_index].msg_len = param_len;
+      entries[entry_index].has_msg = true;
     } else if ((param_index - 2) % 4 == 3) {
       // pubkey hash
       CHECK2(param_len > 0, ERROR_EXEC_INVALID_LENGTH);
@@ -769,6 +777,7 @@ __attribute__((visibility("default"))) int main(int argc, char *argv[]) {
       CHECK2(entry_index < MAX_ENTRY_SIZE, CKB_INDEX_OUT_OF_BOUND);
       entries[entry_index].pubkey_hash = param_ptr;
       entries[entry_index].pubkey_hash_len = param_len;
+      entries[entry_index].has_pubkey = true;
     } else {
       // code error
       CHECK2(false, ERROR_EXEC_INVALID_PARAM);
@@ -782,6 +791,10 @@ __attribute__((visibility("default"))) int main(int argc, char *argv[]) {
 
   for (size_t i = 0; i <= entry_index; i++) {
     ValidationEntry *entry = entries + i;
+    CHECK2(entry->has_auth_algorithm_id, ERROR_EXEC_INVALID_PARAM);
+    CHECK2(entry->has_msg, ERROR_EXEC_INVALID_PARAM);
+    CHECK2(entry->has_sig, ERROR_EXEC_INVALID_PARAM);
+    CHECK2(entry->has_pubkey, ERROR_EXEC_INVALID_PARAM);
     err = ckb_auth_validate(entry->auth_algorithm_id, entry->sig,
                             entry->sig_len, entry->msg, entry->msg_len,
                             entry->pubkey_hash, entry->pubkey_hash_len);
