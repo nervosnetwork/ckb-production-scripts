@@ -1,7 +1,9 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
-use ckb_crypto::secp::{Generator, Pubkey};
+use std::os::unix::thread;
+
+use ckb_crypto::secp::{Generator, Pubkey, Privkey};
 use ckb_error::prelude::thiserror::private::AsDynError;
 use ckb_script::TransactionScriptsVerifier;
 use log::{Level, LevelFilter, Metadata, Record};
@@ -15,13 +17,76 @@ use rand::{thread_rng, Rng};
 mod misc;
 
 #[test]
+fn ckb_verify_const_val() {
+    let mut data_loader = DummyDataLoader::new();
+    let mut gen_key = Generator::non_crypto_safe_prng(12);
+    let privkey = gen_key.gen_privkey();
+
+    let mut config = TestConfig::new(
+        AlgorithmType::Ckb,
+        EntryCategoryType::Exec,
+        privkey.clone(),
+        1,
+    );
+    config.use_const_val = true;
+
+    let ckb_args = gen_args(&config);
+
+    let tx = gen_tx(&mut data_loader, ckb_args, &config);
+    let tx = sign_tx(tx, &privkey, &config);
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+
+    let consensus = gen_consensus();
+    let tx_env = gen_tx_env();
+
+    let mut verifier =
+        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    verify_result.expect("pass verification");
+    assert!(false);
+}
+
+#[test]
+fn ckb_verify_const_val2() {
+    let mut data_loader = DummyDataLoader::new();
+    let mut gen_key = Generator::non_crypto_safe_prng(12);
+    let privkey = gen_key.gen_privkey();
+
+    let mut config = TestConfig::new(
+        AlgorithmType::Ckb,
+        EntryCategoryType::DynamicLinking,
+        privkey.clone(),
+        1,
+    );
+    config.use_const_val = true;
+
+    let ckb_args = gen_args(&config);
+
+    let tx = gen_tx(&mut data_loader, ckb_args, &config);
+    let tx = sign_tx(tx, &privkey, &config);
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+
+    let consensus = gen_consensus();
+    let tx_env = gen_tx_env();
+
+    let mut verifier =
+        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    verify_result.expect("pass verification");
+    assert!(false);
+}
+
+/*
+#[test]
 fn ckb_verify() {
     let mut data_loader = DummyDataLoader::new();
     let privkey = Generator::random_privkey();
 
     let config = TestConfig::new(
         AlgorithmType::Ckb,
-        EntryCategoryType::DynamicLinking,
+        EntryCategoryType::Exec,
         privkey.clone(),
         1,
     );
@@ -160,3 +225,4 @@ fn ckb_verify_multiple_group() {
     let verify_result = verifier.verify(MAX_CYCLES);
     verify_result.expect("pass verification");
 }
+*/
