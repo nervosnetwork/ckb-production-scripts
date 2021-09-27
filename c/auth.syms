@@ -1,3 +1,4 @@
 {
   ckb_auth_validate;
+  main;
 };
