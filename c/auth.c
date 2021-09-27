@@ -715,12 +715,52 @@ exit:
   return err;
 }
 
+#define OFFSETOF(TYPE, ELEMENT) ((size_t) & (((TYPE *)0)->ELEMENT))
+#define PT_DYNAMIC 2
+
+typedef struct {
+  uint64_t type;
+  uint64_t value;
+} Elf64_Dynamic;
+
 #ifdef CKB_USE_SIM
 int simulator_main(int argc, char *argv[]) {
 #else
 // exec entry
 int main(int argc, char *argv[]) {
+  uint64_t *phoff = (uint64_t *)OFFSETOF(Elf64_Ehdr, e_phoff);
+  uint16_t *phnum = (uint16_t *)OFFSETOF(Elf64_Ehdr, e_phnum);
+  Elf64_Phdr *program_headers = (Elf64_Phdr *)(*phoff);
+  ;
+  for (int i = 0; i < *phnum; i++) {
+    Elf64_Phdr *program_header = &program_headers[i];
+    if (program_header->p_type == PT_DYNAMIC) {
+      Elf64_Dynamic *d = (Elf64_Dynamic *)program_header->p_vaddr;
+      uint64_t rela_address = 0;
+      uint64_t rela_count = 0;
+      while (d->type != 0) {
+        if (d->type == 0x7) {
+          rela_address = d->value;
+        } else if (d->type == 0x6ffffff9) {
+          rela_count = d->value;
+        }
+        d++;
+      }
+      if (rela_address > 0 && rela_count > 0) {
+        Elf64_Rela *relocations = (Elf64_Rela *)rela_address;
+        for (int j = 0; j < rela_count; j++) {
+          Elf64_Rela *relocation = &relocations[j];
+          if (relocation->r_info != R_RISCV_RELATIVE) {
+            return ERROR_INVALID_ELF;
+          }
+          *((uint64_t *)(relocation->r_offset)) =
+              (uint64_t)(relocation->r_addend);
+        }
+      }
+    }
+  }
 #endif
+
   int err = 0;
   uint8_t *param_ptr = NULL;
   uint32_t param_len = 0;
