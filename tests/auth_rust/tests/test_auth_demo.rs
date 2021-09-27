@@ -25,21 +25,34 @@ fn verify_unit(config: &TestConfig) -> Result<u64, Error> {
 
     let mut verifier =
         TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
-    verifier.set_debug_printer(debug_printer);
+    verifier.set_debug_printer(misc::debug_printer);
     verifier.verify(MAX_CYCLES)
 }
 
-#[test]
-fn ckb_verify() {
-    let auth = misc::auth_builder(AlgorithmType::Ckb).unwrap();
-    let config = TestConfig::new(
+fn unit_test(t: AlgorithmType, incorrect_msg: bool) -> Result<u64, Error> {
+    let auth = misc::auth_builder(t).unwrap();
+    let mut config = TestConfig::new(
         auth,
         EntryCategoryType::DynamicLinking,
         1,
     );
+    config.incorrect_msg = incorrect_msg;
 
-    let verify_result = verify_unit(&config);    
-    verify_result.expect("pass verification");
+    verify_unit(&config)
+}
+
+fn unit_test_success(t: AlgorithmType) {
+    unit_test(t, false).expect("pass verification");
+}
+
+fn unit_test_failed(t: AlgorithmType) {
+    let verify_result = unit_test(t, true);
+    assert_script_error(verify_result.unwrap_err(), AuthErrorCodeType::Mismatched);
+}
+
+#[test]
+fn ckb_verify() {
+    unit_test_success(AlgorithmType::Ckb);
 }
 
 #[test]
@@ -58,16 +71,7 @@ fn ckb_verify_pubkey_failed() {
 
 #[test]
 fn ckb_verify_msg_failed() {
-    let auth = misc::auth_builder(AlgorithmType::Ckb).unwrap();
-    let mut config = TestConfig::new(
-        auth,
-        EntryCategoryType::DynamicLinking,
-        1,
-    );
-    config.incorrect_msg = true;
-
-    let verify_result = verify_unit(&config);    
-    assert_script_error(verify_result.unwrap_err(), AuthErrorCodeType::Mismatched);
+    unit_test_failed(AlgorithmType::Ckb);
 }
 
 #[test]
@@ -120,27 +124,30 @@ fn ckb_verify_multiple_group() {
 
 #[test]
 fn ethereum_verify() {
-    let auth = misc::auth_builder(AlgorithmType::Ethereum).unwrap();
-    let config = TestConfig::new(
-        auth,
-        EntryCategoryType::DynamicLinking,
-        1,
-    );
-    let verify_result = verify_unit(&config);    
-    verify_result.expect("pass verification");
+    unit_test_success(AlgorithmType::Ethereum);
 }
 
 #[test]
 fn ethereum_verify_failed() {
-    let auth = misc::auth_builder(AlgorithmType::Ethereum).unwrap();
-    let mut config = TestConfig::new(
-        auth,
-        EntryCategoryType::DynamicLinking,
-        1,
-    );
-    config.incorrect_msg = true;
-
-    let verify_result = verify_unit(&config);    
-    assert_script_error(verify_result.unwrap_err(), AuthErrorCodeType::Mismatched);
+    unit_test_failed(AlgorithmType::Ethereum);
 }
 
+#[test]
+fn eos_verify() {
+    unit_test_success(AlgorithmType::Eos);
+}
+
+#[test]
+fn eos_verify_failed() {
+    unit_test_failed(AlgorithmType::Eos)
+}
+
+#[test]
+fn tron_verify() {
+    unit_test_success(AlgorithmType::Tron);
+}
+
+#[test]
+fn tron_verify_failed() {
+    unit_test_failed(AlgorithmType::Tron);
+}

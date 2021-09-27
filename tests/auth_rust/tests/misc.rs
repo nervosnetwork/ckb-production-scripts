@@ -24,6 +24,7 @@ use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, mem::size_of, result, vec};
 use sha3::{Digest, Keccak256};
+use mbedtls::hash::{Md, Type};
 
 pub const MAX_CYCLES: u64 = std::u64::MAX;
 pub const SIGNATURE_SIZE: usize = 65;
@@ -130,7 +131,7 @@ pub fn sign_tx_by_input_group(
                 if config.incorrect_msg {
                     rng.fill(&mut message);
                 }
-                let sig = config.auth.sign(&message);
+                let sig = config.auth.sign(&config.auth.convert_message(&message));
                 witness
                     .as_builder()
                     .lock(Some(sig).pack())
@@ -437,13 +438,16 @@ pub fn gen_tx_env() -> TxVerifyEnv {
     TxVerifyEnv::new_commit(&header)
 }
 
-pub fn debug_printer(script: &Byte32, msg: &str) {
-    let slice = script.as_slice();
+pub fn debug_printer(_script: &Byte32, msg: &str) {
+    /*
+    let slice = _script.as_slice();
     let str = format!(
         "Script({:x}{:x}{:x}{:x}{:x})",
         slice[0], slice[1], slice[2], slice[3], slice[4]
     );
     println!("{:?}: {}", str, msg);
+    */
+    print!("{}", msg);
 }
 
 pub struct MyLogger;
@@ -486,7 +490,11 @@ pub fn assert_script_error(err: Error, err_code: AuthErrorCodeType) {
 pub trait Auth {
     fn get_pub_key_hash(&self) -> Vec<u8>;
     fn get_algorithm_type(&self) -> u8;
-    fn sign(&self, msg: &[u8; 32]) -> Bytes;
+
+    fn convert_message(&self, message: &[u8; 32]) -> H256 {
+        H256::from(message.clone())
+    }
+    fn sign(&self, msg: &H256) -> Bytes;
 }
 
 pub fn auth_builder(t: AlgorithmType) -> result::Result<Box<dyn Auth>, i32> {
@@ -497,9 +505,15 @@ pub fn auth_builder(t: AlgorithmType) -> result::Result<Box<dyn Auth>, i32> {
         AlgorithmType::Ethereum => {
             return Ok(EthereumAuth::new());
         }
-        AlgorithmType::Eos => {}
-        AlgorithmType::Tron => {}
-        AlgorithmType::Bitcoin => {}
+        AlgorithmType::Eos => {
+            return Ok(EosAuth::new());
+        }
+        AlgorithmType::Tron => {
+            return Ok(TronAuth::new());
+        }
+        AlgorithmType::Bitcoin => {
+            return Ok(BitcoinAuth::new());
+        }
         AlgorithmType::Dogecoin => {}
         AlgorithmType::CkbMultisig => {}
         AlgorithmType::SchnorrOrTaproot => {}
@@ -535,9 +549,8 @@ impl Auth for CKbAuth {
     fn get_algorithm_type(&self) -> u8 {
         AlgorithmType::Ckb as u8
     }
-    fn sign(&self, msg: &[u8; 32]) -> Bytes {
-        let message = H256::from(msg.clone());
-        let sig = self.privkey.sign_recoverable(&message).expect("sign").serialize();
+    fn sign(&self, msg: &H256) -> Bytes {
+        let sig = self.privkey.sign_recoverable(&msg).expect("sign").serialize();
         Bytes::from(sig)
     }
 }
@@ -551,14 +564,6 @@ impl EthereumAuth {
         Box::new(EthereumAuth{
             privkey,
         })
-    }
-    fn convert_keccak256_hash(message: &[u8]) -> H256 {
-        let eth_prefix: &[u8; 28] = b"\x19Ethereum Signed Message:\n32";
-        let mut hasher = Keccak256::new();
-        hasher.update(eth_prefix);
-        hasher.update(message);
-        let r = hasher.finalize();
-        H256::from_slice(r.as_slice()).expect("convert_keccak256_hash")
     }
 }
 impl Auth for EthereumAuth {
@@ -574,9 +579,129 @@ impl Auth for EthereumAuth {
     fn get_algorithm_type(&self) -> u8 {
         AlgorithmType::Ethereum as u8
     }
-    fn sign(&self, msg: &[u8; 32]) -> Bytes {
-        let message = H256::from(EthereumAuth::convert_keccak256_hash(msg));
-        let sig = self.privkey.sign_recoverable(&message).expect("sign").serialize();
+    fn convert_message(&self, message: &[u8; 32]) -> H256 {
+        let eth_prefix: &[u8; 28] = b"\x19Ethereum Signed Message:\n32";
+        let mut hasher = Keccak256::new();
+        hasher.update(eth_prefix);
+        hasher.update(message);
+        let r = hasher.finalize();
+        H256::from_slice(r.as_slice()).expect("convert_keccak256_hash")
+    }
+    fn sign(&self, msg: &H256) -> Bytes {
+        let sig = self.privkey.sign_recoverable(msg).expect("sign").serialize();
+        Bytes::from(sig)
+    }
+}
+
+struct EosAuth {
+    pub privkey: Privkey,
+}
+impl EosAuth {
+    fn new() -> Box<dyn Auth> {
+        let privkey = Generator::random_privkey();
+        Box::new(EthereumAuth{
+            privkey,
+        })
+    }
+}
+impl Auth for EosAuth {
+    fn get_pub_key_hash(&self) ->  Vec<u8> {
+        let pub_key = self.privkey.pubkey().expect("pubkey");
+        let pub_key = pub_key.as_bytes();
+
+        let mut hasher = Keccak256::new();
+        hasher.update(pub_key);
+        let r = hasher.finalize();
+        Vec::from(&r[12..])
+    }
+    fn get_algorithm_type(&self) -> u8 {
+        AlgorithmType::Ethereum as u8
+    }
+    fn convert_message(&self, message: &[u8; 32]) -> H256 {
+        let mut md = Md::new(Type::Sha256).unwrap();
+        md.update(message).expect("md sha256 update");
+        let mut msg: [u8; 32] = [0; 32];
+        md.finish(&mut msg).expect("md sha256 finish");
+        H256::from(msg)
+    }
+    fn sign(&self, msg: &H256) -> Bytes {
+        let sig = self.privkey.sign_recoverable(msg).expect("sign").serialize();
+        Bytes::from(sig)
+    }
+}
+
+struct TronAuth {
+    pub privkey: Privkey,
+}
+impl TronAuth {
+    fn new() -> Box<dyn Auth> {
+        let privkey = Generator::random_privkey();
+        Box::new(TronAuth{
+            privkey,
+        })
+    }
+}
+impl Auth for TronAuth {
+    fn get_pub_key_hash(&self) ->  Vec<u8> {
+        let pub_key = self.privkey.pubkey().expect("pubkey");
+        let pub_key = pub_key.as_bytes();
+
+        let mut hasher = Keccak256::new();
+        hasher.update(pub_key);
+        let r = hasher.finalize();
+        Vec::from(&r[12..])
+    }
+    fn get_algorithm_type(&self) -> u8 {
+        AlgorithmType::Tron as u8
+    }
+    fn convert_message(&self, message: &[u8; 32]) -> H256 {
+        let eth_prefix: &[u8; 24] = b"\x19TRON Signed Message:\n32";
+        let mut hasher = Keccak256::new();
+        hasher.update(eth_prefix);
+        hasher.update(message);
+        let r = hasher.finalize();
+        H256::from_slice(r.as_slice()).expect("convert_keccak256_hash")
+    }
+    fn sign(&self, msg: &H256) -> Bytes {
+        let sig = self.privkey.sign_recoverable(msg).expect("sign").serialize();
+        Bytes::from(sig)
+    }
+}
+
+struct BitcoinAuth {
+    pub privkey: Privkey,
+}
+impl BitcoinAuth {
+    fn new() -> Box<dyn Auth> {
+        let privkey = Generator::random_privkey();
+        Box::new(BitcoinAuth{
+            privkey,
+        })
+    }
+}
+impl Auth for BitcoinAuth {
+    fn get_pub_key_hash(&self) ->  Vec<u8> {
+        let pub_key = self.privkey.pubkey().expect("pubkey");
+        let pub_key = pub_key.as_bytes();
+
+        let mut hasher = Keccak256::new();
+        hasher.update(pub_key);
+        let r = hasher.finalize();
+        Vec::from(&r[12..])
+    }
+    fn get_algorithm_type(&self) -> u8 {
+        AlgorithmType::Bitcoin as u8
+    }
+    fn convert_message(&self, message: &[u8; 32]) -> H256 {
+        let eth_prefix: &[u8; 24] = b"\x19TRON Signed Message:\n32";
+        let mut hasher = Keccak256::new();
+        hasher.update(eth_prefix);
+        hasher.update(message);
+        let r = hasher.finalize();
+        H256::from_slice(r.as_slice()).expect("convert_keccak256_hash")
+    }
+    fn sign(&self, msg: &H256) -> Bytes {
+        let sig = self.privkey.sign_recoverable(msg).expect("sign").serialize();
         Bytes::from(sig)
     }
 }
