@@ -152,17 +152,19 @@ pub fn sign_tx_by_input_group(
         .build()
 }
 
-fn append_cell_deps(
+fn append_cell_deps<R: Rng>(
     dummy: &mut DummyDataLoader,
+    rng: &mut R,
     deps_data: &Bytes,
-    const_hash: &[u8; 32],
 ) -> OutPoint {
     // setup sighash_all dep
     let sighash_all_out_point = {
-        let rand_hash = {
-            const_hash.pack()
+        let contract_tx_hash = {
+            let mut buf = [0u8; 32];
+            rng.fill(&mut buf);
+            buf.pack()
         };
-        OutPoint::new(rand_hash, 0)
+        OutPoint::new(contract_tx_hash, 0)
     };
 
     // dep contract code
@@ -184,40 +186,10 @@ fn append_cell_deps(
 fn append_cells_deps<R: Rng>(
     dummy: &mut DummyDataLoader,
     rng: &mut R,
-    config: &TestConfig,
 ) -> (Capacity, TransactionBuilder) {
-    
-    let mut auth_demo_rand_hash: [u8; 32] = [0; 32];
-    let mut auth_dl_rand_hash: [u8; 32] = [0; 32];
-    let mut secp256_rand_hash: [u8; 32] = [0; 32];
-    if config.use_const_val {
-        auth_demo_rand_hash = [
-            0x97, 0xbc, 0x16, 0x9f, 0x11, 0x04, 0xdb, 0x02, 
-            0xf1, 0xf4, 0xc4, 0xfe, 0xa6, 0xd2, 0xf2, 0xd0, 
-            0x9b, 0x82, 0xfd, 0x21, 0x32, 0xe7, 0x03, 0xc8, 
-            0xe8, 0x00, 0x90, 0xbf, 0xb5, 0x8c, 0x06, 0x4e, 
-        ];
-        auth_dl_rand_hash = [
-            0x02, 0x0a, 0x2a, 0x68, 0x2a, 0x7e, 0x10, 0x4e, 
-            0x42, 0x91, 0x42, 0x80, 0x05, 0x3c, 0xca, 0x5f, 
-            0x57, 0x23, 0xc2, 0xd1, 0x86, 0xfb, 0x26, 0xf4, 
-            0xa0, 0x9b, 0xc4, 0x5b, 0x90, 0x65, 0x8e, 0xf0, 
-        ];
-        secp256_rand_hash = [
-            0x94, 0x00, 0xba, 0x86, 0xc6, 0x06, 0x34, 0xeb, 
-            0xa9, 0x71, 0x55, 0x16, 0x01, 0x44, 0x1d, 0x86, 
-            0x74, 0x0c, 0x10, 0x42, 0xce, 0xbc, 0x8d, 0x1f, 
-            0xaf, 0x69, 0xdd, 0x90, 0xe7, 0x75, 0xa6, 0xe7, 
-        ];
-    } else {
-        rng.fill(&mut auth_demo_rand_hash);
-        rng.fill(&mut auth_dl_rand_hash);
-        rng.fill(&mut secp256_rand_hash);
-    }
-
-    let sighash_all_out_point = append_cell_deps(dummy,&AUTH_DEMO,&auth_demo_rand_hash);
-    let sighash_dl_out_point = append_cell_deps(dummy, &AUTH_DL, &auth_dl_rand_hash);
-    let secp256k1_data_out_point = append_cell_deps(dummy, &SECP256K1_DATA_BIN, &secp256_rand_hash);
+    let sighash_all_out_point = append_cell_deps(dummy, rng, &AUTH_DEMO);
+    let sighash_dl_out_point = append_cell_deps(dummy, rng, &AUTH_DL);
+    let secp256k1_data_out_point = append_cell_deps(dummy, rng, &SECP256K1_DATA_BIN);
 
     // setup default tx builder
     let dummy_capacity = Capacity::shannons(42);
@@ -259,7 +231,6 @@ pub fn gen_tx(
         dummy,
         vec![(lock_args, config.sign_size as usize)],
         &mut rng,
-        config,
     )
 }
 
@@ -267,32 +238,18 @@ pub fn gen_tx_with_grouped_args<R: Rng>(
     dummy: &mut DummyDataLoader,
     grouped_args: Vec<(Bytes, usize)>,
     rng: &mut R,
-    config: &TestConfig,
 ) -> TransactionView {
-    let (dummy_capacity, mut tx_builder) = append_cells_deps(dummy, rng, config);
+    let (dummy_capacity, mut tx_builder) = append_cells_deps(dummy, rng);
     let sighash_all_cell_data_hash = CellOutput::calc_data_hash(&AUTH_DEMO);
 
     for (args, inputs_size) in grouped_args {
         // setup dummy input unlock script
         for _ in 0..inputs_size {
-            let previous_tx_hash;
-            if config.use_const_val {
-                previous_tx_hash = {
-                    let buf = [
-                        0x7d, 0x79, 0x35, 0x8e, 0x35, 0x6e, 0x5f, 0xfc,
-                        0x3d, 0x0f, 0xcf, 0x40, 0xe3, 0x9b, 0x27, 0x74,
-                        0xf9, 0xbb, 0x5f, 0x0f, 0x48, 0xeb, 0xd2, 0xe1,
-                        0xd7, 0x6f, 0x48, 0xe1, 0x3e, 0x46, 0xce, 0x11,
-                    ];
-                    buf.pack()
-                };
-            } else {
-                previous_tx_hash = {
-                    let mut buf = [0u8; 32];
-                    rng.fill(&mut buf);
-                    buf.pack()
-                };
-            }
+            let previous_tx_hash = {
+                let mut buf = [0u8; 32];
+                rng.fill(&mut buf);
+                buf.pack()
+            };
             let previous_out_point = OutPoint::new(previous_tx_hash, 0);
             let script = Script::new_builder()
                 .args(args.pack())
@@ -308,14 +265,10 @@ pub fn gen_tx_with_grouped_args<R: Rng>(
                 (previous_output_cell.clone(), Bytes::new()),
             );
             let mut buf = BytesMut::with_capacity(65);
+            let mut random_extra_witness = [0u8; 64];
+            rng.fill(&mut random_extra_witness);
 
-            if config.use_const_val {
-                buf.put(Bytes::from(config.rand_buf.to_vec()));
-            }else{
-                let mut random_extra_witness = [0u8; 64];
-                rng.fill(&mut random_extra_witness);
-                buf.put(Bytes::from(random_extra_witness.to_vec()));
-            }
+            buf.put(Bytes::from(random_extra_witness.to_vec()));
 
             let witness_args = WitnessArgsBuilder::default()
                 .input_type(Some(Bytes::from(buf.to_vec())).pack())
@@ -372,9 +325,6 @@ pub struct TestConfig {
 
     pub incorrect_pubkey: bool,
     pub incorrect_msg: bool,
-
-    pub use_const_val: bool,
-    pub rand_buf: [u8; 64],
 }
 
 impl TestConfig {
@@ -392,8 +342,6 @@ impl TestConfig {
             sign_size,
             incorrect_pubkey: false,
             incorrect_msg: false,
-            use_const_val: false,
-            rand_buf: [0; 64],
         }
     }
 }
@@ -497,12 +445,11 @@ pub fn gen_tx_env() -> TxVerifyEnv {
 
 pub fn debug_printer(script: &Byte32, msg: &str) {
     let slice = script.as_slice();
-    let _str = format!(
+    let str = format!(
         "Script({:x}{:x}{:x}{:x}{:x})",
         slice[0], slice[1], slice[2], slice[3], slice[4]
     );
-    //println!("{:?}: {}", _str, msg);
-    print!("{}", msg);
+    println!("{:?}: {}", str, msg);
 }
 
 pub struct MyLogger;
