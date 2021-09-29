@@ -265,28 +265,12 @@ int ckb_auth_validate_stub(uint8_t auth_algorithm_id, const uint8_t* signature,
                            uint32_t pubkey_hash_size) {
   int err = 0;
   if (g_switch_to_exec) {
-    CkbBinaryArgsType bin = {0};
-    ckb_exec_reset(&bin);
-    uint8_t code_hash[32] = {0};
-    uint8_t hash_type = 0;
-    err = ckb_exec_append(&bin, code_hash, sizeof(code_hash));
-    CHECK(err);
-    err = ckb_exec_append(&bin, &hash_type, 1);
-    CHECK(err);
-    err = ckb_exec_append(&bin, &auth_algorithm_id, 1);
-    CHECK(err);
-    err = ckb_exec_append(&bin, (uint8_t*)signature, signature_size);
-    CHECK(err);
-    err = ckb_exec_append(&bin, (uint8_t*)message, message_size);
-    CHECK(err);
-    err = ckb_exec_append(&bin, pubkey_hash, pubkey_hash_size);
-    CHECK(err);
-
-    CkbHexArgsType hex = {0};
-    err = ckb_exec_encode_params(&bin, &hex);
-
-    char* argv[2] = {hex.buff, 0};
-    return simulator_main(1, argv);
+    CkbEntryType entry = {.entry_category = EntryCategoryExec};
+    CkbAuthType auth = {.algorithm_id = auth_algorithm_id};
+    memcpy(auth.content, pubkey_hash, pubkey_hash_size);
+    ASSERT(message_size == 32);
+    ASSERT(pubkey_hash_size = 20);
+    return ckb_auth(&entry, &auth, signature, signature_size, message);
   } else {
     return ckb_auth_validate(auth_algorithm_id, signature, signature_size,
                              message, message_size, pubkey_hash,

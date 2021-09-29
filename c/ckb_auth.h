@@ -45,7 +45,7 @@ typedef int (*ckb_auth_validate_t)(uint8_t auth_algorithm_id,
 
 static uint8_t g_code_buff[300 * 1024] __attribute__((aligned(RISCV_PGSIZE)));
 
-int ckb_auth(CkbEntryType *entry, CkbAuthType *id, uint8_t *signature,
+int ckb_auth(CkbEntryType *entry, CkbAuthType *id, const uint8_t *signature,
              uint32_t signature_size, const uint8_t *message32) {
   int err = 0;
   if (entry->entry_category == EntryCategoryDynamicLinking) {

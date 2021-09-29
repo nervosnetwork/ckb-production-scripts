@@ -92,7 +92,7 @@ validate_signature_rsa_clean:
 ### Auth
 build/auth: c/auth.c deps/mbedtls/library/libmbedcrypto.a
 	$(CC) $(AUTH_CFLAGS) $(LDFLAGS) -fPIC -fPIE -pie -Wl,--dynamic-list c/auth.syms -o $@ $^
-	$(OBJCOPY) --only-keep-debug $@ $@.debug
+	cp $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
 ${PROTOCOL_SCHEMA}:
