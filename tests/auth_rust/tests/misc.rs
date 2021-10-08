@@ -28,7 +28,7 @@ use openssl::{
     rsa::Rsa,
     sign::Signer,
 };
-use rand::{thread_rng, Rng};
+use rand::{distributions::Standard, thread_rng, Rng};
 use secp256k1;
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
@@ -147,7 +147,15 @@ pub fn sign_tx_by_input_group(
                 if config.incorrect_msg {
                     rng.fill(&mut message);
                 }
-                let sig = config.auth.sign(&config.auth.convert_message(&message));
+                let sig;
+                if config.incorrect_sign {
+                    sig = {
+                        let buff: Vec<u8> = rng.sample_iter(&Standard).take(16).collect();
+                        Bytes::from(buff)
+                    };
+                } else {
+                    sig = config.auth.sign(&config.auth.convert_message(&message));
+                }
                 witness
                     .as_builder()
                     .lock(Some(sig).pack())
@@ -342,6 +350,7 @@ pub struct TestConfig {
 
     pub incorrect_pubkey: bool,
     pub incorrect_msg: bool,
+    pub incorrect_sign: bool,
 }
 
 impl TestConfig {
@@ -357,6 +366,7 @@ impl TestConfig {
             sign_size,
             incorrect_pubkey: false,
             incorrect_msg: false,
+            incorrect_sign: false,
         }
     }
 }
@@ -504,6 +514,21 @@ pub fn assert_script_error(err: Error, err_code: AuthErrorCodeType) {
     );
 }
 
+pub fn assert_script_error_vec(err: Error, err_codes: &[i32]) {
+    let error_string = err.to_string();
+    let mut is_assert = false;
+    for err_code in err_codes {
+        if error_string.contains(format!("error code {}", err_code).as_str()) {
+            is_assert = true;
+            break;
+        }
+    }
+
+    if !is_assert {
+        assert!(false, "error_string: {}", error_string);
+    }
+}
+
 pub fn assert_script_error_i(err: Error, err_code: i32) {
     let err_code = err_code as i8;
     let error_string = err.to_string();
@@ -516,7 +541,7 @@ pub fn assert_script_error_i(err: Error, err_code: i32) {
 }
 
 pub trait Auth {
-    fn get_pub_key_hash(&self) -> Vec<u8>;
+    fn get_pub_key_hash(&self) -> Vec<u8>; // result size must is 20
     fn get_algorithm_type(&self) -> u8;
 
     fn convert_message(&self, message: &[u8; 32]) -> H256 {
@@ -567,7 +592,7 @@ pub fn auth_builder(t: AlgorithmType) -> result::Result<Box<dyn Auth>, i32> {
     Err(1)
 }
 
-struct CKbAuth {
+pub struct CKbAuth {
     pub privkey: Privkey,
 }
 impl CKbAuth {
@@ -584,7 +609,7 @@ impl CKbAuth {
         let pub_hash = ckb_hash::blake2b_256(pub_key.as_slice());
         Vec::from(&pub_hash[0..20])
     }
-    fn ckb_sign(msg: &H256, privkey: &Privkey) -> Bytes {
+    pub fn ckb_sign(msg: &H256, privkey: &Privkey) -> Bytes {
         let sig = privkey.sign_recoverable(&msg).expect("sign").serialize();
         Bytes::from(sig)
     }
@@ -601,7 +626,7 @@ impl Auth for CKbAuth {
     }
 }
 
-struct EthereumAuth {
+pub struct EthereumAuth {
     pub privkey: secp256k1::key::SecretKey,
     pub pubkey: secp256k1::key::PublicKey,
 }
@@ -612,7 +637,7 @@ impl EthereumAuth {
         let (privkey, pubkey) = generator.generate_keypair(&mut rng);
         Box::new(EthereumAuth { privkey, pubkey })
     }
-    fn get_eth_pub_key_hash(pubkey: &secp256k1::key::PublicKey) -> Vec<u8> {
+    pub fn get_eth_pub_key_hash(pubkey: &secp256k1::key::PublicKey) -> Vec<u8> {
         let pubkey = pubkey.serialize_uncompressed();
         let mut hasher = Keccak256::new();
         hasher.update(&pubkey[1..].to_vec());
@@ -620,7 +645,7 @@ impl EthereumAuth {
 
         Vec::from(&r[12..])
     }
-    fn eth_sign(msg: &H256, privkey: &secp256k1::SecretKey) -> Bytes {
+    pub fn eth_sign(msg: &H256, privkey: &secp256k1::SecretKey) -> Bytes {
         let secp: secp256k1::Secp256k1<secp256k1::All> = secp256k1::Secp256k1::gen_new();
         let msg = secp256k1::Message::from_slice(msg.as_bytes()).unwrap();
         let sign = secp.sign_recoverable(&msg, privkey);
@@ -650,7 +675,7 @@ impl Auth for EthereumAuth {
     }
 }
 
-struct EosAuth {
+pub struct EosAuth {
     pub privkey: secp256k1::key::SecretKey,
     pub pubkey: secp256k1::key::PublicKey,
 }
@@ -681,7 +706,7 @@ impl Auth for EosAuth {
     }
 }
 
-struct TronAuth {
+pub struct TronAuth {
     pub privkey: secp256k1::key::SecretKey,
     pub pubkey: secp256k1::key::PublicKey,
 }
@@ -725,7 +750,7 @@ impl BitcoinAuth {
             compress: true,
         })
     }
-    fn get_btc_pub_key_hash(privkey: &Privkey, compress: bool) -> Vec<u8> {
+    pub fn get_btc_pub_key_hash(privkey: &Privkey, compress: bool) -> Vec<u8> {
         let pub_key = privkey.pubkey().expect("pubkey");
         let pub_key_vec: Vec<u8>;
         if compress {
@@ -749,7 +774,7 @@ impl BitcoinAuth {
 
         Vec::from(&pub_hash[0..20])
     }
-    fn btc_sign(msg: &H256, privkey: &Privkey, compress: bool) -> Bytes {
+    pub fn btc_sign(msg: &H256, privkey: &Privkey, compress: bool) -> Bytes {
         let sign = privkey.sign_recoverable(&msg).expect("sign").serialize();
         assert_eq!(sign.len(), 65);
         let recid = sign[64];
@@ -856,10 +881,10 @@ pub struct CkbMultisigAuth {
     pub hash: Vec<u8>,
 }
 impl CkbMultisigAuth {
-    fn get_mulktisig_size(&self) -> usize {
+    pub fn get_mulktisig_size(&self) -> usize {
         (4 + 20 * self.pubkeys_cnt + 65 * self.threshold) as usize
     }
-    fn generator_key(
+    pub fn generator_key(
         pubkeys_cnt: u8,
         threshold: u8,
         require_first_n: u8,
@@ -878,6 +903,20 @@ impl CkbMultisigAuth {
             pubkey_data.put(Bytes::from(hash));
         }
         (pubkey_data.freeze().to_vec(), pubkey_hashs)
+    }
+
+    pub fn multickb_sign(&self, msg: &H256) -> Bytes {
+        let mut sign_data = BytesMut::with_capacity(self.get_mulktisig_size());
+        sign_data.put(Bytes::from(self.pubkey_data.clone()));
+        let privkey_size = self.privkeys.len();
+        for i in 0..self.threshold {
+            if privkey_size > i as usize {
+                sign_data.put(CKbAuth::ckb_sign(msg, &self.privkeys[i as usize]));
+            } else {
+                sign_data.put(CKbAuth::ckb_sign(msg, &self.privkeys[privkey_size - 1]));
+            }
+        }
+        sign_data.freeze()
     }
 
     pub fn new(pubkeys_cnt: u8, threshold: u8, require_first_n: u8) -> Box<CkbMultisigAuth> {
@@ -902,12 +941,7 @@ impl Auth for CkbMultisigAuth {
         AlgorithmType::CkbMultisig as u8
     }
     fn sign(&self, msg: &H256) -> Bytes {
-        let mut sign_data = BytesMut::with_capacity(self.get_mulktisig_size());
-        sign_data.put(Bytes::from(self.pubkey_data.clone()));
-        for i in 0..self.threshold {
-            sign_data.put(CKbAuth::ckb_sign(msg, &self.privkeys[i as usize]));
-        }
-        sign_data.freeze()
+        self.multickb_sign(msg)
     }
     fn get_sign_size(&self) -> usize {
         self.get_mulktisig_size()
