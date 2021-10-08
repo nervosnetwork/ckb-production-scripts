@@ -156,9 +156,30 @@ pub fn sign_tx_by_input_group(
                 } else {
                     sig = config.auth.sign(&config.auth.convert_message(&message));
                 }
+
+                let sig2 = match config.incorrect_sign_size {
+                    TestConfigIncorrectSing::None => sig,
+                    TestConfigIncorrectSing::Bigger => {
+                        let sign_size = rng.gen_range(1, 64);
+                        let mut buff = BytesMut::with_capacity(sig.len() + sign_size);
+                        buff.put(sig);
+                        let mut fillbuffer: BytesMut = BytesMut::with_capacity(sign_size);
+                        for _i in 0..(sign_size - 1) {
+                            fillbuffer.put_u8(rng.gen_range(0, 255) as u8);
+                        }
+                        buff.put(Bytes::from(fillbuffer));
+                        buff.freeze()
+                    }
+                    TestConfigIncorrectSing::Smaller => {
+                        let sign_size = rng.gen_range(1, sig.len() - 8);
+                        let temp_sig = &sig.to_vec()[0..sign_size];
+                        Bytes::from(temp_sig.to_vec())
+                    }
+                };
+
                 witness
                     .as_builder()
-                    .lock(Some(sig).pack())
+                    .lock(Some(sig2).pack())
                     .build()
                     .as_bytes()
                     .pack()
@@ -327,7 +348,7 @@ pub enum EntryCategoryType {
     DynamicLinking = 1,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum AlgorithmType {
     Ckb = 0,
     Ethereum = 1,
@@ -342,6 +363,13 @@ pub enum AlgorithmType {
     OwnerLock = 0xFC,
 }
 
+#[derive(PartialEq, Eq)]
+pub enum TestConfigIncorrectSing {
+    None,
+    Bigger,
+    Smaller,
+}
+
 pub struct TestConfig {
     pub auth: Box<dyn Auth>,
     pub entry_category_type: EntryCategoryType,
@@ -351,6 +379,7 @@ pub struct TestConfig {
     pub incorrect_pubkey: bool,
     pub incorrect_msg: bool,
     pub incorrect_sign: bool,
+    pub incorrect_sign_size: TestConfigIncorrectSing,
 }
 
 impl TestConfig {
@@ -367,6 +396,7 @@ impl TestConfig {
             incorrect_pubkey: false,
             incorrect_msg: false,
             incorrect_sign: false,
+            incorrect_sign_size: TestConfigIncorrectSing::None,
         }
     }
 }

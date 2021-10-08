@@ -1,6 +1,8 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
+use std::error;
+
 use ckb_crypto::secp::{Generator, Privkey, Pubkey};
 use ckb_error::{prelude::thiserror::private::AsDynError, Error};
 use ckb_script::TransactionScriptsVerifier;
@@ -10,6 +12,7 @@ use ckb_types::{
 };
 use log::{Level, LevelFilter, Metadata, Record};
 use mbedtls::hash::{Md, Type};
+use openssl::ssl::ErrorCode;
 use rand::{thread_rng, Rng};
 use sha3::{Digest, Keccak256};
 
@@ -60,6 +63,29 @@ fn unit_test_failed(t: AlgorithmType) {
     assert_script_error(verify_result.unwrap_err(), AuthErrorCodeType::Mismatched);
 }
 
+fn unit_test_sign_size_failed_with_error_code(t: AlgorithmType, error_code: i32) {
+    {
+        let auth = auth_builder(t).unwrap();
+        let mut config = TestConfig::new(auth, unit_test_get_run_type(), 1);
+        config.incorrect_sign_size = misc::TestConfigIncorrectSing::Bigger;
+
+        let verify_result = verify_unit(&config);
+        misc::assert_script_error_i(verify_result.unwrap_err(), error_code);
+    }
+    {
+        let auth = auth_builder(t).unwrap();
+        let mut config = TestConfig::new(auth, unit_test_get_run_type(), 1);
+        config.incorrect_sign_size = misc::TestConfigIncorrectSing::Smaller;
+
+        let verify_result = verify_unit(&config);
+        misc::assert_script_error_i(verify_result.unwrap_err(), error_code);
+    }
+}
+
+fn unit_test_sign_size_failed(t: AlgorithmType) {
+    unit_test_sign_size_failed_with_error_code(t, AuthErrorCodeType::InvalidArg as i32);
+}
+
 #[test]
 fn ckb_verify() {
     unit_test_success(AlgorithmType::Ckb);
@@ -94,6 +120,11 @@ fn ckb_verify_sign_failed() {
             AuthErrorCodeType::InvalidArg as i32,
         ],
     );
+}
+
+#[test]
+fn ckb_verify_sign_size_failed() {
+    unit_test_sign_size_failed(AlgorithmType::Ckb);
 }
 
 #[test]
@@ -163,6 +194,46 @@ fn ethereum_verify_sign_failed() {
 }
 
 #[test]
+fn ethereum_verify_sign_size_failed() {
+    unit_test_sign_size_failed(AlgorithmType::Ethereum);
+}
+
+#[test]
+fn convert_eth_error() {
+    struct EthConverFaileAuth(EthereumAuth);
+    impl Auth for EthConverFaileAuth {
+        fn get_pub_key_hash(&self) -> Vec<u8> {
+            EthereumAuth::get_eth_pub_key_hash(&self.0.pubkey)
+        }
+        fn get_algorithm_type(&self) -> u8 {
+            AlgorithmType::Ethereum as u8
+        }
+        fn convert_message(&self, message: &[u8; 32]) -> H256 {
+            let eth_prefix: &[u8; 28] = b"\x19Ethereum Signed Xessage:\n32";
+            let mut hasher = Keccak256::new();
+            hasher.update(eth_prefix);
+            hasher.update(message);
+            let r = hasher.finalize();
+            let ret = H256::from_slice(r.as_slice()).expect("convert_keccak256_hash");
+            ret
+        }
+        fn sign(&self, msg: &H256) -> Bytes {
+            EthereumAuth::eth_sign(msg, &self.0.privkey)
+        }
+    }
+
+    let generator: secp256k1::Secp256k1<secp256k1::All> = secp256k1::Secp256k1::new();
+    let mut rng = thread_rng();
+    let (privkey, pubkey) = generator.generate_keypair(&mut rng);
+
+    let auth = Box::new(EthConverFaileAuth {
+        0: EthereumAuth { privkey, pubkey },
+    });
+    let verify_result = unit_test_with_auth(auth, false);
+    assert_script_error(verify_result.unwrap_err(), AuthErrorCodeType::Mismatched);
+}
+
+#[test]
 fn eos_verify() {
     unit_test_success(AlgorithmType::Eos);
 }
@@ -170,6 +241,45 @@ fn eos_verify() {
 #[test]
 fn eos_verify_failed() {
     unit_test_failed(AlgorithmType::Eos)
+}
+
+#[test]
+fn eos_verify_sign_size_failed() {
+    unit_test_sign_size_failed(AlgorithmType::Eos);
+}
+
+#[test]
+fn convert_eos_error() {
+    struct EthConverFaileAuth(EosAuth);
+    impl Auth for EthConverFaileAuth {
+        fn get_pub_key_hash(&self) -> Vec<u8> {
+            EthereumAuth::get_eth_pub_key_hash(&self.0.pubkey)
+        }
+        fn get_algorithm_type(&self) -> u8 {
+            AlgorithmType::Eos as u8
+        }
+        fn convert_message(&self, message: &[u8; 32]) -> H256 {
+            let mut msg: [u8; 32] = [0; 32];
+            let mut md = Md::new(Type::Sha256).unwrap();
+            md.update(message).expect("md sha256 update");
+            md.update(&[1, 2, 3]).expect("md sha256 update");
+            md.finish(&mut msg).expect("md sha256 finish");
+            H256::from(msg)
+        }
+        fn sign(&self, msg: &H256) -> Bytes {
+            EthereumAuth::eth_sign(msg, &self.0.privkey)
+        }
+    }
+
+    let generator: secp256k1::Secp256k1<secp256k1::All> = secp256k1::Secp256k1::new();
+    let mut rng = thread_rng();
+    let (privkey, pubkey) = generator.generate_keypair(&mut rng);
+
+    let auth = Box::new(EthConverFaileAuth {
+        0: EosAuth { privkey, pubkey },
+    });
+    let verify_result = unit_test_with_auth(auth, false);
+    assert_script_error(verify_result.unwrap_err(), AuthErrorCodeType::Mismatched);
 }
 
 #[test]
@@ -196,6 +306,44 @@ fn tron_verify_sign_failed() {
             AuthErrorCodeType::InvalidArg as i32,
         ],
     );
+}
+
+#[test]
+fn tron_verify_sign_size_failed() {
+    unit_test_sign_size_failed(AlgorithmType::Tron);
+}
+
+#[test]
+fn convert_tron_error() {
+    struct TronConverFaileAuth(TronAuth);
+    impl Auth for TronConverFaileAuth {
+        fn get_pub_key_hash(&self) -> Vec<u8> {
+            EthereumAuth::get_eth_pub_key_hash(&self.0.pubkey)
+        }
+        fn get_algorithm_type(&self) -> u8 {
+            AlgorithmType::Tron as u8
+        }
+        fn convert_message(&self, message: &[u8; 32]) -> H256 {
+            let eth_prefix: &[u8; 24] = b"\x19TRON Signed Xessage:\n32";
+            let mut hasher = Keccak256::new();
+            hasher.update(eth_prefix);
+            hasher.update(message);
+            let r = hasher.finalize();
+            H256::from_slice(r.as_slice()).expect("convert_keccak256_hash")
+        }
+        fn sign(&self, msg: &H256) -> Bytes {
+            EthereumAuth::eth_sign(msg, &self.0.privkey)
+        }
+    }
+
+    let generator: secp256k1::Secp256k1<secp256k1::All> = secp256k1::Secp256k1::new();
+    let mut rng = thread_rng();
+    let (privkey, pubkey) = generator.generate_keypair(&mut rng);
+    let auth = Box::new(TronConverFaileAuth {
+        0: TronAuth { privkey, pubkey },
+    });
+    let verify_result = unit_test_with_auth(auth, false);
+    assert_script_error(verify_result.unwrap_err(), AuthErrorCodeType::Mismatched);
 }
 
 #[test]
@@ -232,6 +380,60 @@ fn bitcoin_verify_uncompress() {
 }
 
 #[test]
+fn bitcoin_verify_sign_size_failed() {
+    unit_test_sign_size_failed(AlgorithmType::Bitcoin);
+}
+
+#[test]
+fn convert_btc_error() {
+    struct BtcConverFaileAuth(BitcoinAuth);
+    impl Auth for BtcConverFaileAuth {
+        fn get_pub_key_hash(&self) -> Vec<u8> {
+            BitcoinAuth::get_btc_pub_key_hash(&self.0.privkey, self.0.compress)
+        }
+        fn get_algorithm_type(&self) -> u8 {
+            AlgorithmType::Bitcoin as u8
+        }
+        fn convert_message(&self, message: &[u8; 32]) -> H256 {
+            let message_magic = b"\x18Bitcoin Signed Xessage:\n\x40";
+            let msg_hex = hex::encode(message);
+            assert_eq!(msg_hex.len(), 64);
+
+            let mut temp2: BytesMut = BytesMut::with_capacity(message_magic.len() + msg_hex.len());
+            temp2.put(Bytes::from(message_magic.to_vec()));
+            temp2.put(Bytes::from(hex::encode(message)));
+
+            let mut md = Md::new(Type::Sha256).unwrap();
+            md.update(temp2.freeze().to_vec().as_slice())
+                .expect("md btc failed");
+            let mut msg: [u8; 32] = [0; 32];
+            md.finish(&mut msg).expect("md btc sha256 finish");
+
+            let mut md = Md::new(Type::Sha256).unwrap();
+            md.update(&msg).expect("md btc new message failed");
+            md.finish(&mut msg)
+                .expect("md btc convert message finish failed");
+
+            H256::from(msg)
+        }
+        fn sign(&self, msg: &H256) -> Bytes {
+            BitcoinAuth::btc_sign(msg, &self.0.privkey, self.0.compress)
+        }
+    }
+
+    let privkey = Generator::random_privkey();
+    let auth = Box::new(BtcConverFaileAuth {
+        0: BitcoinAuth {
+            privkey,
+            compress: true,
+        },
+    });
+
+    let verify_result = unit_test_with_auth(auth, false);
+    assert_script_error(verify_result.unwrap_err(), AuthErrorCodeType::Mismatched);
+}
+
+#[test]
 fn dogecoin_verify() {
     unit_test_success(AlgorithmType::Dogecoin);
 }
@@ -239,6 +441,60 @@ fn dogecoin_verify() {
 #[test]
 fn dogecoin_verify_failed() {
     unit_test_failed(AlgorithmType::Dogecoin);
+}
+
+#[test]
+fn dogecoin_verify_sign_size_failed() {
+    unit_test_sign_size_failed(AlgorithmType::Dogecoin);
+}
+
+#[test]
+fn convert_doge_error() {
+    struct DogeConverFaileAuth(DogecoinAuth);
+    impl Auth for DogeConverFaileAuth {
+        fn get_pub_key_hash(&self) -> Vec<u8> {
+            BitcoinAuth::get_btc_pub_key_hash(&self.0.privkey, self.0.compress)
+        }
+        fn get_algorithm_type(&self) -> u8 {
+            AlgorithmType::Bitcoin as u8
+        }
+        fn convert_message(&self, message: &[u8; 32]) -> H256 {
+            let message_magic = b"\x18Bitcoin Signed Xessage:\n\x40";
+            let msg_hex = hex::encode(message);
+            assert_eq!(msg_hex.len(), 64);
+
+            let mut temp2: BytesMut = BytesMut::with_capacity(message_magic.len() + msg_hex.len());
+            temp2.put(Bytes::from(message_magic.to_vec()));
+            temp2.put(Bytes::from(hex::encode(message)));
+
+            let mut md = Md::new(Type::Sha256).unwrap();
+            md.update(temp2.freeze().to_vec().as_slice())
+                .expect("md btc failed");
+            let mut msg: [u8; 32] = [0; 32];
+            md.finish(&mut msg).expect("md btc sha256 finish");
+
+            let mut md = Md::new(Type::Sha256).unwrap();
+            md.update(&msg).expect("md btc new message failed");
+            md.finish(&mut msg)
+                .expect("md btc convert message finish failed");
+
+            H256::from(msg)
+        }
+        fn sign(&self, msg: &H256) -> Bytes {
+            BitcoinAuth::btc_sign(msg, &self.0.privkey, self.0.compress)
+        }
+    }
+
+    let privkey = Generator::random_privkey();
+    let auth = Box::new(DogeConverFaileAuth {
+        0: DogecoinAuth {
+            privkey,
+            compress: true,
+        },
+    });
+
+    let verify_result = unit_test_with_auth(auth, false);
+    assert_script_error(verify_result.unwrap_err(), AuthErrorCodeType::Mismatched);
 }
 
 #[test]
@@ -371,6 +627,12 @@ fn rsa_verify_sign_failed() {
 }
 
 #[test]
+fn rsa_verify_sign_size_failed() {
+    // ERROR_RSA_INVALID_PARAM2
+    unit_test_sign_size_failed_with_error_code(AlgorithmType::RSA, 41);
+}
+
+#[test]
 fn abnormal_algorithm_type() {
     struct AbnormalAuth {}
     impl misc::Auth for AbnormalAuth {
@@ -390,204 +652,4 @@ fn abnormal_algorithm_type() {
         verify_result.unwrap_err(),
         AuthErrorCodeType::NotImplemented,
     );
-}
-
-#[test]
-fn convert_eth_error() {
-    struct EthConverFaileAuth(EthereumAuth);
-    impl Auth for EthConverFaileAuth {
-        fn get_pub_key_hash(&self) -> Vec<u8> {
-            EthereumAuth::get_eth_pub_key_hash(&self.0.pubkey)
-        }
-        fn get_algorithm_type(&self) -> u8 {
-            AlgorithmType::Ethereum as u8
-        }
-        fn convert_message(&self, message: &[u8; 32]) -> H256 {
-            let eth_prefix: &[u8; 28] = b"\x19Ethereum Signed Xessage:\n32";
-            let mut hasher = Keccak256::new();
-            hasher.update(eth_prefix);
-            hasher.update(message);
-            let r = hasher.finalize();
-            let ret = H256::from_slice(r.as_slice()).expect("convert_keccak256_hash");
-            ret
-        }
-        fn sign(&self, msg: &H256) -> Bytes {
-            EthereumAuth::eth_sign(msg, &self.0.privkey)
-        }
-    }
-
-    let generator: secp256k1::Secp256k1<secp256k1::All> = secp256k1::Secp256k1::new();
-    let mut rng = thread_rng();
-    let (privkey, pubkey) = generator.generate_keypair(&mut rng);
-
-    let auth = Box::new(EthConverFaileAuth {
-        0: EthereumAuth { privkey, pubkey },
-    });
-    let verify_result = unit_test_with_auth(auth, false);
-    assert_script_error(verify_result.unwrap_err(), AuthErrorCodeType::Mismatched);
-}
-
-#[test]
-fn convert_eos_error() {
-    struct EthConverFaileAuth(EosAuth);
-    impl Auth for EthConverFaileAuth {
-        fn get_pub_key_hash(&self) -> Vec<u8> {
-            EthereumAuth::get_eth_pub_key_hash(&self.0.pubkey)
-        }
-        fn get_algorithm_type(&self) -> u8 {
-            AlgorithmType::Eos as u8
-        }
-        fn convert_message(&self, message: &[u8; 32]) -> H256 {
-            let mut msg: [u8; 32] = [0; 32];
-            let mut md = Md::new(Type::Sha256).unwrap();
-            md.update(message).expect("md sha256 update");
-            md.update(&[1, 2, 3]).expect("md sha256 update");
-            md.finish(&mut msg).expect("md sha256 finish");
-            H256::from(msg)
-        }
-        fn sign(&self, msg: &H256) -> Bytes {
-            EthereumAuth::eth_sign(msg, &self.0.privkey)
-        }
-    }
-
-    let generator: secp256k1::Secp256k1<secp256k1::All> = secp256k1::Secp256k1::new();
-    let mut rng = thread_rng();
-    let (privkey, pubkey) = generator.generate_keypair(&mut rng);
-
-    let auth = Box::new(EthConverFaileAuth {
-        0: EosAuth { privkey, pubkey },
-    });
-    let verify_result = unit_test_with_auth(auth, false);
-    assert_script_error(verify_result.unwrap_err(), AuthErrorCodeType::Mismatched);
-}
-
-#[test]
-fn convert_tron_error() {
-    struct TronConverFaileAuth(TronAuth);
-    impl Auth for TronConverFaileAuth {
-        fn get_pub_key_hash(&self) -> Vec<u8> {
-            EthereumAuth::get_eth_pub_key_hash(&self.0.pubkey)
-        }
-        fn get_algorithm_type(&self) -> u8 {
-            AlgorithmType::Tron as u8
-        }
-        fn convert_message(&self, message: &[u8; 32]) -> H256 {
-            let eth_prefix: &[u8; 24] = b"\x19TRON Signed Xessage:\n32";
-            let mut hasher = Keccak256::new();
-            hasher.update(eth_prefix);
-            hasher.update(message);
-            let r = hasher.finalize();
-            H256::from_slice(r.as_slice()).expect("convert_keccak256_hash")
-        }
-        fn sign(&self, msg: &H256) -> Bytes {
-            EthereumAuth::eth_sign(msg, &self.0.privkey)
-        }
-    }
-
-    let generator: secp256k1::Secp256k1<secp256k1::All> = secp256k1::Secp256k1::new();
-    let mut rng = thread_rng();
-    let (privkey, pubkey) = generator.generate_keypair(&mut rng);
-    let auth = Box::new(TronConverFaileAuth {
-        0: TronAuth { privkey, pubkey },
-    });
-    let verify_result = unit_test_with_auth(auth, false);
-    assert_script_error(verify_result.unwrap_err(), AuthErrorCodeType::Mismatched);
-}
-
-#[test]
-fn convert_btc_error() {
-    struct BtcConverFaileAuth(BitcoinAuth);
-    impl Auth for BtcConverFaileAuth {
-        fn get_pub_key_hash(&self) -> Vec<u8> {
-            BitcoinAuth::get_btc_pub_key_hash(&self.0.privkey, self.0.compress)
-        }
-        fn get_algorithm_type(&self) -> u8 {
-            AlgorithmType::Bitcoin as u8
-        }
-        fn convert_message(&self, message: &[u8; 32]) -> H256 {
-            let message_magic = b"\x18Bitcoin Signed Xessage:\n\x40";
-            let msg_hex = hex::encode(message);
-            assert_eq!(msg_hex.len(), 64);
-
-            let mut temp2: BytesMut = BytesMut::with_capacity(message_magic.len() + msg_hex.len());
-            temp2.put(Bytes::from(message_magic.to_vec()));
-            temp2.put(Bytes::from(hex::encode(message)));
-
-            let mut md = Md::new(Type::Sha256).unwrap();
-            md.update(temp2.freeze().to_vec().as_slice())
-                .expect("md btc failed");
-            let mut msg: [u8; 32] = [0; 32];
-            md.finish(&mut msg).expect("md btc sha256 finish");
-
-            let mut md = Md::new(Type::Sha256).unwrap();
-            md.update(&msg).expect("md btc new message failed");
-            md.finish(&mut msg)
-                .expect("md btc convert message finish failed");
-
-            H256::from(msg)
-        }
-        fn sign(&self, msg: &H256) -> Bytes {
-            BitcoinAuth::btc_sign(msg, &self.0.privkey, self.0.compress)
-        }
-    }
-
-    let privkey = Generator::random_privkey();
-    let auth = Box::new(BtcConverFaileAuth {
-        0: BitcoinAuth {
-            privkey,
-            compress: true,
-        },
-    });
-
-    let verify_result = unit_test_with_auth(auth, false);
-    assert_script_error(verify_result.unwrap_err(), AuthErrorCodeType::Mismatched);
-}
-
-#[test]
-fn convert_doge_error() {
-    struct DogeConverFaileAuth(DogecoinAuth);
-    impl Auth for DogeConverFaileAuth {
-        fn get_pub_key_hash(&self) -> Vec<u8> {
-            BitcoinAuth::get_btc_pub_key_hash(&self.0.privkey, self.0.compress)
-        }
-        fn get_algorithm_type(&self) -> u8 {
-            AlgorithmType::Bitcoin as u8
-        }
-        fn convert_message(&self, message: &[u8; 32]) -> H256 {
-            let message_magic = b"\x18Bitcoin Signed Xessage:\n\x40";
-            let msg_hex = hex::encode(message);
-            assert_eq!(msg_hex.len(), 64);
-
-            let mut temp2: BytesMut = BytesMut::with_capacity(message_magic.len() + msg_hex.len());
-            temp2.put(Bytes::from(message_magic.to_vec()));
-            temp2.put(Bytes::from(hex::encode(message)));
-
-            let mut md = Md::new(Type::Sha256).unwrap();
-            md.update(temp2.freeze().to_vec().as_slice())
-                .expect("md btc failed");
-            let mut msg: [u8; 32] = [0; 32];
-            md.finish(&mut msg).expect("md btc sha256 finish");
-
-            let mut md = Md::new(Type::Sha256).unwrap();
-            md.update(&msg).expect("md btc new message failed");
-            md.finish(&mut msg)
-                .expect("md btc convert message finish failed");
-
-            H256::from(msg)
-        }
-        fn sign(&self, msg: &H256) -> Bytes {
-            BitcoinAuth::btc_sign(msg, &self.0.privkey, self.0.compress)
-        }
-    }
-
-    let privkey = Generator::random_privkey();
-    let auth = Box::new(DogeConverFaileAuth {
-        0: DogecoinAuth {
-            privkey,
-            compress: true,
-        },
-    });
-
-    let verify_result = unit_test_with_auth(auth, false);
-    assert_script_error(verify_result.unwrap_err(), AuthErrorCodeType::Mismatched);
 }
