@@ -33,6 +33,7 @@ use secp256k1;
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 use std::{collections::HashMap, mem::size_of, result, vec};
+use dyn_clone::{clone_trait_object, DynClone};
 
 pub const MAX_CYCLES: u64 = std::u64::MAX;
 pub const SIGNATURE_SIZE: usize = 65;
@@ -342,7 +343,7 @@ struct EntryType {
     entry_category: u8,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum EntryCategoryType {
     Exec = 0,
     DynamicLinking = 1,
@@ -384,13 +385,13 @@ pub struct TestConfig {
 
 impl TestConfig {
     pub fn new(
-        auth: Box<dyn Auth>,
+        auth: &Box<dyn Auth>,
         entry_category_type: EntryCategoryType,
         sign_size: i32,
     ) -> TestConfig {
         assert!(sign_size > 0);
         TestConfig {
-            auth,
+            auth : auth.clone(),
             entry_category_type,
             sign_size,
             incorrect_pubkey: false,
@@ -533,12 +534,13 @@ pub enum AuthErrorCodeType {
     ExecInvalidMsg,
 }
 
-pub fn assert_script_error(err: Error, err_code: AuthErrorCodeType) {
+pub fn assert_script_error(err: Error, err_code: AuthErrorCodeType, des: &str) {
     let err_code = err_code as i8;
     let error_string = err.to_string();
     assert!(
         error_string.contains(format!("error code {}", err_code).as_str()),
-        "error_string: {}, expected_error_code: {}",
+        "{}, error string: {}, expected error code: {}",
+        des,
         error_string,
         err_code
     );
@@ -570,7 +572,7 @@ pub fn assert_script_error_i(err: Error, err_code: i32) {
     );
 }
 
-pub trait Auth {
+pub trait Auth : DynClone {
     fn get_pub_key_hash(&self) -> Vec<u8>; // result size must is 20
     fn get_algorithm_type(&self) -> u8;
 
@@ -621,7 +623,9 @@ pub fn auth_builder(t: AlgorithmType) -> result::Result<Box<dyn Auth>, i32> {
     assert!(false);
     Err(1)
 }
+clone_trait_object!(Auth);
 
+#[derive(Clone)]
 pub struct CKbAuth {
     pub privkey: Privkey,
 }
@@ -656,6 +660,7 @@ impl Auth for CKbAuth {
     }
 }
 
+#[derive(Clone)]
 pub struct EthereumAuth {
     pub privkey: secp256k1::key::SecretKey,
     pub pubkey: secp256k1::key::PublicKey,
@@ -705,6 +710,7 @@ impl Auth for EthereumAuth {
     }
 }
 
+#[derive(Clone)]
 pub struct EosAuth {
     pub privkey: secp256k1::key::SecretKey,
     pub pubkey: secp256k1::key::PublicKey,
@@ -736,6 +742,7 @@ impl Auth for EosAuth {
     }
 }
 
+#[derive(Clone)]
 pub struct TronAuth {
     pub privkey: secp256k1::key::SecretKey,
     pub pubkey: secp256k1::key::PublicKey,
@@ -768,6 +775,7 @@ impl Auth for TronAuth {
     }
 }
 
+#[derive(Clone)]
 pub struct BitcoinAuth {
     pub privkey: Privkey,
     pub compress: bool,
@@ -855,6 +863,7 @@ impl Auth for BitcoinAuth {
     }
 }
 
+#[derive(Clone)]
 pub struct DogecoinAuth {
     pub privkey: Privkey,
     pub compress: bool,
@@ -902,6 +911,7 @@ impl Auth for DogecoinAuth {
     }
 }
 
+#[derive(Clone)]
 pub struct CkbMultisigAuth {
     pub pubkeys_cnt: u8,
     pub threshold: u8,
@@ -978,6 +988,7 @@ impl Auth for CkbMultisigAuth {
     }
 }
 
+#[derive(Clone)]
 struct SchnorrAuth {}
 impl SchnorrAuth {
     fn new() -> Box<dyn Auth> {
@@ -996,6 +1007,7 @@ impl Auth for SchnorrAuth {
     }
 }
 
+#[derive(Clone)]
 struct RSAAuth {
     pub privkey: PKey<Private>,
 }
@@ -1079,6 +1091,7 @@ impl Auth for RSAAuth {
     }
 }
 
+#[derive(Clone)]
 struct OwnerLockAuth {}
 impl OwnerLockAuth {
     fn new() -> Box<dyn Auth> {

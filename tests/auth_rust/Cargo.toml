@@ -29,3 +29,4 @@ serde = { version = "1.0.130", features = ["derive"] }
 mbedtls = "0.8.1"
 hex = "0.4.3"
 secp256k1 = { version = "0.19", features = ["rand-std", "recovery"] }
+dyn-clone = "1.0.4"

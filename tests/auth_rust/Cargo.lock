@@ -57,6 +57,7 @@ dependencies = [
  "ckb-traits",
  "ckb-types",
  "ckb-vm",
+ "dyn-clone",
  "hex",
  "lazy_static",
  "log",
@@ -607,6 +608,12 @@ checksum = "d3dd60d1080a57a05ab032377049e0591415d2b31afd7028356dbf3cc6dcb066"
 dependencies = [
  "generic-array",
 ]
+
+[[package]]
+name = "dyn-clone"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee2626afccd7561a06cf1367e2950c4718ea04565e20fb5029b6c7d8ad09abcf"
 
 [[package]]
 name = "eaglesong"
