@@ -13,16 +13,15 @@ jobs:
       run: git submodule update --init
     - name: Build contract
       run: make all-via-docker
-# recover it when ready
-#    - name: Build test extensions
-#      run: make -f tests/xudt_rce/extension_scripts.Makefile all-via-docker
-#    - name: Run simulator tests
-#      run: bash tests/validate_signature_rsa/run.sh
-#    - name: Run tests
-#      run: cargo test
-#    - name: Run xudt tests
-#      run: cd tests/xudt_rce_rust && cargo test
-#    - name: Run xudt simulator tests
-#      run: cd tests/xudt_rce && bash run.sh
+    - name: Build test extensions
+      run: make -f tests/xudt_rce/extension_scripts.Makefile all-via-docker
+    - name: Run simulator tests
+      run: bash tests/validate_signature_rsa/run.sh
+    - name: Run tests
+      run: cargo test
+    - name: Run xudt tests
+      run: cd tests/xudt_rce_rust && cargo test
+    - name: Run xudt simulator tests
+      run: cd tests/xudt_rce && bash run.sh
     - name: Run auth simulator tests
       run: cd tests/auth && bash run.sh

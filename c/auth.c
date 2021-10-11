@@ -731,7 +731,6 @@ int main(int argc, char *argv[]) {
   uint64_t *phoff = (uint64_t *)OFFSETOF(Elf64_Ehdr, e_phoff);
   uint16_t *phnum = (uint16_t *)OFFSETOF(Elf64_Ehdr, e_phnum);
   Elf64_Phdr *program_headers = (Elf64_Phdr *)(*phoff);
-  ;
   for (int i = 0; i < *phnum; i++) {
     Elf64_Phdr *program_header = &program_headers[i];
     if (program_header->p_type == PT_DYNAMIC) {
