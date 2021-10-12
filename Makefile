@@ -95,7 +95,6 @@ build/auth: c/auth.c deps/mbedtls/library/libmbedcrypto.a
 	cp $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
-
 ${PROTOCOL_SCHEMA}:
 	curl -L -o $@ ${PROTOCOL_URL}
 
@@ -162,6 +161,7 @@ clean:
 	make -C deps/mbedtls/library clean
 	rm -f build/validate_signature_rsa
 	rm -f build/validate_signature_rsa_sim
+	rm -f build/auth build/auth_demo
 	cargo clean
 
 install-tools:
