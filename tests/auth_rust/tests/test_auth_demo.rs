@@ -210,6 +210,65 @@ fn bitcoin_uncompress_verify() {
 }
 
 #[test]
+fn bitcoin_pubkey_recid_verify() {
+    #[derive(Clone)]
+    pub struct BitcoinFailedAuth (BitcoinAuth);
+    impl Auth for BitcoinFailedAuth {
+        fn get_pub_key_hash(&self) -> Vec<u8> {
+            BitcoinAuth::get_btc_pub_key_hash(&self.0.privkey, self.0.compress)
+        }
+        fn get_algorithm_type(&self) -> u8 {
+            AlgorithmType::Bitcoin as u8
+        }
+        fn convert_message(&self, message: &[u8; 32]) -> H256 {
+            BitcoinAuth::btc_convert_message(message)
+        }
+        fn sign(&self, msg: &H256) -> Bytes {
+            let sign = self.0.privkey.sign_recoverable(&msg).expect("sign").serialize();
+            assert_eq!(sign.len(), 65);
+            
+            let mut rng = rand::thread_rng();
+            let max_recid: u8 = {
+                if self.0.compress { 255 - 31 }
+                else { 255 -27 }
+            };
+            let mut recid: u8 = rng.gen_range(0, max_recid);
+            while recid == sign[64] && recid < 31 {
+                recid = rng.gen_range(0, max_recid);
+            }
+            let mark: u8;
+            if self.0.compress {
+                mark = recid + 31;
+            } else {
+                mark = recid + 27;
+            };
+            let mut ret = BytesMut::with_capacity(65);
+            ret.put_u8(mark);
+            ret.put(&sign[0..64]);
+            Bytes::from(ret)
+        }
+    }
+
+    let privkey = Generator::random_privkey();
+    let auth: Box<dyn Auth> = Box::new(BitcoinFailedAuth {
+        0: BitcoinAuth {
+            privkey,
+            compress: true,
+        },
+    });
+
+    let config = TestConfig::new(&auth, EntryCategoryType::DynamicLinking, 1);
+    assert_result_error(
+        verify_unit(&config),
+        "failed conver btc",
+        &[
+            AuthErrorCodeType::Mismatched as i32,
+            AuthErrorCodeType::ErrorWrongState as i32
+        ]
+    );
+}
+
+#[test]
 fn dogecoin_verify() {
     unit_test_common(AlgorithmType::Dogecoin);
 }

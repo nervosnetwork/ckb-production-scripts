@@ -812,6 +812,28 @@ impl BitcoinAuth {
 
         Vec::from(&pub_hash[0..20])
     }
+    pub fn btc_convert_message(message: &[u8; 32]) -> H256 {
+        let message_magic = b"\x18Bitcoin Signed Message:\n\x40";
+        let msg_hex = hex::encode(message);
+        assert_eq!(msg_hex.len(), 64);
+
+        let mut temp2: BytesMut = BytesMut::with_capacity(message_magic.len() + msg_hex.len());
+        temp2.put(Bytes::from(message_magic.to_vec()));
+        temp2.put(Bytes::from(hex::encode(message)));
+
+        let mut md = Md::new(Type::Sha256).unwrap();
+        md.update(temp2.freeze().to_vec().as_slice())
+            .expect("md btc failed");
+        let mut msg: [u8; 32] = [0; 32];
+        md.finish(&mut msg).expect("md btc sha256 finish");
+
+        let mut md = Md::new(Type::Sha256).unwrap();
+        md.update(&msg).expect("md btc new message failed");
+        md.finish(&mut msg)
+            .expect("md btc convert message finish failed");
+
+        H256::from(msg)
+    }
     pub fn btc_sign(msg: &H256, privkey: &Privkey, compress: bool) -> Bytes {
         let sign = privkey.sign_recoverable(&msg).expect("sign").serialize();
         assert_eq!(sign.len(), 65);
@@ -837,26 +859,7 @@ impl Auth for BitcoinAuth {
         AlgorithmType::Bitcoin as u8
     }
     fn convert_message(&self, message: &[u8; 32]) -> H256 {
-        let message_magic = b"\x18Bitcoin Signed Message:\n\x40";
-        let msg_hex = hex::encode(message);
-        assert_eq!(msg_hex.len(), 64);
-
-        let mut temp2: BytesMut = BytesMut::with_capacity(message_magic.len() + msg_hex.len());
-        temp2.put(Bytes::from(message_magic.to_vec()));
-        temp2.put(Bytes::from(hex::encode(message)));
-
-        let mut md = Md::new(Type::Sha256).unwrap();
-        md.update(temp2.freeze().to_vec().as_slice())
-            .expect("md btc failed");
-        let mut msg: [u8; 32] = [0; 32];
-        md.finish(&mut msg).expect("md btc sha256 finish");
-
-        let mut md = Md::new(Type::Sha256).unwrap();
-        md.update(&msg).expect("md btc new message failed");
-        md.finish(&mut msg)
-            .expect("md btc convert message finish failed");
-
-        H256::from(msg)
+        BitcoinAuth::btc_convert_message(message)
     }
     fn sign(&self, msg: &H256) -> Bytes {
         BitcoinAuth::btc_sign(msg, &self.privkey, self.compress)
