@@ -712,7 +712,7 @@ fn unit_test_rsa(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
             verify_unit(&config),
             "sign size(bigger)",
             &[
-                41, 48
+                41, 48, 49,
             ]
         );
         // ERROR_RSA_INVALID_PARAM2
@@ -726,7 +726,7 @@ fn unit_test_rsa(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
             verify_unit(&config),
             "sign size(smaller)",
             &[
-                41, 48
+                41, 48, 49,
             ]
         );
     }
