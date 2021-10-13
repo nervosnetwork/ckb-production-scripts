@@ -9,8 +9,7 @@ use ckb_types::{
     H256,
 };
 use log::{Level, LevelFilter, Metadata, Record};
-use mbedtls::hash::{Md, Type};
-use openssl::ssl::ErrorCode;
+use openssl::{ssl::ErrorCode, sha::Sha256};
 use rand::{thread_rng, Rng};
 use sha3::{Digest, Keccak256, digest::generic_array::typenum::private::IsEqualPrivate};
 
@@ -329,11 +328,10 @@ fn convert_eos_error() {
             AlgorithmType::Eos as u8
         }
         fn convert_message(&self, message: &[u8; 32]) -> H256 {
-            let mut msg: [u8; 32] = [0; 32];
-            let mut md = Md::new(Type::Sha256).unwrap();
-            md.update(message).expect("md sha256 update");
-            md.update(&[1, 2, 3]).expect("md sha256 update");
-            md.finish(&mut msg).expect("md sha256 finish");
+            let mut md = Sha256::new();
+            md.update(message);
+            md.update(&[1, 2, 3]);
+            let msg = md.finish();
             H256::from(msg)
         }
         fn sign(&self, msg: &H256) -> Bytes {
@@ -418,16 +416,8 @@ fn convert_btc_error() {
             temp2.put(Bytes::from(message_magic.to_vec()));
             temp2.put(Bytes::from(hex::encode(message)));
 
-            let mut md = Md::new(Type::Sha256).unwrap();
-            md.update(temp2.freeze().to_vec().as_slice())
-                .expect("md btc failed");
-            let mut msg: [u8; 32] = [0; 32];
-            md.finish(&mut msg).expect("md btc sha256 finish");
-
-            let mut md = Md::new(Type::Sha256).unwrap();
-            md.update(&msg).expect("md btc new message failed");
-            md.finish(&mut msg)
-                .expect("md btc convert message finish failed");
+            let msg = misc::calculate_sha256(&temp2);
+            let msg = misc::calculate_sha256(&msg);
 
             H256::from(msg)
         }
@@ -474,16 +464,8 @@ fn convert_doge_error() {
             temp2.put(Bytes::from(message_magic.to_vec()));
             temp2.put(Bytes::from(hex::encode(message)));
 
-            let mut md = Md::new(Type::Sha256).unwrap();
-            md.update(temp2.freeze().to_vec().as_slice())
-                .expect("md btc failed");
-            let mut msg: [u8; 32] = [0; 32];
-            md.finish(&mut msg).expect("md btc sha256 finish");
-
-            let mut md = Md::new(Type::Sha256).unwrap();
-            md.update(&msg).expect("md btc new message failed");
-            md.finish(&mut msg)
-                .expect("md btc convert message finish failed");
+            let msg = misc::calculate_sha256(&temp2);
+            let msg = misc::calculate_sha256(&msg);
 
             H256::from(msg)
         }
