@@ -227,20 +227,14 @@ fn bitcoin_pubkey_recid_verify() {
             assert_eq!(sign.len(), 65);
             
             let mut rng = rand::thread_rng();
-            let max_recid: u8 = {
-                if self.0.compress { 255 - 31 }
-                else { 255 -27 }
-            };
-            let mut recid: u8 = rng.gen_range(0, max_recid);
+            let mut recid: u8 = rng.gen_range(0, 4);
             while recid == sign[64] && recid < 31 {
-                recid = rng.gen_range(0, max_recid);
+                recid = rng.gen_range(0, 4);
             }
-            let mark: u8;
+            let mut mark: u8 = sign[64];
             if self.0.compress {
-                mark = recid + 31;
-            } else {
-                mark = recid + 27;
-            };
+                mark = mark | 4;
+            }
             let mut ret = BytesMut::with_capacity(65);
             ret.put_u8(mark);
             ret.put(&sign[0..64]);
@@ -541,6 +535,8 @@ fn unit_test_ckbmultisig(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
             "sign data",
             &[
                 -41,
+                -42,
+                -44,
                 -22
             ]
         );
@@ -557,6 +553,8 @@ fn unit_test_ckbmultisig(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
             "sign size(bigger)",
             &[
                 -41,
+                -42,
+                -44,
                 -22
             ]
         );
@@ -571,6 +569,8 @@ fn unit_test_ckbmultisig(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
             "sign size(smaller)",
             &[
                 -41,
+                -42,
+                -44,
                 -22
             ]
         );
