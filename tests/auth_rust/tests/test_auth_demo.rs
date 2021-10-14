@@ -536,6 +536,7 @@ fn unit_test_ckbmultisig(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
             &[
                 -41,
                 -42,
+                -43,
                 -44,
                 -22
             ]
@@ -554,6 +555,7 @@ fn unit_test_ckbmultisig(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
             &[
                 -41,
                 -42,
+                -43,
                 -44,
                 -22
             ]
@@ -570,6 +572,7 @@ fn unit_test_ckbmultisig(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
             &[
                 -41,
                 -42,
+                -43,
                 -44,
                 -22
             ]
