@@ -2,17 +2,16 @@
 #![allow(dead_code)]
 
 use ckb_crypto::secp::{Generator, Privkey, Pubkey};
-use ckb_error::{prelude::thiserror::private::AsDynError};
+use ckb_error::prelude::thiserror::private::AsDynError;
 use ckb_script::TransactionScriptsVerifier;
 use ckb_types::{
     bytes::{BufMut, Bytes, BytesMut},
     H256,
 };
 use log::{Level, LevelFilter, Metadata, Record};
-use mbedtls::hash::{Md, Type};
-use openssl::ssl::ErrorCode;
+use openssl::{sha::Sha256, ssl::ErrorCode};
 use rand::{thread_rng, Rng};
-use sha3::{Digest, Keccak256, digest::generic_array::typenum::private::IsEqualPrivate};
+use sha3::{digest::generic_array::typenum::private::IsEqualPrivate, Digest, Keccak256};
 
 use misc::{
     assert_script_error, auth_builder, build_resolved_tx, debug_printer, gen_args, gen_consensus,
@@ -38,11 +37,20 @@ fn verify_unit(config: &TestConfig) -> Result<u64, ckb_error::Error> {
 }
 
 fn assert_result_ok(res: Result<u64, ckb_error::Error>, des: &str) {
-    assert!(res.is_ok(), "pass {} verification, des: {}", des, res.unwrap_err().to_string());
+    assert!(
+        res.is_ok(),
+        "pass {} verification, des: {}",
+        des,
+        res.unwrap_err().to_string()
+    );
 }
 
 fn assert_result_error(res: Result<u64, ckb_error::Error>, des: &str, err_codes: &[i32]) {
-    assert!(res.is_err(), "pass failed {} verification, des: run ok", des);
+    assert!(
+        res.is_err(),
+        "pass failed {} verification, des: run ok",
+        des
+    );
     let err_str = res.unwrap_err().to_string();
     let mut is_assert = false;
     for err_code in err_codes {
@@ -106,9 +114,7 @@ fn unit_test_faileds(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
         assert_result_error(
             verify_unit(&config),
             "public key",
-            &[
-                AuthErrorCodeType::Mismatched as i32
-            ]
+            &[AuthErrorCodeType::Mismatched as i32],
         );
     }
 
@@ -122,7 +128,7 @@ fn unit_test_faileds(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
             &[
                 AuthErrorCodeType::Mismatched as i32,
                 AuthErrorCodeType::InvalidArg as i32,
-            ]
+            ],
         );
     }
 
@@ -138,7 +144,7 @@ fn unit_test_faileds(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
             &[
                 AuthErrorCodeType::Mismatched as i32,
                 AuthErrorCodeType::InvalidArg as i32,
-            ]
+            ],
         );
     }
 
@@ -152,7 +158,7 @@ fn unit_test_faileds(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
             &[
                 AuthErrorCodeType::Mismatched as i32,
                 AuthErrorCodeType::InvalidArg as i32,
-            ]
+            ],
         );
     }
 }
@@ -171,8 +177,8 @@ fn unit_test_common_with_runtype(algorithm_type: AlgorithmType, run_type: EntryC
 }
 
 fn unit_test_common(algorithm_type: AlgorithmType) {
-    unit_test_common_with_runtype(algorithm_type,EntryCategoryType::DynamicLinking);
-    unit_test_common_with_runtype(algorithm_type,EntryCategoryType::Exec);
+    unit_test_common_with_runtype(algorithm_type, EntryCategoryType::DynamicLinking);
+    unit_test_common_with_runtype(algorithm_type, EntryCategoryType::Exec);
 }
 
 #[test]
@@ -212,7 +218,7 @@ fn bitcoin_uncompress_verify() {
 #[test]
 fn bitcoin_pubkey_recid_verify() {
     #[derive(Clone)]
-    pub struct BitcoinFailedAuth (BitcoinAuth);
+    pub struct BitcoinFailedAuth(BitcoinAuth);
     impl Auth for BitcoinFailedAuth {
         fn get_pub_key_hash(&self) -> Vec<u8> {
             BitcoinAuth::get_btc_pub_key_hash(&self.0.privkey, self.0.compress)
@@ -224,24 +230,23 @@ fn bitcoin_pubkey_recid_verify() {
             BitcoinAuth::btc_convert_message(message)
         }
         fn sign(&self, msg: &H256) -> Bytes {
-            let sign = self.0.privkey.sign_recoverable(&msg).expect("sign").serialize();
+            let sign = self
+                .0
+                .privkey
+                .sign_recoverable(&msg)
+                .expect("sign")
+                .serialize();
             assert_eq!(sign.len(), 65);
-            
+
             let mut rng = rand::thread_rng();
-            let max_recid: u8 = {
-                if self.0.compress { 255 - 31 }
-                else { 255 -27 }
-            };
-            let mut recid: u8 = rng.gen_range(0, max_recid);
+            let mut recid: u8 = rng.gen_range(0, 4);
             while recid == sign[64] && recid < 31 {
-                recid = rng.gen_range(0, max_recid);
+                recid = rng.gen_range(0, 4);
             }
-            let mark: u8;
+            let mut mark: u8 = sign[64];
             if self.0.compress {
-                mark = recid + 31;
-            } else {
-                mark = recid + 27;
-            };
+                mark = mark | 4;
+            }
             let mut ret = BytesMut::with_capacity(65);
             ret.put_u8(mark);
             ret.put(&sign[0..64]);
@@ -263,8 +268,8 @@ fn bitcoin_pubkey_recid_verify() {
         "failed conver btc",
         &[
             AuthErrorCodeType::Mismatched as i32,
-            AuthErrorCodeType::ErrorWrongState as i32
-        ]
+            AuthErrorCodeType::ErrorWrongState as i32,
+        ],
     );
 }
 
@@ -272,7 +277,6 @@ fn bitcoin_pubkey_recid_verify() {
 fn dogecoin_verify() {
     unit_test_common(AlgorithmType::Dogecoin);
 }
-
 
 #[test]
 fn convert_eth_error() {
@@ -311,9 +315,7 @@ fn convert_eth_error() {
     assert_result_error(
         verify_unit(&config),
         "failed conver eth",
-        &[
-            AuthErrorCodeType::Mismatched as i32
-        ]
+        &[AuthErrorCodeType::Mismatched as i32],
     );
 }
 
@@ -329,11 +331,10 @@ fn convert_eos_error() {
             AlgorithmType::Eos as u8
         }
         fn convert_message(&self, message: &[u8; 32]) -> H256 {
-            let mut msg: [u8; 32] = [0; 32];
-            let mut md = Md::new(Type::Sha256).unwrap();
-            md.update(message).expect("md sha256 update");
-            md.update(&[1, 2, 3]).expect("md sha256 update");
-            md.finish(&mut msg).expect("md sha256 finish");
+            let mut md = Sha256::new();
+            md.update(message);
+            md.update(&[1, 2, 3]);
+            let msg = md.finish();
             H256::from(msg)
         }
         fn sign(&self, msg: &H256) -> Bytes {
@@ -352,9 +353,7 @@ fn convert_eos_error() {
     assert_result_error(
         verify_unit(&config),
         "failed conver eos",
-        &[
-            AuthErrorCodeType::Mismatched as i32
-        ]
+        &[AuthErrorCodeType::Mismatched as i32],
     );
 }
 
@@ -392,9 +391,7 @@ fn convert_tron_error() {
     assert_result_error(
         verify_unit(&config),
         "failed conver tron",
-        &[
-            AuthErrorCodeType::Mismatched as i32
-        ]
+        &[AuthErrorCodeType::Mismatched as i32],
     );
 }
 
@@ -418,16 +415,8 @@ fn convert_btc_error() {
             temp2.put(Bytes::from(message_magic.to_vec()));
             temp2.put(Bytes::from(hex::encode(message)));
 
-            let mut md = Md::new(Type::Sha256).unwrap();
-            md.update(temp2.freeze().to_vec().as_slice())
-                .expect("md btc failed");
-            let mut msg: [u8; 32] = [0; 32];
-            md.finish(&mut msg).expect("md btc sha256 finish");
-
-            let mut md = Md::new(Type::Sha256).unwrap();
-            md.update(&msg).expect("md btc new message failed");
-            md.finish(&mut msg)
-                .expect("md btc convert message finish failed");
+            let msg = misc::calculate_sha256(&temp2);
+            let msg = misc::calculate_sha256(&msg);
 
             H256::from(msg)
         }
@@ -448,9 +437,7 @@ fn convert_btc_error() {
     assert_result_error(
         verify_unit(&config),
         "failed conver btc",
-        &[
-            AuthErrorCodeType::Mismatched as i32
-        ]
+        &[AuthErrorCodeType::Mismatched as i32],
     );
 }
 
@@ -474,16 +461,8 @@ fn convert_doge_error() {
             temp2.put(Bytes::from(message_magic.to_vec()));
             temp2.put(Bytes::from(hex::encode(message)));
 
-            let mut md = Md::new(Type::Sha256).unwrap();
-            md.update(temp2.freeze().to_vec().as_slice())
-                .expect("md btc failed");
-            let mut msg: [u8; 32] = [0; 32];
-            md.finish(&mut msg).expect("md btc sha256 finish");
-
-            let mut md = Md::new(Type::Sha256).unwrap();
-            md.update(&msg).expect("md btc new message failed");
-            md.finish(&mut msg)
-                .expect("md btc convert message finish failed");
+            let msg = misc::calculate_sha256(&temp2);
+            let msg = misc::calculate_sha256(&msg);
 
             H256::from(msg)
         }
@@ -504,9 +483,7 @@ fn convert_doge_error() {
     assert_result_error(
         verify_unit(&config),
         "failed conver doge",
-        &[
-            AuthErrorCodeType::Mismatched as i32
-        ]
+        &[AuthErrorCodeType::Mismatched as i32],
     );
 }
 
@@ -541,13 +518,7 @@ fn unit_test_ckbmultisig(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
         let mut config = TestConfig::new(auth, run_type, 1);
         config.incorrect_pubkey = true;
 
-        assert_result_error(
-            verify_unit(&config),
-            "public key",
-            &[
-                -51
-            ]
-        );
+        assert_result_error(verify_unit(&config), "public key", &[-51]);
     }
 
     // sign data
@@ -557,10 +528,7 @@ fn unit_test_ckbmultisig(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
         assert_result_error(
             verify_unit(&config),
             "sign data",
-            &[
-                -41,
-                -22
-            ]
+            &[-41, -42, -43, -44, -22],
         );
     }
 
@@ -573,10 +541,7 @@ fn unit_test_ckbmultisig(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
         assert_result_error(
             verify_unit(&config),
             "sign size(bigger)",
-            &[
-                -41,
-                -22
-            ]
+            &[-41, -42, -43, -44, -22],
         );
     }
 
@@ -587,10 +552,7 @@ fn unit_test_ckbmultisig(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
         assert_result_error(
             verify_unit(&config),
             "sign size(smaller)",
-            &[
-                -41,
-                -22
-            ]
+            &[-41, -42, -43, -44, -22],
         );
     }
 
@@ -598,26 +560,14 @@ fn unit_test_ckbmultisig(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
     {
         let auth: Box<dyn Auth> = CkbMultisigAuth::new(2, 3, 1);
         let config = TestConfig::new(&auth, run_type, 1);
-        assert_result_error(
-            verify_unit(&config),
-            "cnt failed",
-            &[
-                -43,
-            ]
-        );
+        assert_result_error(verify_unit(&config), "cnt failed", &[-43]);
     }
 
     // cnt_failed
     {
         let auth: Box<dyn Auth> = CkbMultisigAuth::new(2, 2, 4);
         let config = TestConfig::new(&auth, run_type, 1);
-        assert_result_error(
-            verify_unit(&config),
-            "require_first_n failed",
-            &[
-                -44,
-            ]
-        );
+        assert_result_error(verify_unit(&config), "require_first_n failed", &[-44]);
 
         // #define ERROR_INVALID_REQUIRE_FIRST_N -44
     }
@@ -641,13 +591,7 @@ fn unit_test_ckbmultisig(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
             },
         });
         let config = TestConfig::new(&auth, run_type, 1);
-        assert_result_error(
-            verify_unit(&config),
-            "require_first_n failed",
-            &[
-                -22,
-            ]
-        );
+        assert_result_error(verify_unit(&config), "require_first_n failed", &[-22]);
         // #define ERROR_WITNESS_SIZE -22
     }
 }
@@ -660,8 +604,7 @@ fn ckbmultisig_verify() {
 }
 
 #[test]
-fn ckbmultisig_verify_sing_size_failed() {
-}
+fn ckbmultisig_verify_sing_size_failed() {}
 
 #[test]
 fn schnorr() {
@@ -672,7 +615,7 @@ fn schnorr() {
         assert_script_error(
             verify_result.unwrap_err(),
             AuthErrorCodeType::NotImplemented,
-            "schnorr"
+            "schnorr",
         );
     }
     {
@@ -682,7 +625,7 @@ fn schnorr() {
         assert_script_error(
             verify_result.unwrap_err(),
             AuthErrorCodeType::NotImplemented,
-            "schnorr"
+            "schnorr",
         );
     }
 }
@@ -699,9 +642,7 @@ fn unit_test_rsa(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
         assert_result_error(
             verify_unit(&config),
             "public key",
-            &[
-                AuthErrorCodeType::Mismatched as i32
-            ]
+            &[AuthErrorCodeType::Mismatched as i32],
         );
     }
 
@@ -709,13 +650,7 @@ fn unit_test_rsa(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
     {
         let mut config = TestConfig::new(&auth, run_type, 1);
         config.incorrect_sign = true;
-        assert_result_error(
-            verify_unit(&config),
-            "sign data",
-            &[
-                48, 49,
-            ]
-        );
+        assert_result_error(verify_unit(&config), "sign data", &[48, 49]);
         // ERROR_INVALID_MD_TYPE
         // ERROR_INVALID_PADDING
     }
@@ -726,13 +661,7 @@ fn unit_test_rsa(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
         config.incorrect_sign_size = misc::TestConfigIncorrectSing::Bigger;
         let mut config = TestConfig::new(&auth, run_type, 1);
         config.incorrect_sign = true;
-        assert_result_error(
-            verify_unit(&config),
-            "sign size(bigger)",
-            &[
-                41, 48
-            ]
-        );
+        assert_result_error(verify_unit(&config), "sign size(bigger)", &[41, 48, 49]);
         // ERROR_RSA_INVALID_PARAM2
     }
 
@@ -740,13 +669,7 @@ fn unit_test_rsa(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
     {
         let mut config = TestConfig::new(&auth, run_type, 1);
         config.incorrect_sign_size = misc::TestConfigIncorrectSing::Smaller;
-        assert_result_error(
-            verify_unit(&config),
-            "sign size(smaller)",
-            &[
-                41, 48
-            ]
-        );
+        assert_result_error(verify_unit(&config), "sign size(smaller)", &[41, 48, 49]);
     }
 }
 
@@ -779,9 +702,7 @@ fn abnormal_algorithm_type() {
         assert_result_error(
             verify_unit(&config),
             "sign size(smaller)",
-            &[
-                AuthErrorCodeType::NotImplemented as i32,
-            ]
+            &[AuthErrorCodeType::NotImplemented as i32],
         );
     }
     {
@@ -789,9 +710,7 @@ fn abnormal_algorithm_type() {
         assert_result_error(
             verify_unit(&config),
             "sign size(smaller)",
-            &[
-                AuthErrorCodeType::NotImplemented as i32,
-            ]
+            &[AuthErrorCodeType::NotImplemented as i32],
         );
     }
 }
