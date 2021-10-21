@@ -103,3 +103,5 @@ target_link_libraries(validate_signature_rsa mbedtls)
 add_executable(dlopen_sim tests/validate_signature_rsa/dlopen_sim.c)
 target_compile_definitions(dlopen_sim PUBLIC -D_FILE_OFFSET_BITS=64 -DCKB_DECLARATION_ONLY)
 #target_include_directories(dlopen_sim PUBLIC deps/ckb-c-stdlib-20210413/libc)
+
+add_subdirectory(${PROJECT_SOURCE_DIR}/tests/compact_udt/)

@@ -18,10 +18,13 @@ CFLAGS_MBEDTLS := $(subst ckb-c-std-lib,ckb-c-stdlib-20210413,$(CFLAGS)) -I deps
 LDFLAGS_MBEDTLS := $(LDFLAGS)
 PASSED_MBEDTLS_CFLAGS := -O3 -fPIC -nostdinc -nostdlib -DCKB_DECLARATION_ONLY -I ../../ckb-c-stdlib-20210413/libc -fdata-sections -ffunction-sections
 
+# compact udt lock
+COMPACT_UDT_CFLAGS=$(subst ckb-c-std-lib,ckb-c-stdlib-20210713,$(CFLAGS)) -I deps/sparse-merkle-tree/c
+
 # docker pull nervos/ckb-riscv-gnu-toolchain:gnu-bionic-20191012
 BUILDER_DOCKER := nervos/ckb-riscv-gnu-toolchain@sha256:aae8a3f79705f67d505d1f1d5ddc694a4fd537ed1c7e9622420a470d59ba2ec3
 
-all: build/simple_udt build/anyone_can_pay build/always_success build/validate_signature_rsa build/xudt_rce build/rce_validator
+all: build/simple_udt build/anyone_can_pay build/always_success build/validate_signature_rsa build/xudt_rce build/rce_validator build/compact_udt_lock
 
 all-via-docker: ${PROTOCOL_HEADER}
 	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make"
@@ -102,8 +105,14 @@ mol:
 	make c/xudt_rce_mol2.h
 	make xudt/src/xudt_rce_mol.rs
 
+	rm -f c/compact_udt_mol.h
+	rm -f c/compact_udt_mol2.h
+	make c/compact_udt_mol.h
+	make c/compact_udt_mol2.h
+
 
 xudt/src/xudt_rce_mol.rs: c/xudt_rce.mol
+	mkdir -p xudt/src/
 	${MOLC} --language rust --schema-file $< | rustfmt > $@
 
 c/xudt_rce_mol.h: c/xudt_rce.mol
@@ -120,6 +129,18 @@ build/xudt_rce: c/xudt_rce.c c/rce.h
 
 build/rce_validator: c/rce_validator.c c/rce.h
 	$(CC) $(XUDT_RCE_CFLAGS) $(LDFLAGS) -o $@ $<
+	$(OBJCOPY) --only-keep-debug $@ $@.debug
+	$(OBJCOPY) --strip-debug --strip-all $@
+
+c/compact_udt_mol.h: c/compact_udt.mol
+	${MOLC} --language c --schema-file $< > $@
+
+c/compact_udt_mol2.h: c/compact_udt.mol
+	${MOLC} --language - --schema-file $< --format json > build/compact_udt_mol2.json
+	moleculec-c2 --input build/compact_udt_mol2.json | clang-format -style=Google > $@
+
+build/compact_udt_lock: c/compact_udt_lock.c c/compact_udt_lock.h c/compact_udt_lock_reader.h
+	$(CC) $(COMPACT_UDT_CFLAGS) $(LDFLAGS) -o $@ $^
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 

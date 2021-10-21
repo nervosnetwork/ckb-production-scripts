@@ -1,0 +1,53 @@
+import blockchain;
+
+vector Signature <byte>;
+array ScriptHash [byte; 32];
+array Identity [byte; 21];
+
+table Deposit {
+  source: ScriptHash,
+  target: Identity,
+  amount: Uint128,
+  fee:    Uint128,
+}
+
+vector DepositVec <Deposit>;
+
+table MoveBetweenCompactSMT {
+  script_hash: ScriptHash,
+  identity: Identity,
+}
+
+union TransferTarget {
+  ScriptHash,
+  Identity,
+  MoveBetweenCompactSMT,
+}
+
+table RawTransfer {
+  source: Identity,
+  target: TransferTarget,
+  amount: Uint128,
+  fee:    Uint128,
+}
+
+table Transfer {
+  raw: RawTransfer,
+  signature: Signature,
+}
+
+vector TransferVec <Transfer>;
+
+struct KVPair {
+  k: Byte32,
+  v: Byte32,
+}
+
+vector KVPairVec <KVPair>;
+
+table CompactUDTEntries {
+  deposits: DepositVec,
+  transfers: TransferVec,
+  kv_state: KVPairVec,
+  kv_proof: Bytes,
+}
