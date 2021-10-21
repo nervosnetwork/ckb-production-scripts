@@ -144,6 +144,9 @@ build/compact_udt_lock: c/compact_udt_lock.c c/compact_udt_lock.h c/compact_udt_
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
+compact_udt_lock-via-docker:
+	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make build/compact_udt_lock"
+
 publish:
 	git diff --exit-code Cargo.toml
 	sed -i.bak 's/.*git =/# &/' Cargo.toml

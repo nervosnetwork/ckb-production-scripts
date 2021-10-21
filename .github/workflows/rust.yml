@@ -11,8 +11,8 @@ jobs:
     - uses: actions/checkout@v1
     - name: Update submodules
       run: git submodule update --init
-    - name: Build contract
-      run: make all-via-docker
+#    - name: Build contract
+#      run: make all-via-docker
 # TODO Temporarily comment out these item
 #    - name: Build test extensions
 #      run: make -f tests/xudt_rce/extension_scripts.Makefile all-via-docker
@@ -24,3 +24,5 @@ jobs:
 #      run: cd tests/xudt_rce_rust && cargo test
 #    - name: Run xudt simulator tests
 #      run: cd tests/xudt_rce && bash run.sh
+    - name: Build compact udt lock
+      run: make compact_udt_lock-via-docker
