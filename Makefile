@@ -175,6 +175,7 @@ clean:
 	rm -f build/validate_signature_rsa
 	rm -f build/validate_signature_rsa_sim
 	cargo clean
+	rm -rf build/compact_udt_lock
 
 install-tools:
 	if [ ! -x "$$(command -v "${MOLC}")" ] \
