@@ -1,12 +1,14 @@
-cmake_minimum_required(VERSION 3.10)
-SET(CMAKE_C_STANDARD 11)
 
-project(cudt_simulator C)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
+
+project(cudt_simulator CXX C)
 
 set(CUDT_LOCK_DIR ${PROJECT_SOURCE_DIR}/../..)
 set(CUDT_LOCK_C_DIR ${PROJECT_SOURCE_DIR}/../../c)
 set(CUDT_LOCK_DEPS ${CUDT_LOCK_DIR}/deps)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+message(${CUDT_LOCK_C_DIR})
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
@@ -33,7 +35,12 @@ include_directories(before ${CUDT_LOCK_DIR}/deps/ckb-c-stdlib-20210713/molecule)
 include_directories(before ${CUDT_LOCK_DEPS}/sparse-merkle-tree/c)
 
 add_executable(cudt_simulator
-    ${PROJECT_SOURCE_DIR}/test_compact_udt_lock.c
-    ${PROJECT_SOURCE_DIR}/util/ckb_syscall_cudt_sim.c
-    ${PROJECT_SOURCE_DIR}/util/util.c
+    ${PROJECT_SOURCE_DIR}/test_compact_udt_lock.cpp
+    ${PROJECT_SOURCE_DIR}/compact_udt_virtual_data.cpp
+	
+	${PROJECT_SOURCE_DIR}/simulator/ckb_syscall_cudt_sim.c
+	${PROJECT_SOURCE_DIR}/simulator/compact_udt_lock_inc.c
+	${PROJECT_SOURCE_DIR}/simulator/compact_udt_cc.cpp
+	
+	${PROJECT_SOURCE_DIR}/util/util.cpp
 )

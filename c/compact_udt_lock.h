@@ -12,7 +12,7 @@
   do {                     \
     if (!(cond)) {         \
       err = code;          \
-      ASSERT(0);           \
+      ASSERT_DBG(0);       \
       goto exit_func;      \
     }                      \
   } while (0)
@@ -22,14 +22,26 @@
     int code = (_code); \
     if (code != 0) {    \
       err = code;       \
-      ASSERT(0);        \
+      ASSERT_DBG(0);    \
       goto exit_func;   \
     }                   \
   } while (0)
 
-#ifndef ASSERT
-#define ASSERT(s) ((void)0)
-#endif
+#ifdef CKB_USE_SIM
+#undef ASSERT_DBG
+#include <assert.h>
+#define ASSERT_DBG(i) \
+  if (!(i)) {           \
+    assert(false);    \
+    int* a = NULL;    \
+    *a = 0;           \
+  }
+
+#include "debug.h"
+
+#else  // CKB_USE_SIM
+#define ASSERT_DBG(i)
+#endif  // CKB_USE_SIM
 
 // mol
 #ifndef MOL2_EXIT
@@ -80,8 +92,6 @@ enum __COMPACT_RESULT {
 
   CKBERR_DATA_EMTPY,
   CKBERR_DATA_TOO_LONG,
-
-  
 
   CKBERR_UNKNOW = 255,
 };

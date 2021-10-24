@@ -212,7 +212,7 @@ MOLECULE_API_DECORATOR  mol_seg_res_t   MolBuilder_Deposit_build                
 #define                                 MolBuilder_MoveBetweenCompactSMT_set_identity(b, p, l) mol_table_builder_add(b, 1, p, l)
 MOLECULE_API_DECORATOR  mol_seg_res_t   MolBuilder_MoveBetweenCompactSMT_build          (mol_builder_t);
 #define                                 MolBuilder_MoveBetweenCompactSMT_clear(b)       mol_builder_discard(b)
-#define                                 MolBuilder_TransferTarget_init(b)               mol_union_builder_initialize(b, 64, 0, &MolDefault_ScriptHash, 32)
+#define                                 MolBuilder_TransferTarget_init(b)               mol_union_builder_initialize(b, 64, 0, MolDefault_ScriptHash, 32)
 #define                                 MolBuilder_TransferTarget_set_ScriptHash(b, p, l) mol_union_builder_set(b, 0, p, l)
 #define                                 MolBuilder_TransferTarget_set_Identity(b, p, l) mol_union_builder_set(b, 1, p, l)
 #define                                 MolBuilder_TransferTarget_set_MoveBetweenCompactSMT(b, p, l) mol_union_builder_set(b, 2, p, l)

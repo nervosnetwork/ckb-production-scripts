@@ -1,7 +1,7 @@
 ﻿#include "compact_udt_lock.h"
 
 #ifdef CKB_USE_SIM
-#include "util/ckb_syscall_cudt_sim.h"
+#include "simulator/ckb_syscall_cudt_sim.h"
 #define CKBMAIN simulator_main
 #else  // CKB_USE_SIM
 #include "ckb_consts.h"
@@ -56,7 +56,7 @@ static CKBResCode _make_cursor(int index,
                                int offset,
                                func_get_data func,
                                mol2_cursor_t* cur) {
-  ASSERT(cur);
+  ASSERT_DBG(cur);
 
   CKBResCode err = 0;
   uint64_t len = 0;
@@ -100,7 +100,8 @@ static CKBResCode _get_witness_base(void* addr,
                                     size_t offset,
                                     size_t index,
                                     size_t source) {
-  return ckb_load_witness(addr, len, offset, index, source);
+  CKBResCode ret_code = ckb_load_witness(addr, len, offset, index, source);
+  return ret_code;
 }
 
 #define ReadMemFromMol2(m, source, target, target_size) \
@@ -212,18 +213,18 @@ CKBResCode get_cudt_witness(size_t index,
                             CompactUDTEntriesType* cudt_data) {
   int err = 0;
   WitnessArgsType witnesses;
-  err = _get_cursor_from_witness(&witnesses, 0, CKB_SOURCE_GROUP_INPUT);
+  err = _get_cursor_from_witness(&witnesses, index, CKB_SOURCE_GROUP_INPUT);
   CHECK(err);
 
-  BytesOptType input = witnesses.t->input_type(&witnesses);
-  mol2_cursor_t bytes = input.t->unwrap(&input);
+  BytesOptType ot = witnesses.t->input_type(&witnesses);
+  mol2_cursor_t bytes = ot.t->unwrap(&ot);
   *cudt_data = make_CompactUDTEntries(&bytes);
 
 exit_func:
   return err;
 }
 
-CKBResCode get_args(TypeID* type_id, Identity* identity, bool *has_id) {
+CKBResCode get_args(TypeID* type_id, Identity* identity, bool* has_id) {
   CKBResCode err = CUDT_SUCCESS;
 
   unsigned char script[SCRIPT_SIZE];
