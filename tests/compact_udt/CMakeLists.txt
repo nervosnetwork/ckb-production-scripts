@@ -44,3 +44,4 @@ add_executable(cudt_simulator
 	
 	${PROJECT_SOURCE_DIR}/util/util.cpp
 )
+#target_link_libraries(cudt_simulator PRIVATE -fsanitize=address -fsanitize=undefined)

@@ -7,6 +7,11 @@ uint8_t g_tx_buffer[1024 * 32];
 uint32_t g_tx_buffer_malloced_len = 0;
 
 void* alloc_cache(uint32_t len) {
+  // need 16 byte alignment
+  if (len % 16 != 0) {
+    len = (len / 16 + 1) * 16;
+  }
+
   if (g_tx_buffer_malloced_len + len > sizeof(g_tx_buffer)) {
     ASSERT_DBG(false);
     return NULL;

@@ -195,7 +195,7 @@ CBuffer VD_AllData::gen_witness() {
   // transfer
   auto transfer_vec = cudtmol_Transfer_Vec_Init();
   for (auto it = transfer.begin(); it != transfer.end(); it++) {
-    CacheTransferSourceType target_type;
+    CacheTransferSourceType target_type = 0;
     unique_ptr<AutoSBuf> target_t_buf;
 
     if (it->target_type == TargetType_MoveBetweenCompactSMT) {

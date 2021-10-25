@@ -114,7 +114,7 @@ static CKBResCode _get_witness_base(void* addr,
 #define ReadUint128FromMol2(m, source, target)               \
   {                                                          \
     mol2_cursor_t tmp = m.t->source(&m);                     \
-    memset((void*)(&target), 0, sizeof(target));             \
+    memset((void*)(&target), 0, sizeof(uint128_t));             \
     mol2_read_at(&tmp, (uint8_t*)(&target), sizeof(target)); \
   }
 

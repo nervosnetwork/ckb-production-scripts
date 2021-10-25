@@ -286,7 +286,7 @@ SBuffer cudtmol_CompactUDTEntries(SBuffer* deposits,
   MolBuilder_CompactUDTEntries_set_transfers(&b, transfers->buf,
                                              transfers->len);
   MolBuilder_CompactUDTEntries_set_kv_state(&b, kv_state->buf, kv_state->len);
-  MolBuilder_CompactUDTEntries_set_kv_proof(&b, kv_proof->buf, kv_state->len);
+  MolBuilder_CompactUDTEntries_set_kv_proof(&b, kv_proof->buf, kv_proof->len);
 
   mol_seg_res_t r = MolBuilder_CompactUDTEntries_build(b);
 
