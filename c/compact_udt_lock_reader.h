@@ -104,16 +104,11 @@ static CKBResCode _get_witness_base(void* addr,
   return ret_code;
 }
 
-#define ReadMemFromMol2(m, source, target, target_size)    \
-  {                                                        \
-    mol2_cursor_t tmp = m.t->source(&m);                   \
-    memset((void*)target, 0, target_size);                 \
-    uint32_t cudt_mol2_read_len =                          \
-        mol2_read_at(&tmp, (uint8_t*)target, target_size); \
-    if (cudt_mol2_read_len != target_size) {               \
-      ASSERT_DBG(false);                                   \
-      ckb_exit(CKBERR_UNKNOW);                             \
-    }                                                      \
+#define ReadMemFromMol2(m, source, target, target_size) \
+  {                                                     \
+    mol2_cursor_t tmp = m.t->source(&m);                \
+    memset((void*)target, 0, target_size);              \
+    mol2_read_at(&tmp, (uint8_t*)target, target_size);  \
   }
 
 #define ReadUint128FromMol2(m, source, target)               \
