@@ -38,7 +38,7 @@ int ckb_load_script_hash(void* addr, uint64_t* len, size_t offset) {
   param.len = 0;
   param.index_out_of_bound = false;
   param.by_field = true;
-  param.field = CKB_CELL_FIELD_TYPE_HASH;
+  param.field = CKB_CELL_FIELD_LOCK_HASH;
 
   uint8_t* ptr = cudtmol_get_data(&param);
   if (param.index_out_of_bound)

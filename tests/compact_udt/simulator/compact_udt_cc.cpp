@@ -27,7 +27,7 @@ uint8_t* cc_get_Data_by_field(CUDTMOL_Data* param) {
     return NULL;
   }
 
-  if (param->field == CKB_CELL_FIELD_TYPE_HASH) {
+  if (param->field == CKB_CELL_FIELD_LOCK_HASH) {
     ptr = bin->scritp_hash.get();
     param->len = bin->scritp_hash.len();
 

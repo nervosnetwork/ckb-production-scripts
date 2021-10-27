@@ -23,4 +23,7 @@ UTEST(success, main) {
   ASSERT_DBG(!ret_code);
 }
 
+UTEST(failed_amount, cell_data) {
+}
+
 UTEST_MAIN()

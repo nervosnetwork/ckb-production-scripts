@@ -299,7 +299,7 @@ CKBResCode load_other_cell_data(size_t index, CacheData** last, bool* goon) {
   uint64_t hash_len = sizeof(script_hash);
   int ret_code =
       ckb_load_cell_by_field(&script_hash, &hash_len, 0, index,
-                             CKB_SOURCE_INPUT, CKB_CELL_FIELD_TYPE_HASH);
+                             CKB_SOURCE_INPUT, CKB_CELL_FIELD_LOCK_HASH);
 
   if (ret_code == CKB_INDEX_OUT_OF_BOUND) {
     *goon = false;
