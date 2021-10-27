@@ -75,8 +75,8 @@ void VDScript::set_args_type_id(const CHash& type_id) {
   args_type_id_ = type_id;
 }
 
-void VDScript::set_args_identity(unique_ptr<CIdentity> id) {
-  args_identity_ = move(id);
+void VDScript::using_identity() {
+  ckb_key_ = make_unique<CKBKey>();
 }
 
 CHash VDScript::get_script_hash() {
@@ -104,7 +104,7 @@ CBuffer VDScript::get_args_data() {
     Hash type_id;
     Identity identity;
   };
-  if (args_identity_) {
+  if (ckb_key_) {
     ret.resize(sizeof(ARGS));
   } else {
     ret.resize(sizeof(ARGS) - sizeof(Identity));
@@ -113,10 +113,14 @@ CBuffer VDScript::get_args_data() {
   ARGS* args_data = (ARGS*)ret.data();
   args_data->ver = args_version_;
   args_type_id_.copy((uint8_t*)&(args_data->type_id));
-  if (args_identity_) {
-    args_identity_->copy((uint8_t*)&(args_data->identity));
+  if (ckb_key_) {
+    ckb_key_->get_pubkey_hash().copy((uint8_t*)&(args_data->identity));
   }
   return ret;
+}
+
+CKBKey* VDScript::get_key() {
+  return ckb_key_.get();
 }
 
 //////////////////// VDUser ///////////////////////////////
@@ -163,7 +167,7 @@ VDUser* VDAllData::find_user_tx_ed(CIdentity* id) {
   return find_user(id, users_tx_ed);
 }
 
-CHash VDAllData::get_transfer_sign(VDTXTransfer* t, AutoSBuf* raw_buf) {
+CHash VDAllData::get_transfer_hash(VDTXTransfer* t, AutoSBuf* raw_buf) {
   Blake2b b;
   b.Update(input->get_type_id());
 
@@ -174,6 +178,12 @@ CHash VDAllData::get_transfer_sign(VDTXTransfer* t, AutoSBuf* raw_buf) {
   b.Update(raw_buf->ptr(), raw_buf->len());
 
   return b.Final();
+}
+
+CBuffer VDAllData::get_transfer_sign(CHash* msg) {
+  auto key = input->get_key();
+  ASSERT_DBG(key);
+  return key->signature(msg);
 }
 
 CBuffer VDAllData::gen_witness() {
@@ -228,10 +238,18 @@ CBuffer VDAllData::gen_witness() {
     AutoSBuf raw_buf = cudtmol_TransferRaw(source_buf.get(), target_buf.get(),
                                            amount_buf.get(), fee_buf.get());
 
-    //
+    // signature
+    CBuffer signature_buf;
 
-    AutoSBuf sign_hash(get_transfer_sign(&(*it), &raw_buf));
-    AutoSBuf sign_buf = cudtmol_Bytes(sign_hash.ptr(), sign_hash.len());
+    if (input->get_key()) {
+      CHash msg = get_transfer_hash(&(*it), &raw_buf);
+      signature_buf = get_transfer_sign(&msg);
+    } else {
+      signature_buf.resize(1);
+    }
+
+    AutoSBuf sign_buf =
+        cudtmol_Bytes(signature_buf.data(), signature_buf.size());
 
     AutoSBuf transfer_buf = cudtmol_Transfer(raw_buf.get(), sign_buf.get());
     cudtmol_VecTemplate_Push(transfer_vec, transfer_buf.ptr(),
@@ -289,9 +307,9 @@ int VirtualData::run_simulator() {
 //////////////////// GenerateTransaction /////////////////////////////////
 
 int GenerateTransaction::add_cell(uint128_t amount,
-                    const VD_Users& users,
-                    bool is_cudt,
-                    CBuffer proof) {
+                                  const VD_Users& users,
+                                  bool is_cudt,
+                                  CBuffer proof) {
   int id = cell_count_++;
 
   auto cellg = make_unique<VDAllData>();
@@ -324,11 +342,11 @@ int GenerateTransaction::add_cell(uint128_t amount,
 }
 
 void GenerateTransaction::add_transfer(int src_cell,
-                         CIdentity src_user,
-                         int tar_cell,
-                         CIdentity tar_user,
-                         uint128_t amount,
-                         uint128_t fee) {
+                                       CIdentity src_user,
+                                       int tar_cell,
+                                       CIdentity tar_user,
+                                       uint128_t amount,
+                                       uint128_t fee) {
   VDTransfer transfer;
   transfer.src_cell = src_cell;
   transfer.src_user = src_user;

@@ -64,12 +64,13 @@ class VDScript {
   void set_script_code_hash(const CHash& script);
   void set_args_version(uint8_t ver);
   void set_args_type_id(const CHash& type_id);
-  void set_args_identity(unique_ptr<CIdentity> id);
+  void using_identity();
 
   CHash get_script_hash();
   CHash* get_script_code_hash();
   CHash* get_type_id();
   CBuffer get_args_data();
+  CKBKey* get_key();
 
   VDCellData data;
 
@@ -77,7 +78,7 @@ class VDScript {
   CHash script_code_hash_;
   uint8_t args_version_ = 0;
   CHash args_type_id_;
-  unique_ptr<CIdentity> args_identity_;
+  unique_ptr<CKBKey> ckb_key_;
 };
 
 class VDUser {
@@ -129,7 +130,8 @@ class VDAllData {
   VDUser* find_user(CIdentity* id, VD_Users& users_);
   VDUser* find_user(CIdentity* id);
   VDUser* find_user_tx_ed(CIdentity* id);
-  CHash get_transfer_sign(VDTXTransfer* t, AutoSBuf* raw_buf);
+  CHash get_transfer_hash(VDTXTransfer* t, AutoSBuf* raw_buf);
+  CBuffer get_transfer_sign(CHash* msg);
   CBuffer gen_witness();
   CHash update_smt_root_hash(VD_Users& us);
 };

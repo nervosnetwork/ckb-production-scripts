@@ -82,3 +82,15 @@ CHash SMT::calculate_root(const CBuffer& proof) {
   cudt_smt_calculate_root(smt_h_, ret.get(), proof.data(), proof.size());
   return ret;
 }
+
+CKBKey::CKBKey() {
+  ASSERT_DBG(false);
+  // TODO : Wait auth branch merge the master branch
+}
+CKBKey::~CKBKey() {}
+CIdentity CKBKey::get_pubkey_hash() {
+  return CIdentity();
+}
+CBuffer CKBKey::signature(const CHash* msg) {
+  return CBuffer();
+}

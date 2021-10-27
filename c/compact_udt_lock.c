@@ -5,8 +5,11 @@
 
 uint8_t g_tx_buffer[1024 * 32];
 uint32_t g_tx_buffer_malloced_len = 0;
+bool g_now_is_temporary_cache_ = false;
 
 void* alloc_cache(uint32_t len) {
+  ASSERT_DBG(!g_now_is_temporary_cache_);
+
   // need 16 byte alignment
   if (len % 16 != 0) {
     len = (len / 16 + 1) * 16;
@@ -26,6 +29,17 @@ void* alloc_cache(uint32_t len) {
 void clear_cache() {
   g_tx_buffer_malloced_len = 0;
   memset(g_tx_buffer, 0, sizeof(g_tx_buffer));
+}
+
+void* alloc_temporary_cache(uint32_t len) {
+  void* r = alloc_cache(len);
+  g_now_is_temporary_cache_ = true;
+  return r;
+}
+
+void free_temporary_cache(uint32_t len) {
+  g_tx_buffer_malloced_len -= len;
+  g_now_is_temporary_cache_ = false;
 }
 
 typedef struct _CacheDeposit {
@@ -101,6 +115,8 @@ typedef struct _Cache {
 } Cache;
 Cache* g_cudt_cache;
 
+CacheKVPair* find_kv_pair(const Identity* identity);
+
 CKBResCode check_script_unique() {
   uint64_t len = 0;
   int ret_code = ckb_load_cell_data(NULL, &len, 0, 1, CKB_SOURCE_GROUP_INPUT);
@@ -142,6 +158,41 @@ CKBResCode load_deposit_vec(CacheData* data,
   }
 
 exit_func:
+  return err;
+}
+
+CKBResCode get_transfer_hash(const TransferType* t,
+                             const RawTransferType* raw,
+                             const CacheTransfer* cache,
+                             Hash* transfer_hash) {
+  CKBResCode err = CUDT_SUCCESS;
+
+  blake2b_state b2 = {0};
+  ASSERT_DBG(blake2b_init(&b2, sizeof(Hash)) == 0);
+
+  blake2b_update(&b2, &(g_cudt_cache->type_id), sizeof(Hash));
+  CacheKVPair* kv_pair = find_kv_pair(&(cache->source));
+  CHECK2(kv_pair, CUDTERR_TRANSFER_SRC_NO_KV_PAIR);
+  blake2b_update(&b2, &(kv_pair->value.nonce), sizeof(kv_pair->value.nonce));
+
+  uint8_t* tmp_buffer = alloc_temporary_cache(raw->cur.size);
+  mol2_read_at(&(raw->cur), tmp_buffer, raw->cur.size);
+  blake2b_update(&b2, tmp_buffer, raw->cur.size);
+
+  blake2b_final(&b2, transfer_hash, sizeof(Hash));
+
+  free_temporary_cache(raw->cur.size);
+exit_func:
+  return err;
+}
+
+CKBResCode check_transfer_sign(const Hash* message, const uint8_t* signature) {
+  CKBResCode err = CUDT_SUCCESS;
+
+  // TODO
+  ASSERT_DBG(false);
+
+  // exit_func:
   return err;
 }
 
@@ -194,6 +245,22 @@ CKBResCode load_transfer_vec(CacheData* data,
       default:
         return CUDTERR_WITNESS_INVALID;
     }
+    if (g_cudt_cache->identity) {
+      Hash transfer_hash = {0};
+      CHECK(get_transfer_hash(&t, &raw, cache, &transfer_hash));
+
+      mol2_cursor_t signature_mol = t.t->signature(&t);
+      CHECK2(signature_mol.size != 0, CUDTERR_TRANSFER_SIGN_INVALID);
+
+      uint8_t* transfer_signature = alloc_temporary_cache(signature_mol.size);
+      uint32_t transfer_sign_len =
+          mol2_read_at(&signature_mol, transfer_signature, signature_mol.size);
+      CHECK2(transfer_sign_len == signature_mol.size,
+             CUDTERR_TRANSFER_SIGN_INVALID);
+
+      CHECK(check_transfer_sign(&transfer_hash, transfer_signature));
+      free_temporary_cache(signature_mol.size);
+    }
     cache->target = target_buf;
   }
 
@@ -222,17 +289,22 @@ exit_func:
 }
 
 CKBResCode load_kv_proof(CacheData* data, CompactUDTEntriesType* cudt_witness) {
-  CKBResCode err = CUDT_SUCCESS;
   mol2_cursor_t proof_cur = cudt_witness->t->kv_proof(cudt_witness);
 
-  uint8_t buf[2048];
-  uint32_t len = mol2_read_at(&proof_cur, buf, 2048);
-  CHECK2(len != 0 && len != 2048, CUDTERR_WITNESS_INVALID);
-  g_cudt_cache->kv_proof = alloc_cache(len);
-  memcpy(g_cudt_cache->kv_proof, buf, len);
-  g_cudt_cache->kv_proof_len = len;
-exit_func:
-  return err;
+  if (proof_cur.size == 0) {
+    ASSERT_DBG(false);
+    ckb_exit(CUDTERR_SMTPROOF_SIZE_INVALID);
+  }
+
+  g_cudt_cache->kv_proof = alloc_cache(proof_cur.size);
+  uint32_t len =
+      mol2_read_at(&proof_cur, g_cudt_cache->kv_proof, proof_cur.size);
+  if (len != proof_cur.size) {
+    ASSERT_DBG(false);
+    ckb_exit(CUDTERR_SMTPROOF_SIZE_INVALID);
+  }
+  g_cudt_cache->kv_proof_len = proof_cur.size;
+  return CUDT_SUCCESS;
 }
 
 CKBResCode load_cur_cell_data() {
@@ -252,9 +324,9 @@ CKBResCode load_cur_cell_data() {
   CompactUDTEntriesType cudt_witness;
   CHECK(get_cudt_witness(0, CKB_SOURCE_GROUP_INPUT, &cudt_witness));
   CHECK(load_deposit_vec(data, &cudt_witness));
-  CHECK(load_transfer_vec(data, &cudt_witness));
   CHECK(load_kv_pairs(data, &cudt_witness));
   CHECK(load_kv_proof(data, &cudt_witness));
+  CHECK(load_transfer_vec(data, &cudt_witness));
 
 exit_func:
   return err;
@@ -299,6 +371,10 @@ CKBResCode load_other_cell_data(size_t index, CacheData** last, bool* goon) {
     uint128_t amount = 0;
     ReadUint128FromMol2(d, amount, amount);
     total_deposit += amount;
+    if (total_deposit < amount) {
+      ASSERT_DBG(false);
+      ckb_exit(CUDTERR_OTHER_AMOUNT_INVALID);
+    }
 
     Hash hash;
     ReadMemFromMol2(d, source, &hash, sizeof(hash));
@@ -522,7 +598,7 @@ exit_func:
   return err;
 }
 
-CacheKVPair* find_kv_pair(Identity* identity) {
+CacheKVPair* find_kv_pair(const Identity* identity) {
   ASSERT_DBG(identity);
   for (uint32_t i = 0; i < g_cudt_cache->kv_pairs_len; i++) {
     if (memcmp(&(g_cudt_cache->kv_pairs[i].key), identity, sizeof(Identity)) ==

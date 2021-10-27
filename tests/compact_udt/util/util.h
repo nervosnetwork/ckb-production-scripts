@@ -105,4 +105,13 @@ class SMT {
   CUDT_SMT_H smt_h_;
 };
 
+class CKBKey {
+ public:
+  CKBKey();
+  ~CKBKey();
+
+  CIdentity get_pubkey_hash();
+  CBuffer signature(const CHash* msg);
+};
+
 #endif  // _TESTS_COMPACT_UDT_UTIL_UTIL_H_
