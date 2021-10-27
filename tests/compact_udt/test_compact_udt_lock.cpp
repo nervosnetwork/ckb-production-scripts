@@ -17,13 +17,26 @@ UTEST(success, main) {
   gen_test_data(&transfaction);
 
   auto virtual_data = transfaction.build();
-  ASSERT_DBG(virtual_data);
-
-  int ret_code = virtual_data->run_simulator();
+  int ret_code = virtual_data.run_simulator();
   ASSERT_DBG(!ret_code);
 }
 
-UTEST(failed_amount, cell_data) {
+UTEST(success, with_identity) {
+  // TODO
+  /*
+  GenerateTransaction transfaction;
+  gen_test_data(&transfaction);
+  for (auto it = transfaction.cells_data_.begin();
+       it != transfaction.cells_data_.end(); it++) {
+    it->get()->input_->using_identity();
+  }
+
+  auto virtual_data = transfaction.build();
+  int ret_code = virtual_data.run_simulator();
+  ASSERT_DBG(!ret_code);
+  */
 }
+
+UTEST(failed_amount, cell_data) {}
 
 UTEST_MAIN()

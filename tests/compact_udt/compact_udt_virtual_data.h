@@ -49,12 +49,12 @@ class VDCellData {
 
 class VDTransfer {
  public:
-  int src_cell = 0;
-  CIdentity src_user;
-  int tar_cell = 0;
-  CIdentity tar_user;
-  uint128_t amount = 0;
-  uint128_t fee = 0;
+  int src_cell_ = 0;
+  CIdentity src_user_;
+  int tar_cell_ = 0;
+  CIdentity tar_user_;
+  uint128_t amount_ = 0;
+  uint128_t fee_ = 0;
 };
 
 class VDScript {
@@ -72,7 +72,7 @@ class VDScript {
   CBuffer get_args_data();
   CKBKey* get_key();
 
-  VDCellData data;
+  VDCellData data_;
 
  private:
   CHash script_code_hash_;
@@ -85,9 +85,9 @@ class VDUser {
  public:
   VDUser(CIdentity _id, uint128_t _am);
 
-  CIdentity id;
-  uint128_t amount = 0;
-  uint32_t nonce = 0;
+  CIdentity id_;
+  uint128_t amount_ = 0;
+  uint32_t nonce_ = 0;
 
   CHash gen_smt_key();
   CHash gen_smt_val();
@@ -96,36 +96,36 @@ typedef vector<VDUser> VD_Users;
 
 class VDTXDeposit {
  public:
-  VDAllData* source = nullptr;
-  CIdentity target;
+  VDAllData* source_ = nullptr;
+  CIdentity target_;
 
-  uint128_t amount = 0;
-  uint128_t fee = 0;
+  uint128_t amount_ = 0;
+  uint128_t fee_ = 0;
 };
 
 class VDTXTransfer {
  public:
-  CIdentity source;
+  CIdentity source_;
 
-  VDAllData* target_cell = nullptr;
-  CIdentity target_user;
-  CacheTransferSourceType target_type;
+  VDAllData* target_cell_ = nullptr;
+  CIdentity target_user_;
+  CacheTransferSourceType target_type_;
 
-  uint128_t amount = 0;
-  uint128_t fee = 0;
+  uint128_t amount_ = 0;
+  uint128_t fee_ = 0;
 };
 
 class VDAllData {
  public:
-  unique_ptr<VDScript> input;
-  unique_ptr<VDScript> output;
-  VD_Users users;
-  VD_Users users_tx_ed;
+  unique_ptr<VDScript> input_;
+  unique_ptr<VDScript> output_;
+  VD_Users users_;
+  VD_Users users_tx_ed_;
 
-  std::list<VDTXDeposit> deposit;
-  std::list<VDTXTransfer> transfer;
+  std::list<VDTXDeposit> deposit_;
+  std::list<VDTXTransfer> transfer_;
 
-  CBuffer smt_proof;
+  CBuffer smt_proof_;
 
   VDUser* find_user(CIdentity* id, VD_Users& users_);
   VDUser* find_user(CIdentity* id);
@@ -137,17 +137,17 @@ class VDAllData {
 };
 
 struct VDBinData {
-  CHash scritp_hash;
-  CBuffer script_data;
-  CBuffer cell_data;
-  CBuffer witness;
+  CHash scritp_hash_;
+  CBuffer script_data_;
+  CBuffer cell_data_;
+  CBuffer witness_;
 };
 
 class VirtualData {
  public:
   int run_simulator();
 
-  std::list<unique_ptr<VDBinData>> inputs, outputs;
+  std::list<unique_ptr<VDBinData>> inputs_, outputs_;
 };
 
 class GenerateTransaction {
@@ -163,16 +163,14 @@ class GenerateTransaction {
                     CIdentity tar_user,
                     uint128_t amount,
                     uint128_t fee);
-  VirtualData* build();
+  VirtualData build();
 
  private:
   void fill_scritp_data(VDBinData* bin, VDScript* script);
   void gen_transfer_info();
   VDAllData* find(int id);
 
- private:
-  VirtualData virtual_data_;
-
+ public:
   map<int, VDAllData*> cells_;
   list<unique_ptr<VDAllData>> cells_data_;
 

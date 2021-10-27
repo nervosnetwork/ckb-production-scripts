@@ -126,11 +126,11 @@ CKBKey* VDScript::get_key() {
 //////////////////// VDUser ///////////////////////////////
 
 VDUser::VDUser(CIdentity _id, uint128_t _am)
-    : id(_id), amount(_am), nonce(rand() % 200) {}
+    : id_(_id), amount_(_am), nonce_(rand() % 200) {}
 
 CHash VDUser::gen_smt_key() {
   CHash hash;
-  id.copy((uint8_t*)hash.get());
+  id_.copy((uint8_t*)hash.get());
   return hash;
 }
 
@@ -143,8 +143,8 @@ CHash VDUser::gen_smt_val() {
 
   CHash h;
   SMTVal* smt_val = (SMTVal*)h.get();
-  smt_val->amount = amount;
-  smt_val->nonce = nonce;
+  smt_val->amount = amount_;
+  smt_val->nonce = nonce_;
   return h;
 }
 
@@ -152,7 +152,7 @@ CHash VDUser::gen_smt_val() {
 
 VDUser* VDAllData::find_user(CIdentity* id, VD_Users& users_) {
   auto it = find_if(begin(users_), end(users_),
-                    [id](const VDUser& id2) { return *id == id2.id; });
+                    [id](const VDUser& id2) { return *id == id2.id_; });
   if (it == users_.end())
     return nullptr;
   else
@@ -160,20 +160,20 @@ VDUser* VDAllData::find_user(CIdentity* id, VD_Users& users_) {
 }
 
 VDUser* VDAllData::find_user(CIdentity* id) {
-  return find_user(id, users);
+  return find_user(id, users_);
 }
 
 VDUser* VDAllData::find_user_tx_ed(CIdentity* id) {
-  return find_user(id, users_tx_ed);
+  return find_user(id, users_tx_ed_);
 }
 
 CHash VDAllData::get_transfer_hash(VDTXTransfer* t, AutoSBuf* raw_buf) {
   Blake2b b;
-  b.Update(input->get_type_id());
+  b.Update(input_->get_type_id());
 
-  auto user = find_user(&(t->source));
+  auto user = find_user(&(t->source_));
   ASSERT_DBG(user);
-  b.Update(&(user->nonce), sizeof(user->nonce));
+  b.Update(&(user->nonce_), sizeof(user->nonce_));
 
   b.Update(raw_buf->ptr(), raw_buf->len());
 
@@ -181,7 +181,7 @@ CHash VDAllData::get_transfer_hash(VDTXTransfer* t, AutoSBuf* raw_buf) {
 }
 
 CBuffer VDAllData::get_transfer_sign(CHash* msg) {
-  auto key = input->get_key();
+  auto key = input_->get_key();
   ASSERT_DBG(key);
   return key->signature(msg);
 }
@@ -191,11 +191,11 @@ CBuffer VDAllData::gen_witness() {
 
   // deposit
   auto deposit_vec = cudtmol_Deposit_Vec_Init();
-  for (auto it = deposit.begin(); it != deposit.end(); it++) {
-    AutoSBuf source_buf(it->source->input->get_script_hash());
-    AutoSBuf target_buf(it->target);
-    AutoSBuf amount_buf(it->amount);
-    AutoSBuf fee_buf(it->fee);
+  for (auto it = deposit_.begin(); it != deposit_.end(); it++) {
+    AutoSBuf source_buf(it->source_->input_->get_script_hash());
+    AutoSBuf target_buf(it->target_);
+    AutoSBuf amount_buf(it->amount_);
+    AutoSBuf fee_buf(it->fee_);
     AutoSBuf deposit_buf = cudtmol_Deposit(source_buf.get(), target_buf.get(),
                                            amount_buf.get(), fee_buf.get());
     cudtmol_VecTemplate_Push(deposit_vec, deposit_buf.ptr(), deposit_buf.len());
@@ -204,24 +204,24 @@ CBuffer VDAllData::gen_witness() {
 
   // transfer
   auto transfer_vec = cudtmol_Transfer_Vec_Init();
-  for (auto it = transfer.begin(); it != transfer.end(); it++) {
+  for (auto it = transfer_.begin(); it != transfer_.end(); it++) {
     CacheTransferSourceType target_type = 0;
     unique_ptr<AutoSBuf> target_t_buf;
 
-    if (it->target_type == TargetType_MoveBetweenCompactSMT) {
+    if (it->target_type_ == TargetType_MoveBetweenCompactSMT) {
       target_type = TargetType_MoveBetweenCompactSMT;
-      AutoSBuf target_in_s(it->target_cell->input->get_script_hash());
-      AutoSBuf target_in_i(it->target_user);
+      AutoSBuf target_in_s(it->target_cell_->input_->get_script_hash());
+      AutoSBuf target_in_i(it->target_user_);
       target_t_buf = make_unique<AutoSBuf>(
           cudtmol_MoveBetweenCompactSMT(target_in_s.get(), target_in_i.get()));
-    } else if (it->target_type == TargetType_ScriptHash) {
+    } else if (it->target_type_ == TargetType_ScriptHash) {
       target_type = TargetType_ScriptHash;
-      AutoSBuf target_in_buf(it->target_cell->input->get_script_hash());
+      AutoSBuf target_in_buf(it->target_cell_->input_->get_script_hash());
       target_t_buf = make_unique<AutoSBuf>(
           cudtmol_Bytes(target_in_buf.ptr(), target_in_buf.len()));
-    } else if (it->target_type == TargetType_Identity) {
+    } else if (it->target_type_ == TargetType_Identity) {
       target_type = TargetType_Identity;
-      AutoSBuf target_in_buf(it->target_user);
+      AutoSBuf target_in_buf(it->target_user_);
       target_t_buf = make_unique<AutoSBuf>(
           cudtmol_Bytes(target_in_buf.ptr(), target_in_buf.len()));
     } else {
@@ -231,9 +231,9 @@ CBuffer VDAllData::gen_witness() {
     AutoSBuf target_buf =
         cudtmol_TransferTarget(target_type, target_t_buf->get());
 
-    AutoSBuf source_buf(it->source);
-    AutoSBuf amount_buf(it->amount);
-    AutoSBuf fee_buf(it->fee);
+    AutoSBuf source_buf(it->source_);
+    AutoSBuf amount_buf(it->amount_);
+    AutoSBuf fee_buf(it->fee_);
 
     AutoSBuf raw_buf = cudtmol_TransferRaw(source_buf.get(), target_buf.get(),
                                            amount_buf.get(), fee_buf.get());
@@ -241,7 +241,7 @@ CBuffer VDAllData::gen_witness() {
     // signature
     CBuffer signature_buf;
 
-    if (input->get_key()) {
+    if (input_->get_key()) {
       CHash msg = get_transfer_hash(&(*it), &raw_buf);
       signature_buf = get_transfer_sign(&msg);
     } else {
@@ -260,7 +260,7 @@ CBuffer VDAllData::gen_witness() {
   // kv_state
   auto kv_state_vec = cudtmol_KVPair_Vec_Init();
 
-  for (auto it = users.begin(); it != users.end(); it++) {
+  for (auto it = users_.begin(); it != users_.end(); it++) {
     AutoSBuf k = it->gen_smt_key();
     AutoSBuf v = it->gen_smt_val();
 
@@ -271,7 +271,7 @@ CBuffer VDAllData::gen_witness() {
   AutoSBuf kv_state_vec_buf = cudtmol_VecTemplate_Build(kv_state_vec);
 
   // kv proof
-  AutoSBuf kv_proof_buf = cudtmol_Bytes(smt_proof.data(), smt_proof.size());
+  AutoSBuf kv_proof_buf = cudtmol_Bytes(smt_proof_.data(), smt_proof_.size());
 
   AutoSBuf cudt_buf =
       cudtmol_CompactUDTEntries(deposit_vec_buf.get(), transfer_vec_buf.get(),
@@ -289,7 +289,7 @@ CHash VDAllData::update_smt_root_hash(VD_Users& us) {
     auto v = it->gen_smt_val();
     smt.insert(&k, &v);
   }
-  CHash h = smt.calculate_root(smt_proof);
+  CHash h = smt.calculate_root(smt_proof_);
 
   return h;
 }
@@ -320,20 +320,20 @@ int GenerateTransaction::add_cell(uint128_t amount,
   else
     script_hash = get_other_script_code_hash();
 
-  cellg->input = make_unique<VDScript>(script_hash);
-  cellg->output = make_unique<VDScript>(script_hash);
+  cellg->input_ = make_unique<VDScript>(script_hash);
+  cellg->output_ = make_unique<VDScript>(script_hash);
 
-  auto input = cellg->input.get();
-  auto output = cellg->output.get();
+  auto input = cellg->input_.get();
+  auto output = cellg->output_.get();
 
   input->set_args_type_id(get_new_type_id());
   output->set_args_type_id(get_new_type_id());
 
-  input->data.set_amount(amount);
-  output->data.set_amount(0);
+  input->data_.set_amount(amount);
+  output->data_.set_amount(0);
 
-  cellg->users = users;
-  cellg->smt_proof = proof;
+  cellg->users_ = users;
+  cellg->smt_proof_ = proof;
 
   cells_.insert(make_pair(id, cellg.get()));
   cells_data_.emplace_back(move(cellg));
@@ -348,19 +348,20 @@ void GenerateTransaction::add_transfer(int src_cell,
                                        uint128_t amount,
                                        uint128_t fee) {
   VDTransfer transfer;
-  transfer.src_cell = src_cell;
-  transfer.src_user = src_user;
-  transfer.tar_cell = tar_cell;
-  transfer.tar_user = tar_user;
-  transfer.amount = amount;
-  transfer.fee = fee;
+  transfer.src_cell_ = src_cell;
+  transfer.src_user_ = src_user;
+  transfer.tar_cell_ = tar_cell;
+  transfer.tar_user_ = tar_user;
+  transfer.amount_ = amount;
+  transfer.fee_ = fee;
 
   transfers_.push_back(transfer);
 }
 
-VirtualData* GenerateTransaction::build() {
+VirtualData GenerateTransaction::build() {
+  VirtualData vd;
   for (auto it = cells_data_.begin(); it != cells_data_.end(); it++) {
-    it->get()->users_tx_ed = it->get()->users;
+    it->get()->users_tx_ed_ = it->get()->users_;
   }
 
   gen_transfer_info();
@@ -369,29 +370,29 @@ VirtualData* GenerateTransaction::build() {
     {
       auto bin = make_unique<VDBinData>();
       // get input smt root hash
-      it->get()->input->data.set_smt_root_hash(
-          it->get()->update_smt_root_hash(it->get()->users));
+      it->get()->input_->data_.set_smt_root_hash(
+          it->get()->update_smt_root_hash(it->get()->users_));
 
       // fill scritp and cell data
-      fill_scritp_data(bin.get(), it->get()->input.get());
+      fill_scritp_data(bin.get(), it->get()->input_.get());
 
-      bin->witness = it->get()->gen_witness();
+      bin->witness_ = it->get()->gen_witness();
 
-      virtual_data_.inputs.emplace_back(move(bin));
+      vd.inputs_.emplace_back(move(bin));
     }
     {
       auto bin = make_unique<VDBinData>();
 
       // get output smt root hash
-      it->get()->output->data.set_smt_root_hash(
-          it->get()->update_smt_root_hash(it->get()->users_tx_ed));
+      it->get()->output_->data_.set_smt_root_hash(
+          it->get()->update_smt_root_hash(it->get()->users_tx_ed_));
 
-      fill_scritp_data(bin.get(), it->get()->output.get());
-      virtual_data_.outputs.emplace_back(move(bin));
+      fill_scritp_data(bin.get(), it->get()->output_.get());
+      vd.outputs_.emplace_back(move(bin));
     }
   }
 
-  return &virtual_data_;
+  return vd;
 }
 
 void GenerateTransaction::fill_scritp_data(VDBinData* bin, VDScript* script) {
@@ -400,21 +401,21 @@ void GenerateTransaction::fill_scritp_data(VDBinData* bin, VDScript* script) {
   auto args = script->get_args_data();
   auto args_buf = cudtmol_Bytes(args.data(), args.size());
   AutoSBuf buf = cudtmol_Script(sc_code.get(), 0, &args_buf);
-  bin->script_data = buf.copy();
-  bin->scritp_hash = script_hash;
+  bin->script_data_ = buf.copy();
+  bin->scritp_hash_ = script_hash;
 
-  bin->cell_data = script->data.get_cell_data();
+  bin->cell_data_ = script->data_.get_cell_data();
 }
 
 void GenerateTransaction::gen_transfer_info() {
   for (auto it = transfers_.begin(); it != transfers_.end(); it++) {
-    auto src_cell = find(it->src_cell);
-    auto tar_cell = find(it->tar_cell);
+    auto src_cell = find(it->src_cell_);
+    auto tar_cell = find(it->tar_cell_);
     ASSERT_DBG(src_cell);
     ASSERT_DBG(tar_cell);
 
-    auto scr_script_code = src_cell->input->get_script_code_hash();
-    auto tar_script_code = tar_cell->input->get_script_code_hash();
+    auto scr_script_code = src_cell->input_->get_script_code_hash();
+    auto tar_script_code = tar_cell->input_->get_script_code_hash();
 
     ASSERT_DBG(*scr_script_code == get_cudt_script_code_hash() ||
                *tar_script_code == get_cudt_script_code_hash());
@@ -422,41 +423,41 @@ void GenerateTransaction::gen_transfer_info() {
     {
       VDTXDeposit deposit;
 
-      deposit.amount = it->amount;
-      deposit.fee = it->fee;
+      deposit.amount_ = it->amount_;
+      deposit.fee_ = it->fee_;
 
-      deposit.source = src_cell;
-      deposit.target = it->tar_user;
-      tar_cell->deposit.push_back(deposit);
+      deposit.source_ = src_cell;
+      deposit.target_ = it->tar_user_;
+      tar_cell->deposit_.push_back(deposit);
     }
     {
       VDTXTransfer transfer;
-      transfer.amount = it->amount;
-      transfer.fee = it->fee;
-      transfer.source = it->src_user;
+      transfer.amount_ = it->amount_;
+      transfer.fee_ = it->fee_;
+      transfer.source_ = it->src_user_;
       if (*scr_script_code == *tar_script_code) {
-        transfer.target_cell = tar_cell;
-        transfer.target_user = it->tar_user;
-        transfer.target_type = TargetType_MoveBetweenCompactSMT;
+        transfer.target_cell_ = tar_cell;
+        transfer.target_user_ = it->tar_user_;
+        transfer.target_type_ = TargetType_MoveBetweenCompactSMT;
       } else if (src_cell == tar_cell) {
-        transfer.target_user = it->tar_user;
-        transfer.target_type = TargetType_Identity;
+        transfer.target_user_ = it->tar_user_;
+        transfer.target_type_ = TargetType_Identity;
       } else {
-        transfer.target_cell = tar_cell;
-        transfer.target_type = TargetType_ScriptHash;
+        transfer.target_cell_ = tar_cell;
+        transfer.target_type_ = TargetType_ScriptHash;
       }
 
-      src_cell->transfer.push_back(transfer);
+      src_cell->transfer_.push_back(transfer);
     }
 
-    auto src_user = src_cell->find_user_tx_ed(&(it->src_user));
+    auto src_user = src_cell->find_user_tx_ed(&(it->src_user_));
     ASSERT_DBG(src_user);
-    src_user->amount -= (it->amount + it->fee);
-    src_user->nonce += 1;
+    src_user->amount_ -= (it->amount_ + it->fee_);
+    src_user->nonce_ += 1;
 
-    auto tar_user = tar_cell->find_user_tx_ed(&(it->tar_user));
+    auto tar_user = tar_cell->find_user_tx_ed(&(it->tar_user_));
     ASSERT_DBG(tar_user);
-    tar_user->amount += (it->amount);
+    tar_user->amount_ += (it->amount_);
   }
 }
 

@@ -15,11 +15,11 @@ uint8_t* cc_get_Data_by_field(CUDTMOL_Data* param) {
 
   VDBinData* bin = NULL;
   if (param->source == CKB_SOURCE_INPUT) {
-    auto it = vd->inputs.begin();
+    auto it = vd->inputs_.begin();
     advance(it, param->index);
     bin = it->get();
   } else if (param->source == CKB_SOURCE_OUTPUT) {
-    auto it = vd->outputs.begin();
+    auto it = vd->outputs_.begin();
     advance(it, param->index);
     bin = it->get();
   } else {
@@ -28,8 +28,8 @@ uint8_t* cc_get_Data_by_field(CUDTMOL_Data* param) {
   }
 
   if (param->field == CKB_CELL_FIELD_LOCK_HASH) {
-    ptr = bin->scritp_hash.get();
-    param->len = bin->scritp_hash.len();
+    ptr = bin->scritp_hash_.get();
+    param->len = bin->scritp_hash_.len();
 
   } else {
     ASSERT_DBG(false);
@@ -43,7 +43,7 @@ uint8_t* cc_get_data_tr(CUDTMOL_Data* param) {
   auto* vd = GlobalData::get()->get_virtual_data();
   ASSERT_DBG(vd);
 
-  if (param->index >= vd->inputs.size()) {
+  if (param->index >= vd->inputs_.size()) {
     param->index_out_of_bound = true;
     return NULL;
   }
@@ -55,10 +55,10 @@ uint8_t* cc_get_data_tr(CUDTMOL_Data* param) {
   std::list<unique_ptr<VDBinData>>* bin_list = NULL;
   if (param->source == CKB_SOURCE_GROUP_INPUT ||
       param->source == CKB_SOURCE_INPUT) {
-    bin_list = &(vd->inputs);
+    bin_list = &(vd->inputs_);
   } else if (param->source == CKB_SOURCE_GROUP_OUTPUT ||
              param->source == CKB_SOURCE_OUTPUT) {
-    bin_list = &(vd->outputs);
+    bin_list = &(vd->outputs_);
   }
   ASSERT_DBG(bin_list);
 
@@ -88,14 +88,14 @@ uint8_t* cc_get_data_tr(CUDTMOL_Data* param) {
   ASSERT_DBG(vd);
   switch (param->type) {
     case CUDTMOLType_Scritp:
-      param->len = bin->script_data.size();
-      return bin->script_data.data();
+      param->len = bin->script_data_.size();
+      return bin->script_data_.data();
     case CUDTMOLType_CellData:
-      param->len = bin->cell_data.size();
-      return bin->cell_data.data();
+      param->len = bin->cell_data_.size();
+      return bin->cell_data_.data();
     case CUDTMOLType_Witness:
-      param->len = bin->witness.size();
-      return bin->witness.data();
+      param->len = bin->witness_.size();
+      return bin->witness_.data();
     default:
       ASSERT_DBG(false);
       break;
