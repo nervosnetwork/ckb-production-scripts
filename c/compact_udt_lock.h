@@ -31,7 +31,7 @@
 #undef ASSERT_DBG
 #include <assert.h>
 #define ASSERT_DBG(i) \
-  if (!(i)) {           \
+  if (!(i)) {         \
     assert(false);    \
     int* a = NULL;    \
     *a = 0;           \
@@ -52,7 +52,7 @@
 typedef __uint128_t uint128_t;
 #endif  // uint128_t
 
-enum __COMPACT_RESULT {
+enum _CompactResult {
   CUDT_SUCCESS = 0,
 
   CUDTERR_LOAD_SCRIPT,
@@ -97,7 +97,7 @@ enum __COMPACT_RESULT {
 };
 typedef uint8_t CKBResCode;
 
-enum __CellDataTypeScript {
+enum _CellDataTypeScript {
   Unknow = 0,
   TypeScript_sUDT,
   TypeScript_xUDT,
@@ -105,33 +105,33 @@ enum __CellDataTypeScript {
 typedef uint8_t CellDataTypeScript;
 
 #define CUDT_HASH_SIZE 32
-typedef struct __HASH {
+typedef struct _Hash {
   uint8_t hash[CUDT_HASH_SIZE];
 } Hash;
 #undef CUDT_HASH_SIZE
 
 #define CUDT_IDENTITY 21
-typedef struct __Identity {
+typedef struct _Identity {
   uint8_t identity[CUDT_IDENTITY];
 } Identity;
 #undef CUDT_IDENTITY
 
 #define CUDT_TYPE_ID 32
-typedef struct __TypeID {
+typedef struct _TypeID {
   uint8_t type_id[CUDT_TYPE_ID];
 } TypeID;
 #undef CUDT_TYPE_ID
 
-enum __CacheTransferTargetType {
+enum _CacheTransferTargetType {
   TargetType_ScriptHash = 0,
   TargetType_Identity,
   TargetType_MoveBetweenCompactSMT,
 };
 typedef uint8_t CacheTransferSourceType;
 
-typedef struct __CKBCellData {
+typedef struct _CKBCellData {
   CellDataTypeScript type;  // type script type
-  __uint128_t amount;
+  uint128_t amount;
   uint8_t smt_root_hash[32];
 } CKBCellData;
 

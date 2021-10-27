@@ -6,25 +6,25 @@
 #include "simulator/compact_udt_lock_inc.h"
 #include "test_compact_udt_data.h"
 
-//////////////////// VD_CellData ///////////////////////////
+//////////////////// VDCellData ///////////////////////////
 
-void VD_CellData::set_amount(uint128_t amount) {
+void VDCellData::set_amount(uint128_t amount) {
   amount_ = amount;
 }
 
-void VD_CellData::set_smt_root_hash(const CHash& hash) {
+void VDCellData::set_smt_root_hash(const CHash& hash) {
   smt_root_hash_ = hash;
 }
 
-void VD_CellData::set_sudt() {
+void VDCellData::set_sudt() {
   udt_type_ = UDTType::SUDT;
 }
 
-void VD_CellData::set_xudt() {
+void VDCellData::set_xudt() {
   udt_type_ = UDTType::XUDT;
 }
 
-CBuffer VD_CellData::get_cell_data() {
+CBuffer VDCellData::get_cell_data() {
   if (udt_type_ == UDTType::SUDT)
     return get_cell_data_sudt();
   else if (udt_type_ == UDTType::XUDT)
@@ -34,7 +34,7 @@ CBuffer VD_CellData::get_cell_data() {
   return CBuffer();
 }
 
-CBuffer VD_CellData::get_cell_data_sudt() {
+CBuffer VDCellData::get_cell_data_sudt() {
   struct SUDT_CellData {
     uint128_t amount;
     uint32_t flag;
@@ -52,34 +52,34 @@ CBuffer VD_CellData::get_cell_data_sudt() {
   return buf;
 }
 
-CBuffer VD_CellData::get_cell_data_xudt() {
+CBuffer VDCellData::get_cell_data_xudt() {
   ASSERT_DBG(false);
   return CBuffer();
 }
 
-//////////////////// VD_Script /////////////////////////////
+//////////////////// VDScript /////////////////////////////
 
-VD_Script::VD_Script(const CHash& script_hash) {
+VDScript::VDScript(const CHash& script_hash) {
   script_code_hash_ = script_hash;
 }
 
-void VD_Script::set_script_code_hash(const CHash& script) {
+void VDScript::set_script_code_hash(const CHash& script) {
   script_code_hash_ = script;
 }
 
-void VD_Script::set_args_version(uint8_t ver) {
+void VDScript::set_args_version(uint8_t ver) {
   args_version_ = ver;
 }
 
-void VD_Script::set_args_type_id(const CHash& type_id) {
+void VDScript::set_args_type_id(const CHash& type_id) {
   args_type_id_ = type_id;
 }
 
-void VD_Script::set_args_identity(unique_ptr<CIdentity> id) {
+void VDScript::set_args_identity(unique_ptr<CIdentity> id) {
   args_identity_ = move(id);
 }
 
-CHash VD_Script::get_script_hash() {
+CHash VDScript::get_script_hash() {
   Blake2b b2b;
   b2b.Update(&script_code_hash_);
   b2b.Update(&args_version_, 1);
@@ -87,15 +87,15 @@ CHash VD_Script::get_script_hash() {
   return b2b.Final();
 }
 
-CHash* VD_Script::get_script_code_hash() {
+CHash* VDScript::get_script_code_hash() {
   return &script_code_hash_;
 }
 
-CHash* VD_Script::get_type_id() {
+CHash* VDScript::get_type_id() {
   return &args_type_id_;
 }
 
-CBuffer VD_Script::get_args_data() {
+CBuffer VDScript::get_args_data() {
   CBuffer ret;
 
   // args
@@ -119,18 +119,18 @@ CBuffer VD_Script::get_args_data() {
   return ret;
 }
 
-//////////////////// VD_User ///////////////////////////////
+//////////////////// VDUser ///////////////////////////////
 
-VD_User::VD_User(CIdentity _id, uint128_t _am)
+VDUser::VDUser(CIdentity _id, uint128_t _am)
     : id(_id), amount(_am), nonce(rand() % 200) {}
 
-CHash VD_User::gen_smt_key() {
+CHash VDUser::gen_smt_key() {
   CHash hash;
   id.copy((uint8_t*)hash.get());
   return hash;
 }
 
-CHash VD_User::gen_smt_val() {
+CHash VDUser::gen_smt_val() {
   struct SMTVal {
     uint128_t amount = 0;
     uint32_t nonce = 0;
@@ -144,26 +144,26 @@ CHash VD_User::gen_smt_val() {
   return h;
 }
 
-//////////////////// VD_AllData ////////////////////////////
+//////////////////// VDAllData ////////////////////////////
 
-VD_User* VD_AllData::find_user(CIdentity* id, VD_Users& users_) {
+VDUser* VDAllData::find_user(CIdentity* id, VD_Users& users_) {
   auto it = find_if(begin(users_), end(users_),
-                    [id](const VD_User& id2) { return *id == id2.id; });
+                    [id](const VDUser& id2) { return *id == id2.id; });
   if (it == users_.end())
     return nullptr;
   else
     return &(*it);
 }
 
-VD_User* VD_AllData::find_user(CIdentity* id) {
+VDUser* VDAllData::find_user(CIdentity* id) {
   return find_user(id, users);
 }
 
-VD_User* VD_AllData::find_user_tx_ed(CIdentity* id) {
+VDUser* VDAllData::find_user_tx_ed(CIdentity* id) {
   return find_user(id, users_tx_ed);
 }
 
-CHash VD_AllData::get_transfer_sign(VD_TXTransfer* t, AutoSBuf* raw_buf) {
+CHash VDAllData::get_transfer_sign(VDTXTransfer* t, AutoSBuf* raw_buf) {
   Blake2b b;
   b.Update(input->get_type_id());
 
@@ -176,7 +176,7 @@ CHash VD_AllData::get_transfer_sign(VD_TXTransfer* t, AutoSBuf* raw_buf) {
   return b.Final();
 }
 
-CBuffer VD_AllData::gen_witness() {
+CBuffer VDAllData::gen_witness() {
   // need use mol2
 
   // deposit
@@ -264,7 +264,7 @@ CBuffer VD_AllData::gen_witness() {
   return witness_buf.copy();
 }
 
-CHash VD_AllData::update_smt_root_hash(VD_Users& us) {
+CHash VDAllData::update_smt_root_hash(VD_Users& us) {
   SMT smt;
   for (auto it = us.begin(); it != us.end(); it++) {
     auto k = it->gen_smt_key();
@@ -286,30 +286,30 @@ int VirtualData::run_simulator() {
   return code;
 }
 
-//////////////////// GenTx /////////////////////////////////
+//////////////////// GenerateTransaction /////////////////////////////////
 
-int GenTx::add_cell(uint128_t amount,
+int GenerateTransaction::add_cell(uint128_t amount,
                     const VD_Users& users,
                     bool is_cudt,
                     CBuffer proof) {
   int id = cell_count_++;
 
-  auto cellg = make_unique<VD_AllData>();
+  auto cellg = make_unique<VDAllData>();
 
   CHash script_hash;
   if (is_cudt)
-    script_hash = GetCompactUDTScriptCodeHash();
+    script_hash = get_cudt_script_code_hash();
   else
-    script_hash = GetOtherScriptCodeHash();
+    script_hash = get_other_script_code_hash();
 
-  cellg->input = make_unique<VD_Script>(script_hash);
-  cellg->output = make_unique<VD_Script>(script_hash);
+  cellg->input = make_unique<VDScript>(script_hash);
+  cellg->output = make_unique<VDScript>(script_hash);
 
   auto input = cellg->input.get();
   auto output = cellg->output.get();
 
-  input->set_args_type_id(GetNewTypeID());
-  output->set_args_type_id(GetNewTypeID());
+  input->set_args_type_id(get_new_type_id());
+  output->set_args_type_id(get_new_type_id());
 
   input->data.set_amount(amount);
   output->data.set_amount(0);
@@ -323,13 +323,13 @@ int GenTx::add_cell(uint128_t amount,
   return id;
 }
 
-void GenTx::add_transfer(int src_cell,
+void GenerateTransaction::add_transfer(int src_cell,
                          CIdentity src_user,
                          int tar_cell,
                          CIdentity tar_user,
                          uint128_t amount,
                          uint128_t fee) {
-  VD_Transfer transfer;
+  VDTransfer transfer;
   transfer.src_cell = src_cell;
   transfer.src_user = src_user;
   transfer.tar_cell = tar_cell;
@@ -340,7 +340,7 @@ void GenTx::add_transfer(int src_cell,
   transfers_.push_back(transfer);
 }
 
-VirtualData* GenTx::build() {
+VirtualData* GenerateTransaction::build() {
   for (auto it = cells_data_.begin(); it != cells_data_.end(); it++) {
     it->get()->users_tx_ed = it->get()->users;
   }
@@ -349,7 +349,7 @@ VirtualData* GenTx::build() {
 
   for (auto it = cells_data_.begin(); it != cells_data_.end(); it++) {
     {
-      auto bin = make_unique<VD_BinData>();
+      auto bin = make_unique<VDBinData>();
       // get input smt root hash
       it->get()->input->data.set_smt_root_hash(
           it->get()->update_smt_root_hash(it->get()->users));
@@ -362,7 +362,7 @@ VirtualData* GenTx::build() {
       virtual_data_.inputs.emplace_back(move(bin));
     }
     {
-      auto bin = make_unique<VD_BinData>();
+      auto bin = make_unique<VDBinData>();
 
       // get output smt root hash
       it->get()->output->data.set_smt_root_hash(
@@ -376,7 +376,7 @@ VirtualData* GenTx::build() {
   return &virtual_data_;
 }
 
-void GenTx::fill_scritp_data(VD_BinData* bin, VD_Script* script) {
+void GenerateTransaction::fill_scritp_data(VDBinData* bin, VDScript* script) {
   CHash script_hash = script->get_script_hash();
   AutoSBuf sc_code(script_hash);
   auto args = script->get_args_data();
@@ -388,7 +388,7 @@ void GenTx::fill_scritp_data(VD_BinData* bin, VD_Script* script) {
   bin->cell_data = script->data.get_cell_data();
 }
 
-void GenTx::gen_transfer_info() {
+void GenerateTransaction::gen_transfer_info() {
   for (auto it = transfers_.begin(); it != transfers_.end(); it++) {
     auto src_cell = find(it->src_cell);
     auto tar_cell = find(it->tar_cell);
@@ -398,11 +398,11 @@ void GenTx::gen_transfer_info() {
     auto scr_script_code = src_cell->input->get_script_code_hash();
     auto tar_script_code = tar_cell->input->get_script_code_hash();
 
-    ASSERT_DBG(*scr_script_code == GetCompactUDTScriptCodeHash() ||
-               *tar_script_code == GetCompactUDTScriptCodeHash());
+    ASSERT_DBG(*scr_script_code == get_cudt_script_code_hash() ||
+               *tar_script_code == get_cudt_script_code_hash());
 
     {
-      VD_TXDeposit deposit;
+      VDTXDeposit deposit;
 
       deposit.amount = it->amount;
       deposit.fee = it->fee;
@@ -412,7 +412,7 @@ void GenTx::gen_transfer_info() {
       tar_cell->deposit.push_back(deposit);
     }
     {
-      VD_TXTransfer transfer;
+      VDTXTransfer transfer;
       transfer.amount = it->amount;
       transfer.fee = it->fee;
       transfer.source = it->src_user;
@@ -442,7 +442,7 @@ void GenTx::gen_transfer_info() {
   }
 }
 
-VD_AllData* GenTx::find(int id) {
+VDAllData* GenerateTransaction::find(int id) {
   auto it = cells_.find(id);
   if (it == cells_.end())
     return NULL;

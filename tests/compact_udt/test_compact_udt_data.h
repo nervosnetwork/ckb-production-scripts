@@ -1,5 +1,5 @@
-#ifndef __TESTS_COMPACT_UDT_TESTDATA_H_
-#define __TESTS_COMPACT_UDT_TESTDATA_H_
+#ifndef _TESTS_COMPACT_UDT_TESTDATA_H_
+#define _TESTS_COMPACT_UDT_TESTDATA_H_
 
 #include <stdint.h>
 #include <vector>
@@ -270,35 +270,35 @@ CBuffer val_09 = {
     0x0F, 0x0D, 0x5C, 0xEA, 0x16, 0xBC, 0x5B, 0x54, 0xC0, 0x2C,
 };
 VD_Users users00 = {
-    VD_User(key_00, 10),
-    VD_User(key_01, 100),
-    VD_User(key_02, 500),
+    VDUser(key_00, 10),
+    VDUser(key_01, 100),
+    VDUser(key_02, 500),
 };
 CBuffer proof_00 = {
     0x4C, 0x4F, 0xA4, 0x4C, 0x4F, 0xA4, 0x48, 0x4F,
     0x01, 0x4C, 0x4F, 0xA6, 0x48, 0x4F, 0x59,
 };
 VD_Users users01 = {
-    VD_User(key_00, 100),
-    VD_User(key_02, 1000),
-    VD_User(key_04, 50),
-    VD_User(key_05, 300),
+    VDUser(key_00, 100),
+    VDUser(key_02, 1000),
+    VDUser(key_04, 50),
+    VDUser(key_05, 300),
 };
 CBuffer proof_01 = {
     0x4C, 0x4F, 0xA6, 0x4C, 0x4F, 0xA6, 0x48, 0x4C, 0x4F, 0xA3,
     0x4C, 0x4F, 0xA3, 0x48, 0x4F, 0x03, 0x48, 0x4F, 0x58,
 };
 VD_Users users02 = {
-    VD_User(key_02, 100),
-    VD_User(key_04, 1100),
-    VD_User(key_06, 5000),
+    VDUser(key_02, 100),
+    VDUser(key_04, 1100),
+    VDUser(key_06, 5000),
 };
 CBuffer proof_02 = {
     0x4C, 0x4F, 0xA7, 0x4C, 0x4F, 0xA4, 0x4C, 0x4F,
     0xA4, 0x48, 0x4F, 0x02, 0x48, 0x4F, 0x58,
 };
 }  // namespace
-inline void GenTestData(GenTx* tx) {
+inline void gen_test_data(GenerateTransaction* tx) {
   int cell0 = tx->add_cell(10000, users00, true, proof_00);
   int cell1 = tx->add_cell(50000, users01, true, proof_01);
   int cell2 = tx->add_cell(50000, users02, true, proof_02);
@@ -307,7 +307,7 @@ inline void GenTestData(GenTx* tx) {
   tx->add_transfer(cell1, key_00, cell1, key_02, 10, 10);
   tx->add_transfer(cell2, key_04, cell0, key_00, 1000, 10);
 }
-inline CHash GetCompactUDTScriptCodeHash() {
+inline CHash get_cudt_script_code_hash() {
   CBuffer v00 = {
       0xF5, 0x3F, 0x4E, 0x05, 0xF8, 0xA0, 0x80, 0xA6, 0xB0, 0xC5, 0xC0,
       0x0A, 0xA4, 0x3B, 0xB5, 0x0E, 0x79, 0x10, 0xDD, 0xBA, 0xDD, 0xE2,
@@ -315,7 +315,7 @@ inline CHash GetCompactUDTScriptCodeHash() {
   };
   return v00;
 }
-inline CHash GetOtherScriptCodeHash() {
+inline CHash get_other_script_code_hash() {
   CBuffer v00 = {
       0x27, 0x78, 0xD1, 0x9B, 0xBE, 0x50, 0xC2, 0xF5, 0x06, 0x1D, 0x89,
       0x8C, 0xE1, 0xC5, 0x14, 0xC5, 0x46, 0x08, 0xB0, 0x50, 0xBF, 0xDB,
@@ -323,10 +323,10 @@ inline CHash GetOtherScriptCodeHash() {
   };
   return v00;
 }
-inline CHash GetNewTypeID() {
+inline CHash get_new_type_id() {
   static size_t count = 0;
   ASSERT_DBG((count <= type_id_pool.size()));
   return type_id_pool[count++];
 }
 
-#endif  // __TESTS_COMPACT_UDT_TESTDATA_H_
+#endif  // _TESTS_COMPACT_UDT_TESTDATA_H_

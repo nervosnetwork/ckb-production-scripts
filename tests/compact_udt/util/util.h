@@ -1,5 +1,5 @@
-#ifndef __TESTS_COMPACT_UDT_UTIL_UTIL_H_
-#define __TESTS_COMPACT_UDT_UTIL_UTIL_H_
+#ifndef _TESTS_COMPACT_UDT_UTIL_UTIL_H_
+#define _TESTS_COMPACT_UDT_UTIL_UTIL_H_
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -40,9 +40,7 @@ class CData {
     return memcmp(buf_.data(), o.buf_.data(), buf_.size()) == 0;
   }
 
-  void operator=(const CData<T>& o) {
-    buf_ = o.buf_;
-  }
+  void operator=(const CData<T>& o) { buf_ = o.buf_; }
 
  private:
   array<uint8_t, T> buf_ = {0};
@@ -107,4 +105,4 @@ class SMT {
   CUDT_SMT_H smt_h_;
 };
 
-#endif  // __TESTS_COMPACT_UDT_UTIL_UTIL_H_
+#endif  // _TESTS_COMPACT_UDT_UTIL_UTIL_H_

@@ -13,7 +13,7 @@ uint8_t* cc_get_Data_by_field(CUDTMOL_Data* param) {
   auto* vd = GlobalData::get()->get_virtual_data();
   uint8_t* ptr;
 
-  VD_BinData* bin = NULL;
+  VDBinData* bin = NULL;
   if (param->source == CKB_SOURCE_INPUT) {
     auto it = vd->inputs.begin();
     advance(it, param->index);
@@ -52,7 +52,7 @@ uint8_t* cc_get_data_tr(CUDTMOL_Data* param) {
     return cc_get_Data_by_field(param);
   }
 
-  std::list<unique_ptr<VD_BinData>>* bin_list = NULL;
+  std::list<unique_ptr<VDBinData>>* bin_list = NULL;
   if (param->source == CKB_SOURCE_GROUP_INPUT ||
       param->source == CKB_SOURCE_INPUT) {
     bin_list = &(vd->inputs);
@@ -62,7 +62,7 @@ uint8_t* cc_get_data_tr(CUDTMOL_Data* param) {
   }
   ASSERT_DBG(bin_list);
 
-  VD_BinData* bin = NULL;
+  VDBinData* bin = NULL;
   if (param->source == CKB_SOURCE_GROUP_INPUT ||
       param->source == CKB_SOURCE_GROUP_OUTPUT) {
     if (param->index == 0)

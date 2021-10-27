@@ -114,7 +114,7 @@ static CKBResCode _get_witness_base(void* addr,
 #define ReadUint128FromMol2(m, source, target)               \
   {                                                          \
     mol2_cursor_t tmp = m.t->source(&m);                     \
-    memset((void*)(&target), 0, sizeof(uint128_t));             \
+    memset((void*)(&target), 0, sizeof(uint128_t));          \
     mol2_read_at(&tmp, (uint8_t*)(&target), sizeof(target)); \
   }
 
@@ -148,13 +148,13 @@ CKBResCode get_cell_data(size_t index,
                          Hash* hash) {
   CKBResCode err = CKBERR_UNKNOW;
 
-  typedef struct __SUDT_DATA {
+  typedef struct _SUDTData {
     uint128_t amount;
     uint32_t flag;
     uint8_t smt_hash[32];
-  } SUDT_DATA;
+  } SUDTData;
 
-  SUDT_DATA data;
+  SUDTData data;
   uint64_t data_len = sizeof(data);
   CHECK(ckb_load_cell_data(&data, &data_len, 0, index, source));
   CHECK2(data_len >= 4, CKBERR_CELLDATA_TOO_LOW);
@@ -247,17 +247,17 @@ CKBResCode get_args(TypeID* type_id, Identity* identity, bool* has_id) {
   mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
   mol_seg_t args_bytes_seg = MolReader_Bytes_raw_bytes(&args_seg);
 
-  typedef struct __CUDT_ARGS {
+  typedef struct _CompactArgs {
     uint8_t ver;
     TypeID type_id;
     Identity identity;
-  } CUDTArgs;
+  } CompactArgs;
 
-  CUDTArgs* args = (CUDTArgs*)args_bytes_seg.ptr;
-  if (args_bytes_seg.size == sizeof(CUDTArgs)) {
+  CompactArgs* args = (CompactArgs*)args_bytes_seg.ptr;
+  if (args_bytes_seg.size == sizeof(CompactArgs)) {
     memcpy(identity, &(args->identity), sizeof(Identity));
     *has_id = true;
-  } else if (args_bytes_seg.size == sizeof(CUDTArgs) - sizeof(Identity)) {
+  } else if (args_bytes_seg.size == sizeof(CompactArgs) - sizeof(Identity)) {
     *has_id = false;
   } else {
     CHECK(CUDTERR_ARGS_SIZE_INVALID);

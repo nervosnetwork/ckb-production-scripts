@@ -1,5 +1,5 @@
-#ifndef __TESTS_COMPACT_UDT_SIMULATOR_COMPACT_UDT_LOCK_INC_H_
-#define __TESTS_COMPACT_UDT_SIMULATOR_COMPACT_UDT_LOCK_INC_H_
+#ifndef _TESTS_COMPACT_UDT_SIMULATOR_COMPACT_UDT_LOCK_INC_H_
+#define _TESTS_COMPACT_UDT_SIMULATOR_COMPACT_UDT_LOCK_INC_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,7 +30,7 @@ bool cudt_smt_verify(CUDT_SMT_H h,
                      const uint8_t* proof,
                      uint32_t proof_length);
 
-typedef struct __SBuffer {
+typedef struct _SBuffer {
   uint8_t* buf;
   uint32_t len;
 } SBuffer;
@@ -100,15 +100,15 @@ SBuffer cudtmol_CompactUDTEntries(SBuffer* deposits,
 
 SBuffer cudtmol_Witness(SBuffer* lock, SBuffer* input, SBuffer* output);
 
-enum __CUDTMOL_Type {
+enum _CompactUDTMolType {
   CUDTMOLType_Scritp,
   CUDTMOLType_CellData,
   CUDTMOLType_Witness,
 };
-typedef uint8_t CUDTMOL_Type;
+typedef uint8_t CompactUDTMolType;
 
 typedef struct __CUDTMOL_Data {
-  CUDTMOL_Type type;
+  CompactUDTMolType type;
   size_t index;
   size_t source;
   uint32_t len;
@@ -125,4 +125,4 @@ uint8_t* cudtmol_get_data(CUDTMOL_Data* param);
 }
 #endif  // __cplusplus
 
-#endif  // __TESTS_COMPACT_UDT_SIMULATOR_COMPACT_UDT_LOCK_INC_H_
+#endif  // _TESTS_COMPACT_UDT_SIMULATOR_COMPACT_UDT_LOCK_INC_H_

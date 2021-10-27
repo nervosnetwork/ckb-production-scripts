@@ -1,5 +1,5 @@
-#ifndef __TESTS_COMPACT_UDT_COMPACT_UDT_VIRTUAL_DATA_H_
-#define __TESTS_COMPACT_UDT_COMPACT_UDT_VIRTUAL_DATA_H_
+#ifndef _TESTS_COMPACT_UDT_COMPACT_UDT_VIRTUAL_DATA_H_
+#define _TESTS_COMPACT_UDT_COMPACT_UDT_VIRTUAL_DATA_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,9 +21,9 @@ extern "C" {
 #include <vector>
 #include "util/util.h"
 
-class VD_AllData;
+class VDAllData;
 
-class VD_CellData {
+class VDCellData {
  public:
   void set_amount(uint128_t amount);
   void set_smt_root_hash(const CHash& hash);
@@ -47,7 +47,7 @@ class VD_CellData {
   UDTType udt_type_ = UDTType::SUDT;
 };
 
-class VD_Transfer {
+class VDTransfer {
  public:
   int src_cell = 0;
   CIdentity src_user;
@@ -57,9 +57,9 @@ class VD_Transfer {
   uint128_t fee = 0;
 };
 
-class VD_Script {
+class VDScript {
  public:
-  VD_Script(const CHash& script_hash);
+  VDScript(const CHash& script_hash);
 
   void set_script_code_hash(const CHash& script);
   void set_args_version(uint8_t ver);
@@ -71,7 +71,7 @@ class VD_Script {
   CHash* get_type_id();
   CBuffer get_args_data();
 
-  VD_CellData data;
+  VDCellData data;
 
  private:
   CHash script_code_hash_;
@@ -80,9 +80,9 @@ class VD_Script {
   unique_ptr<CIdentity> args_identity_;
 };
 
-class VD_User {
+class VDUser {
  public:
-  VD_User(CIdentity _id, uint128_t _am);
+  VDUser(CIdentity _id, uint128_t _am);
 
   CIdentity id;
   uint128_t amount = 0;
@@ -91,22 +91,22 @@ class VD_User {
   CHash gen_smt_key();
   CHash gen_smt_val();
 };
-typedef vector<VD_User> VD_Users;
+typedef vector<VDUser> VD_Users;
 
-class VD_TXDeposit {
+class VDTXDeposit {
  public:
-  VD_AllData* source = nullptr;
+  VDAllData* source = nullptr;
   CIdentity target;
 
   uint128_t amount = 0;
   uint128_t fee = 0;
 };
 
-class VD_TXTransfer {
+class VDTXTransfer {
  public:
   CIdentity source;
 
-  VD_AllData* target_cell = nullptr;
+  VDAllData* target_cell = nullptr;
   CIdentity target_user;
   CacheTransferSourceType target_type;
 
@@ -114,27 +114,27 @@ class VD_TXTransfer {
   uint128_t fee = 0;
 };
 
-class VD_AllData {
+class VDAllData {
  public:
-  unique_ptr<VD_Script> input;
-  unique_ptr<VD_Script> output;
+  unique_ptr<VDScript> input;
+  unique_ptr<VDScript> output;
   VD_Users users;
   VD_Users users_tx_ed;
 
-  std::list<VD_TXDeposit> deposit;
-  std::list<VD_TXTransfer> transfer;
+  std::list<VDTXDeposit> deposit;
+  std::list<VDTXTransfer> transfer;
 
   CBuffer smt_proof;
 
-  VD_User* find_user(CIdentity* id, VD_Users& users_);
-  VD_User* find_user(CIdentity* id);
-  VD_User* find_user_tx_ed(CIdentity* id);
-  CHash get_transfer_sign(VD_TXTransfer* t, AutoSBuf* raw_buf);
+  VDUser* find_user(CIdentity* id, VD_Users& users_);
+  VDUser* find_user(CIdentity* id);
+  VDUser* find_user_tx_ed(CIdentity* id);
+  CHash get_transfer_sign(VDTXTransfer* t, AutoSBuf* raw_buf);
   CBuffer gen_witness();
   CHash update_smt_root_hash(VD_Users& us);
 };
 
-struct VD_BinData {
+struct VDBinData {
   CHash scritp_hash;
   CBuffer script_data;
   CBuffer cell_data;
@@ -145,10 +145,10 @@ class VirtualData {
  public:
   int run_simulator();
 
-  std::list<unique_ptr<VD_BinData>> inputs, outputs;
+  std::list<unique_ptr<VDBinData>> inputs, outputs;
 };
 
-class GenTx {
+class GenerateTransaction {
  public:
   int add_cell(uint128_t amount,
                const VD_Users& users,
@@ -164,17 +164,17 @@ class GenTx {
   VirtualData* build();
 
  private:
-  void fill_scritp_data(VD_BinData* bin, VD_Script* script);
+  void fill_scritp_data(VDBinData* bin, VDScript* script);
   void gen_transfer_info();
-  VD_AllData* find(int id);
+  VDAllData* find(int id);
 
  private:
   VirtualData virtual_data_;
 
-  map<int, VD_AllData*> cells_;
-  list<unique_ptr<VD_AllData>> cells_data_;
+  map<int, VDAllData*> cells_;
+  list<unique_ptr<VDAllData>> cells_data_;
 
-  std::list<VD_Transfer> transfers_;
+  std::list<VDTransfer> transfers_;
 
   int cell_count_ = 0;
 };
@@ -195,4 +195,4 @@ class GlobalData {
  public:
 };
 
-#endif  // __TESTS_COMPACT_UDT_COMPACT_UDT_VIRTUAL_DATA_H_
+#endif  // _TESTS_COMPACT_UDT_COMPACT_UDT_VIRTUAL_DATA_H_

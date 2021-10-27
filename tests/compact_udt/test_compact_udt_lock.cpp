@@ -13,11 +13,13 @@ extern "C" {
 using namespace std;
 
 UTEST(success, main) {
-  GenTx tx;
-  GenTestData(&tx);
-  auto vd = tx.build();
-  ASSERT_DBG(vd);
-  int ret_code = vd->run_simulator();
+  GenerateTransaction transfaction;
+  gen_test_data(&transfaction);
+
+  auto virtual_data = transfaction.build();
+  ASSERT_DBG(virtual_data);
+
+  int ret_code = virtual_data->run_simulator();
   ASSERT_DBG(!ret_code);
 }
 
