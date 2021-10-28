@@ -100,6 +100,9 @@ SBuffer cudtmol_CompactUDTEntries(SBuffer* deposits,
 
 SBuffer cudtmol_Witness(SBuffer* lock, SBuffer* input, SBuffer* output);
 
+SBuffer cudtmol_bytes_vec(SBuffer** data, uint32_t len);
+SBuffer cudtmol_xudtdata(SBuffer* lock, SBuffer* data);
+
 enum _CompactUDTMolType {
   CUDTMOLType_Scritp,
   CUDTMOLType_CellData,

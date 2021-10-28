@@ -135,8 +135,8 @@ CKBResCode _get_xudt_data(XudtDataType* data, size_t index, size_t source) {
   CKBResCode err = CKBERR_UNKNOW;
   mol2_cursor_t cur;
   err = _make_cursor(index, source, 4, _get_cell_data_base, &cur);
-  CHECK2(err == CKBERR_DATA_EMTPY, CKBERR_CELLDATA_TOO_LOW);
-  CHECK2(err == CKBERR_CELLDATA_INDEX_OUT_OF_BOUND,
+  CHECK2(err != CKBERR_DATA_EMTPY, CKBERR_CELLDATA_TOO_LOW);
+  CHECK2(err != CKBERR_CELLDATA_INDEX_OUT_OF_BOUND,
          CKBERR_CELLDATA_INDEX_OUT_OF_BOUND);
   CHECK(err);
 
@@ -190,16 +190,9 @@ CKBResCode get_cell_data(size_t index,
   XudtDataType xudt_data;
   CHECK(_get_xudt_data(&xudt_data, index, source));
   mol2_cursor_t mol_lock_data = xudt_data.t->lock(&xudt_data);
-  BytesType lock_data = make_Bytes(&mol_lock_data);
-  uint32_t lock_data_size = lock_data.t->len(&lock_data);
-  CHECK2(lock_data_size == 32, CKBERR_CELLDATA_UNKNOW);
-
-  bool existing = false;
+  CHECK2((mol_lock_data.size == sizeof(Hash)), CUDTERR_ARGS_UNKNOW);
   if (hash) {
-    uint8_t* tmp_hash = (uint8_t*)hash;
-    for (uint32_t i = 0; i < lock_data_size; i++) {
-      tmp_hash[i] = lock_data.t->get(&lock_data, i, &existing);
-    }
+    mol2_read_at(&mol_lock_data, (uint8_t*)hash, sizeof(Hash));
   }
   if (type)
     *type = TypeScript_xUDT;

@@ -32,6 +32,11 @@ class CData {
   }
 
   void rand_fill() { random_mem(buf_.data(), buf_.size()); }
+  static CData srand_fill() {
+    CData ret;
+    ret.rand_fill();
+    return ret;
+  }
   void copy(uint8_t* hash) const { memcpy(hash, buf_.data(), buf_.size()); }
   uint8_t* get() { return (uint8_t*)buf_.data(); }
   static size_t len() { return T; }
@@ -52,6 +57,12 @@ typedef CData<21> CIdentity;
 class AutoSBuf {
  public:
   AutoSBuf() { ASSERT_DBG(false); }
+  AutoSBuf(AutoSBuf&& a) {
+    buf_.buf = a.buf_.buf;
+    buf_.len = a.buf_.len;
+    a.buf_.buf = NULL;
+    a.buf_.len = 0;
+  }
   AutoSBuf(SBuffer buf) : buf_(buf) { ASSERT_DBG(buf_.len); }
   AutoSBuf(CBuffer& buf) {
     buf_ = cudtmol_alloc(buf.size());
@@ -64,7 +75,10 @@ class AutoSBuf {
   AutoSBuf(const uint128_t h) : buf_(cudtmol_alloc(sizeof(uint128_t))) {
     memcpy(buf_.buf, &h, sizeof(uint128_t));
   }
-  ~AutoSBuf() { cudtmol_free(&buf_); }
+  ~AutoSBuf() {
+    if (buf_.buf)
+      cudtmol_free(&buf_);
+  }
 
   CBuffer copy() {
     CBuffer b;

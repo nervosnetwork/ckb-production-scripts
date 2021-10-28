@@ -92,7 +92,7 @@ class VDUser {
   CHash gen_smt_key();
   CHash gen_smt_val();
 };
-typedef vector<VDUser> VD_Users;
+typedef vector<VDUser> VDUsers;
 
 class VDTXDeposit {
  public:
@@ -119,21 +119,21 @@ class VDAllData {
  public:
   unique_ptr<VDScript> input_;
   unique_ptr<VDScript> output_;
-  VD_Users users_;
-  VD_Users users_tx_ed_;
+  VDUsers users_;
+  VDUsers users_tx_ed_;
 
   std::list<VDTXDeposit> deposit_;
   std::list<VDTXTransfer> transfer_;
 
   CBuffer smt_proof_;
 
-  VDUser* find_user(CIdentity* id, VD_Users& users_);
+  VDUser* find_user(CIdentity* id, VDUsers& users_);
   VDUser* find_user(CIdentity* id);
   VDUser* find_user_tx_ed(CIdentity* id);
   CHash get_transfer_hash(VDTXTransfer* t, AutoSBuf* raw_buf);
   CBuffer get_transfer_sign(CHash* msg);
   CBuffer gen_witness();
-  CHash update_smt_root_hash(VD_Users& us);
+  CHash update_smt_root_hash(VDUsers& us);
 };
 
 struct VDBinData {
@@ -153,9 +153,10 @@ class VirtualData {
 class GenerateTransaction {
  public:
   int add_cell(uint128_t amount,
-               const VD_Users& users,
+               const VDUsers& users,
                bool is_cudt,
-               CBuffer proof);
+               CBuffer proof,
+               bool use_xudt);
 
   void add_transfer(int src_cell,
                     CIdentity src_user,

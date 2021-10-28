@@ -319,6 +319,29 @@ SBuffer cudtmol_Witness(SBuffer* lock, SBuffer* input, SBuffer* output) {
   return cudtmol_alloc_seg(&r);
 }
 
+SBuffer cudtmol_bytes_vec(SBuffer** data, uint32_t len) {
+  mol_builder_t b;
+  MolBuilder_BytesVec_init(&b);
+
+  for (uint32_t i = 0; i < len; i++) {
+    MolBuilder_BytesVec_push(&b, data[i]->buf, data[i]->len);
+  }
+
+  mol_seg_res_t r = MolBuilder_BytesVec_build(b);
+  return cudtmol_alloc_seg(&r);
+}
+
+SBuffer cudtmol_xudtdata(SBuffer* lock, SBuffer* data) {
+  mol_builder_t b;
+  MolBuilder_XudtData_init(&b);
+
+  MolBuilder_XudtData_set_lock(&b, lock->buf, lock->len);
+  MolBuilder_XudtData_set_data(&b, data->buf, data->len);
+
+  mol_seg_res_t r = MolBuilder_XudtData_build(b);
+  return cudtmol_alloc_seg(&r);
+}
+
 uint8_t* cudtmol_get_data(CUDTMOL_Data* param) {
   return cc_get_data(param);
 }

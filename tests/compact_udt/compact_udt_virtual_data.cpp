@@ -53,8 +53,22 @@ CBuffer VDCellData::get_cell_data_sudt() {
 }
 
 CBuffer VDCellData::get_cell_data_xudt() {
-  ASSERT_DBG(false);
-  return CBuffer();
+  AutoSBuf lock_buf = cudtmol_Bytes(smt_root_hash_.get(), smt_root_hash_.len());
+
+  size_t data_size = 2;
+
+  vector<AutoSBuf> data_buf;
+  vector<SBuffer*> data_ptr_buf;
+  for (size_t i = 0; i < data_size; i++) {
+    data_buf.push_back(cudtmol_Bytes(CHash::srand_fill().get(), CHash::len()));
+  }
+  for (size_t i = 0; i < data_size; i++) {
+    data_ptr_buf.push_back(data_buf[i].get());
+  }
+  AutoSBuf buf = cudtmol_bytes_vec(data_ptr_buf.data(), data_ptr_buf.size());
+  AutoSBuf xudt_data_buf = cudtmol_xudtdata(lock_buf.get(), buf.get());
+
+  return AutoSBuf(cudtmol_Bytes(xudt_data_buf.ptr(), xudt_data_buf.len())).copy();
 }
 
 //////////////////// VDScript /////////////////////////////
@@ -150,7 +164,7 @@ CHash VDUser::gen_smt_val() {
 
 //////////////////// VDAllData ////////////////////////////
 
-VDUser* VDAllData::find_user(CIdentity* id, VD_Users& users_) {
+VDUser* VDAllData::find_user(CIdentity* id, VDUsers& users_) {
   auto it = find_if(begin(users_), end(users_),
                     [id](const VDUser& id2) { return *id == id2.id_; });
   if (it == users_.end())
@@ -281,7 +295,7 @@ CBuffer VDAllData::gen_witness() {
   return witness_buf.copy();
 }
 
-CHash VDAllData::update_smt_root_hash(VD_Users& us) {
+CHash VDAllData::update_smt_root_hash(VDUsers& us) {
   SMT smt;
   for (auto it = us.begin(); it != us.end(); it++) {
     auto k = it->gen_smt_key();
@@ -306,9 +320,10 @@ int VirtualData::run_simulator() {
 //////////////////// GenerateTransaction /////////////////////////////////
 
 int GenerateTransaction::add_cell(uint128_t amount,
-                                  const VD_Users& users,
+                                  const VDUsers& users,
                                   bool is_cudt,
-                                  CBuffer proof) {
+                                  CBuffer proof,
+                                  bool use_xudt) {
   int id = cell_count_++;
 
   auto cellg = make_unique<VDAllData>();
@@ -330,6 +345,11 @@ int GenerateTransaction::add_cell(uint128_t amount,
 
   input->data_.set_amount(amount);
   output->data_.set_amount(0);
+
+  if (use_xudt) {
+    input->data_.set_xudt();
+    output->data_.set_xudt();
+  }
 
   cellg->users_ = users;
   cellg->smt_proof_ = proof;
