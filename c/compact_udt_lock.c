@@ -373,7 +373,7 @@ CKBResCode load_other_cell_data(size_t index, CacheData** last, bool* goon) {
     total_deposit += amount;
     if (total_deposit < amount) {
       ASSERT_DBG(false);
-      ckb_exit(CUDTERR_OTHER_AMOUNT_INVALID);
+      ckb_exit(CUDTERR_NONCE_OVERFLOW);
     }
 
     Hash hash;
@@ -520,6 +520,10 @@ CKBResCode check_total_udt() {
   for (CacheDeposit* cache = cur_cache->deposits; cache != NULL;
        cache = cache->next) {
     total_deposit += cache->amount;
+    if (total_deposit < cache->amount) {
+      ASSERT_DBG(false);
+      ckb_exit(CUDTERR_AMOUNT_OVERFLOW);
+    }
   }
 
   // cur total transfer (to other)
@@ -529,6 +533,10 @@ CKBResCode check_total_udt() {
        cache = cache->next) {
     total_transfer += cache->amount;
     total_fee += cache->fee;
+    if (total_transfer < cache->amount || total_fee < cache->fee) {
+      ASSERT_DBG(false);
+      ckb_exit(CUDTERR_AMOUNT_OVERFLOW);
+    }
   }
 
   if (cur_cache->input_amount + total_deposit <
@@ -621,6 +629,10 @@ CKBResCode check_each_deposit() {
     CacheKVPair* kv_pair = find_kv_pair(&(cache->target));
     CHECK2(kv_pair, CUDTERR_DEPOSIT_NO_KVPAIR);
     kv_pair->value.amount += cache->amount;
+    if (kv_pair->value.amount < cache->amount) {
+      ASSERT_DBG(false);
+      ckb_exit(CUDTERR_AMOUNT_OVERFLOW);
+    }
   }
 
 exit_func:
@@ -694,6 +706,10 @@ CKBResCode check_each_transfer() {
            CUDTERR_TRANSFER_ENOUGH_UDT);
     src_kv->value.amount -= (cache->amount + cache->fee);
     src_kv->value.nonce += 1;
+    if (src_kv->value.nonce == 0) {
+      ASSERT_DBG(false);
+      ckb_exit(CUDTERR_NONCE_OVERFLOW);
+    }
   }
 
 exit_func:
