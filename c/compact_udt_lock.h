@@ -8,7 +8,7 @@
 #undef CHECK2
 #undef CHECK
 
-#define CHECK2(cond, code) \
+#define CUDT_CHECK2(cond, code) \
   do {                     \
     if (!(cond)) {         \
       err = code;          \
@@ -17,7 +17,7 @@
     }                      \
   } while (0)
 
-#define CHECK(_code)    \
+#define CUDT_CHECK(_code)    \
   do {                  \
     int code = (_code); \
     if (code != 0) {    \

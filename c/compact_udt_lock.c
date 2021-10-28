@@ -133,7 +133,7 @@ CKBResCode check_script_unique() {
 CKBResCode get_scritp_hash(CacheData* data) {
   CKBResCode err = CUDT_SUCCESS;
   uint64_t len = sizeof(data->script_hash);
-  CHECK(ckb_load_script_hash(&(data->script_hash), &len, 0));
+  CUDT_CHECK(ckb_load_script_hash(&(data->script_hash), &len, 0));
 exit_func:
   return err;
 }
@@ -147,7 +147,7 @@ CKBResCode load_deposit_vec(CacheData* data,
   for (uint32_t i = 0; i < len; i++) {
     bool existing = false;
     DepositType d = dvec.t->get(&dvec, i, &existing);
-    CHECK2(existing, CUDTERR_WITNESS_INVALID);
+    CUDT_CHECK2(existing, CUDTERR_WITNESS_INVALID);
 
     CacheDeposit* cache = (CacheDeposit*)alloc_cache(sizeof(CacheDeposit));
 
@@ -176,7 +176,7 @@ CKBResCode get_transfer_hash(const TransferType* t,
 
   blake2b_update(&b2, &(g_cudt_cache->type_id), sizeof(Hash));
   CacheKVPair* kv_pair = find_kv_pair(&(cache->source));
-  CHECK2(kv_pair, CUDTERR_TRANSFER_SRC_NO_KV_PAIR);
+  CUDT_CHECK2(kv_pair, CUDTERR_TRANSFER_SRC_NO_KV_PAIR);
   blake2b_update(&b2, &(kv_pair->value.nonce), sizeof(kv_pair->value.nonce));
 
   uint8_t* tmp_buffer = alloc_temporary_cache(raw->cur.size);
@@ -211,7 +211,7 @@ CKBResCode load_transfer_vec(CacheData* data,
   for (uint32_t i = 0; i < len; i++) {
     bool existing = false;
     TransferType t = tvec.t->get(&tvec, i, &existing);
-    CHECK2(existing, CUDTERR_WITNESS_INVALID);
+    CUDT_CHECK2(existing, CUDTERR_WITNESS_INVALID);
 
     CacheTransfer* cache = (CacheTransfer*)alloc_cache(sizeof(CacheTransfer));
     *last_cache = cache;
@@ -256,18 +256,18 @@ CKBResCode load_transfer_vec(CacheData* data,
     }
     if (g_cudt_cache->identity) {
       Hash transfer_hash = {0};
-      CHECK(get_transfer_hash(&t, &raw, cache, &transfer_hash));
+      CUDT_CHECK(get_transfer_hash(&t, &raw, cache, &transfer_hash));
 
       mol2_cursor_t signature_mol = t.t->signature(&t);
-      CHECK2(signature_mol.size != 0, CUDTERR_TRANSFER_SIGN_INVALID);
+      CUDT_CHECK2(signature_mol.size != 0, CUDTERR_TRANSFER_SIGN_INVALID);
 
       uint8_t* transfer_signature = alloc_temporary_cache(signature_mol.size);
       uint32_t transfer_sign_len =
           mol2_read_at(&signature_mol, transfer_signature, signature_mol.size);
-      CHECK2(transfer_sign_len == signature_mol.size,
+      CUDT_CHECK2(transfer_sign_len == signature_mol.size,
              CUDTERR_TRANSFER_SIGN_INVALID);
 
-      CHECK(check_transfer_sign(&transfer_hash, transfer_signature));
+      CUDT_CHECK(check_transfer_sign(&transfer_hash, transfer_signature));
       free_temporary_cache(signature_mol.size);
     }
     cache->target = target_buf;
@@ -289,7 +289,7 @@ CKBResCode load_kv_pairs(CacheData* data, CompactUDTEntriesType* cudt_witness) {
     CacheKVPair* cache_kv = &(g_cudt_cache->kv_pairs[i]);
     bool existing = false;
     KVPairType kv = kvvec.t->get(&kvvec, i, &existing);
-    CHECK2(existing, CUDTERR_WITNESS_INVALID);
+    CUDT_CHECK2(existing, CUDTERR_WITNESS_INVALID);
     ReadMemFromMol2(kv, k, &(cache_kv->key), sizeof(cache_kv->key));
     ReadMemFromMol2(kv, v, &(cache_kv->value), sizeof(cache_kv->value));
   }
@@ -318,24 +318,24 @@ CKBResCode load_kv_proof(CacheData* data, CompactUDTEntriesType* cudt_witness) {
 
 CKBResCode load_cur_cell_data() {
   CKBResCode err = CUDT_SUCCESS;
-  CHECK(check_script_unique());
+  CUDT_CHECK(check_script_unique());
 
   CacheData* data = &g_cudt_cache->cur_data;
   err = get_cell_data(0, CKB_SOURCE_GROUP_INPUT, NULL, &data->input_amount,
                       &(g_cudt_cache->input_smt_hash));
-  CHECK2(err == CUDT_SUCCESS, CUDTERR_LOAD_CELL_DATA);
+  CUDT_CHECK2(err == CUDT_SUCCESS, CUDTERR_LOAD_CELL_DATA);
   err = get_cell_data(0, CKB_SOURCE_GROUP_OUTPUT, NULL, &data->output_amount,
                       &(g_cudt_cache->output_smt_hash));
-  CHECK2(err == CUDT_SUCCESS, CUDTERR_LOAD_CELL_DATA);
+  CUDT_CHECK2(err == CUDT_SUCCESS, CUDTERR_LOAD_CELL_DATA);
 
-  CHECK(get_scritp_hash(data));
+  CUDT_CHECK(get_scritp_hash(data));
 
   CompactUDTEntriesType cudt_witness;
-  CHECK(get_cudt_witness(0, CKB_SOURCE_GROUP_INPUT, &cudt_witness));
-  CHECK(load_deposit_vec(data, &cudt_witness));
-  CHECK(load_kv_pairs(data, &cudt_witness));
-  CHECK(load_kv_proof(data, &cudt_witness));
-  CHECK(load_transfer_vec(data, &cudt_witness));
+  CUDT_CHECK(get_cudt_witness(0, CKB_SOURCE_GROUP_INPUT, &cudt_witness));
+  CUDT_CHECK(load_deposit_vec(data, &cudt_witness));
+  CUDT_CHECK(load_kv_pairs(data, &cudt_witness));
+  CUDT_CHECK(load_kv_proof(data, &cudt_witness));
+  CUDT_CHECK(load_transfer_vec(data, &cudt_witness));
 
 exit_func:
   return err;
@@ -354,7 +354,7 @@ CKBResCode load_other_cell_data(size_t index, CacheData** last, bool* goon) {
     *goon = false;
     return CUDT_SUCCESS;
   }
-  CHECK2(!ret_code, CUDTERR_LOAD_OTHER_DATA);
+  CUDT_CHECK2(!ret_code, CUDTERR_LOAD_OTHER_DATA);
 
   // cur witness
   if (memcmp(&g_cudt_cache->cur_data.script_hash, &script_hash,
@@ -362,7 +362,7 @@ CKBResCode load_other_cell_data(size_t index, CacheData** last, bool* goon) {
     return CUDT_SUCCESS;
 
   CompactUDTEntriesType cudt_witness;
-  CHECK(get_cudt_witness(index, CKB_SOURCE_INPUT, &cudt_witness));
+  CUDT_CHECK(get_cudt_witness(index, CKB_SOURCE_INPUT, &cudt_witness));
 
   CacheData* cache = NULL;
 
@@ -375,7 +375,7 @@ CKBResCode load_other_cell_data(size_t index, CacheData** last, bool* goon) {
   for (uint32_t i = 0; i < len; i++) {
     bool existing = false;
     DepositType d = dvec.t->get(&dvec, i, &existing);
-    CHECK2(existing, CUDTERR_WITNESS_OTHER_INVALID);
+    CUDT_CHECK2(existing, CUDTERR_WITNESS_OTHER_INVALID);
 
     uint128_t amount = 0;
     ReadUint128FromMol2(d, amount, amount);
@@ -417,7 +417,7 @@ CKBResCode load_other_cell_data(size_t index, CacheData** last, bool* goon) {
   for (uint32_t i = 0; i < len; i++) {
     bool existing = false;
     TransferType t = tvec.t->get(&tvec, i, &existing);
-    CHECK2(existing, CUDTERR_WITNESS_OTHER_INVALID);
+    CUDT_CHECK2(existing, CUDTERR_WITNESS_OTHER_INVALID);
 
     RawTransferType raw = t.t->raw(&t);
     TransferTargetType target = raw.t->target(&raw);
@@ -475,9 +475,9 @@ CKBResCode load_other_cell_data(size_t index, CacheData** last, bool* goon) {
   if (cache == NULL)
     return CUDT_SUCCESS;
 
-  CHECK(get_cell_data(0, CKB_SOURCE_GROUP_INPUT, NULL, &cache->input_amount,
+  CUDT_CHECK(get_cell_data(0, CKB_SOURCE_GROUP_INPUT, NULL, &cache->input_amount,
                       NULL));
-  CHECK(get_cell_data(0, CKB_SOURCE_GROUP_OUTPUT, NULL, &cache->output_amount,
+  CUDT_CHECK(get_cell_data(0, CKB_SOURCE_GROUP_OUTPUT, NULL, &cache->output_amount,
                       NULL));
   memcpy(&(cache->script_hash), &script_hash, sizeof(script_hash));
 
@@ -495,7 +495,7 @@ CKBResCode load_all_other_cell_data() {
   CacheData** last = &(g_cudt_cache->other_data);
   bool goon = true;
   for (size_t i = 0; goon; i++) {
-    CHECK(load_other_cell_data(i, last, &goon));
+    CUDT_CHECK(load_other_cell_data(i, last, &goon));
     if ((*last) != NULL)
       last = &((*last)->next);
   }
@@ -510,14 +510,14 @@ CKBResCode load_all_data() {
 
   Identity identity;
   bool has_id = false;
-  CHECK(get_args(&(g_cudt_cache->type_id), &identity, &has_id));
+  CUDT_CHECK(get_args(&(g_cudt_cache->type_id), &identity, &has_id));
   if (has_id) {
     g_cudt_cache->identity = (Identity*)alloc_cache(sizeof(Identity));
     memcpy(g_cudt_cache->identity, &identity, sizeof(Identity));
   }
 
-  CHECK(load_cur_cell_data());
-  CHECK(load_all_other_cell_data());
+  CUDT_CHECK(load_cur_cell_data());
+  CUDT_CHECK(load_all_other_cell_data());
 
 exit_func:
   return err;
@@ -566,7 +566,7 @@ CKBResCode check_smt_root(Hash* hash) {
   smt_state_t smt_statue;
   smt_pair_t smt_pairs[MAX_SMT_PAIR];
   smt_state_init(&smt_statue, smt_pairs, MAX_SMT_PAIR);
-  CHECK2(g_cudt_cache->kv_pairs_len < MAX_SMT_PAIR, CUDTERR_KV_TOO_LONG);
+  CUDT_CHECK2(g_cudt_cache->kv_pairs_len < MAX_SMT_PAIR, CUDTERR_KV_TOO_LONG);
 
   for (uint32_t i = 0; i < g_cudt_cache->kv_pairs_len; i++) {
     CacheKVPair* kv = &(g_cudt_cache->kv_pairs[i]);
@@ -576,7 +576,7 @@ CKBResCode check_smt_root(Hash* hash) {
   smt_state_normalize(&smt_statue);
   int smt_code = smt_verify((const uint8_t*)hash, &smt_statue,
                             g_cudt_cache->kv_proof, g_cudt_cache->kv_proof_len);
-  CHECK2(smt_code == 0, CUDTERR_KV_VERIFY);
+  CUDT_CHECK2(smt_code == 0, CUDTERR_KV_VERIFY);
   err = CUDT_SUCCESS;
 exit_func:
   return err;
@@ -603,7 +603,7 @@ CKBResCode check_deposit(CacheDeposit* cache) {
   } else {
     source_cache = find_other_cache(cache->source);
   }
-  CHECK2(source_cache, CUDTERR_DEPOSIT_INVALID);
+  CUDT_CHECK2(source_cache, CUDTERR_DEPOSIT_INVALID);
 
   bool has = false;
   CacheTransfer* ct = source_cache->transfers;
@@ -619,7 +619,7 @@ CKBResCode check_deposit(CacheDeposit* cache) {
     has = true;
     break;
   }
-  CHECK2(has, CUDTERR_DEPOSIT_INVALID);
+  CUDT_CHECK2(has, CUDTERR_DEPOSIT_INVALID);
 
 exit_func:
   return err;
@@ -643,10 +643,10 @@ CKBResCode check_each_deposit() {
 
   for (CacheDeposit* cache = g_cudt_cache->cur_data.deposits; cache != NULL;
        cache = cache->next) {
-    CHECK(check_deposit(cache));
+    CUDT_CHECK(check_deposit(cache));
 
     CacheKVPair* kv_pair = find_kv_pair(&(cache->target));
-    CHECK2(kv_pair, CUDTERR_DEPOSIT_NO_KVPAIR);
+    CUDT_CHECK2(kv_pair, CUDTERR_DEPOSIT_NO_KVPAIR);
     kv_pair->value.amount += cache->amount;
     if (kv_pair->value.amount < cache->amount) {
       ASSERT_DBG(false);
@@ -666,7 +666,7 @@ CKBResCode check_transfer(CacheTransfer* cache,
     return CUDT_SUCCESS;
 
   CacheData* other_data = find_other_cache(hash);
-  CHECK2(other_data, CUDTERR_TRANSFER_INVALID);
+  CUDT_CHECK2(other_data, CUDTERR_TRANSFER_INVALID);
 
   bool has = false;
   CacheDeposit* cd = other_data->deposits;
@@ -688,7 +688,7 @@ CKBResCode check_transfer(CacheTransfer* cache,
     has = true;
     break;
   }
-  CHECK2(has, CUDTERR_TRANSFER_INVALID);
+  CUDT_CHECK2(has, CUDTERR_TRANSFER_INVALID);
 
 exit_func:
   return err;
@@ -717,12 +717,12 @@ CKBResCode check_each_transfer() {
       } break;
     }
 
-    CHECK(check_transfer(cache, hash, identity));
+    CUDT_CHECK(check_transfer(cache, hash, identity));
 
     CacheKVPair* src_kv = find_kv_pair(&(cache->source));
-    CHECK2(src_kv, CUDTERR_TRANSFER_NO_KVPAIR);
+    CUDT_CHECK2(src_kv, CUDTERR_TRANSFER_NO_KVPAIR);
 
-    CHECK2(src_kv->value.amount >= cache->amount + cache->fee,
+    CUDT_CHECK2(src_kv->value.amount >= cache->amount + cache->fee,
            CUDTERR_TRANSFER_ENOUGH_UDT);
     src_kv->value.amount -= (cache->amount + cache->fee);
     src_kv->value.nonce += 1;
@@ -739,12 +739,12 @@ exit_func:
 int CKBMAIN(int argc, char* argv[]) {
   CKBResCode err = CKBERR_UNKNOW;
 
-  CHECK(load_all_data());
-  CHECK(check_total_udt());
-  CHECK(check_smt_root(&(g_cudt_cache->input_smt_hash)));
-  CHECK(check_each_deposit());
-  CHECK(check_each_transfer());
-  CHECK(check_smt_root(&(g_cudt_cache->output_smt_hash)));
+  CUDT_CHECK(load_all_data());
+  CUDT_CHECK(check_total_udt());
+  CUDT_CHECK(check_smt_root(&(g_cudt_cache->input_smt_hash)));
+  CUDT_CHECK(check_each_deposit());
+  CUDT_CHECK(check_each_transfer());
+  CUDT_CHECK(check_smt_root(&(g_cudt_cache->output_smt_hash)));
   err = CUDT_SUCCESS;
 exit_func:
   return err;

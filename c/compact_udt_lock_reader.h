@@ -60,10 +60,10 @@ static CKBResCode _make_cursor(int index,
 
   CKBResCode err = 0;
   uint64_t len = 0;
-  CHECK(func(NULL, &len, 0, index, source));
+  CUDT_CHECK(func(NULL, &len, 0, index, source));
 
-  CHECK2(len != 0, CKBERR_DATA_EMTPY);
-  CHECK2(len <= sizeof(g_read_data_source), CKBERR_DATA_TOO_LONG);
+  CUDT_CHECK2(len != 0, CKBERR_DATA_EMTPY);
+  CUDT_CHECK2(len <= sizeof(g_read_data_source), CKBERR_DATA_TOO_LONG);
 
   cur->offset = 0;
   cur->size = len;
@@ -135,10 +135,10 @@ CKBResCode _get_xudt_data(XudtDataType* data, size_t index, size_t source) {
   CKBResCode err = CKBERR_UNKNOW;
   mol2_cursor_t cur;
   err = _make_cursor(index, source, 4, _get_cell_data_base, &cur);
-  CHECK2(err != CKBERR_DATA_EMTPY, CKBERR_CELLDATA_TOO_LOW);
-  CHECK2(err != CKBERR_CELLDATA_INDEX_OUT_OF_BOUND,
+  CUDT_CHECK2(err != CKBERR_DATA_EMTPY, CKBERR_CELLDATA_TOO_LOW);
+  CUDT_CHECK2(err != CKBERR_CELLDATA_INDEX_OUT_OF_BOUND,
          CKBERR_CELLDATA_INDEX_OUT_OF_BOUND);
-  CHECK(err);
+  CUDT_CHECK(err);
 
   *data = make_XudtData(&cur);
 
@@ -168,8 +168,8 @@ CKBResCode get_cell_data(size_t index,
 
   uint64_t data_len = sudt_data_size;
   int ret_err = ckb_load_cell_data(sudt_data, &data_len, 0, index, source);
-  CHECK(ret_err);
-  CHECK2(data_len > sizeof(uint128_t), CKBERR_CELLDATA_TOO_LOW);
+  CUDT_CHECK(ret_err);
+  CUDT_CHECK2(data_len > sizeof(uint128_t), CKBERR_CELLDATA_TOO_LOW);
   if (amount)
     *amount = *((uint128_t*)sudt_data);
 
@@ -188,9 +188,9 @@ CKBResCode get_cell_data(size_t index,
   }
 
   XudtDataType xudt_data;
-  CHECK(_get_xudt_data(&xudt_data, index, source));
+  CUDT_CHECK(_get_xudt_data(&xudt_data, index, source));
   mol2_cursor_t mol_lock_data = xudt_data.t->lock(&xudt_data);
-  CHECK2((mol_lock_data.size == sizeof(Hash)), CUDTERR_ARGS_UNKNOW);
+  CUDT_CHECK2((mol_lock_data.size == sizeof(Hash)), CUDTERR_ARGS_UNKNOW);
   if (hash) {
     mol2_read_at(&mol_lock_data, (uint8_t*)hash, sizeof(Hash));
   }
@@ -207,7 +207,7 @@ CKBResCode _get_cursor_from_witness(WitnessArgsType* witness,
                                     size_t source) {
   CKBResCode err = 0;
   mol2_cursor_t cur;
-  CHECK(_make_cursor(index, source, 0, _get_witness_base, &cur));
+  CUDT_CHECK(_make_cursor(index, source, 0, _get_witness_base, &cur));
 
   *witness = make_WitnessArgs(&cur);
 
@@ -221,7 +221,7 @@ CKBResCode get_cudt_witness(size_t index,
   int err = 0;
   WitnessArgsType witnesses;
   err = _get_cursor_from_witness(&witnesses, index, CKB_SOURCE_GROUP_INPUT);
-  CHECK(err);
+  CUDT_CHECK(err);
 
   BytesOptType ot = witnesses.t->input_type(&witnesses);
   mol2_cursor_t bytes = ot.t->unwrap(&ot);
@@ -257,7 +257,7 @@ CKBResCode get_args(TypeID* type_id, Identity* identity, bool* has_id) {
   const int args_size = 1 + sizeof(TypeID);
   const int args_size_with_id = 1 + sizeof(TypeID) + sizeof(Identity);
 
-  CHECK2((args_bytes_seg.ptr[0] == 0), CUDTERR_INVALID_VERSION);
+  CUDT_CHECK2((args_bytes_seg.ptr[0] == 0), CUDTERR_INVALID_VERSION);
   *type_id = *(TypeID*)(args_bytes_seg.ptr + 1);
 
   if (args_bytes_seg.size == args_size) {
@@ -266,7 +266,7 @@ CKBResCode get_args(TypeID* type_id, Identity* identity, bool* has_id) {
     *has_id = true;
     *identity = *(Identity*)(args_bytes_seg.ptr + args_size);
   } else {
-    CHECK(CUDTERR_ARGS_SIZE_INVALID);
+    CUDT_CHECK(CUDTERR_ARGS_SIZE_INVALID);
   }
 exit_func:
   return err;
