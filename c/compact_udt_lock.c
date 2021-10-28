@@ -26,10 +26,10 @@ void* alloc_cache(uint32_t len) {
   return p;
 }
 
-void clear_cache() {
-  g_tx_buffer_malloced_len = 0;
-  memset(g_tx_buffer, 0, sizeof(g_tx_buffer));
-}
+// void clear_cache() {
+//  g_tx_buffer_malloced_len = 0;
+//  memset(g_tx_buffer, 0, sizeof(g_tx_buffer));
+//}
 
 void* alloc_temporary_cache(uint32_t len) {
   void* r = alloc_cache(len);

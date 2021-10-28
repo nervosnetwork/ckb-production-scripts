@@ -301,7 +301,7 @@ CBuffer proof_02 = {
 inline void gen_test_data(GenerateTransaction* tx) {
   int cell0 = tx->add_cell(10000, users00, true, proof_00);
   int cell1 = tx->add_cell(50000, users01, true, proof_01);
-  int cell2 = tx->add_cell(50000, users02, true, proof_02);
+  int cell2 = tx->add_cell(50000, users02, false, proof_02);
   tx->add_transfer(cell0, key_00, cell1, key_02, 50, 1);
   tx->add_transfer(cell1, key_02, cell2, key_06, 100, 10);
   tx->add_transfer(cell1, key_00, cell1, key_02, 10, 10);

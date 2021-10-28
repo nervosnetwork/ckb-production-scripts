@@ -216,9 +216,8 @@ CBuffer VDAllData::gen_witness() {
           cudtmol_MoveBetweenCompactSMT(target_in_s.get(), target_in_i.get()));
     } else if (it->target_type_ == TargetType_ScriptHash) {
       target_type = TargetType_ScriptHash;
-      AutoSBuf target_in_buf(it->target_cell_->input_->get_script_hash());
-      target_t_buf = make_unique<AutoSBuf>(
-          cudtmol_Bytes(target_in_buf.ptr(), target_in_buf.len()));
+      target_t_buf =
+          make_unique<AutoSBuf>(it->target_cell_->input_->get_script_hash());
     } else if (it->target_type_ == TargetType_Identity) {
       target_type = TargetType_Identity;
       AutoSBuf target_in_buf(it->target_user_);
