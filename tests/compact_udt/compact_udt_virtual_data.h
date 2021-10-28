@@ -22,6 +22,8 @@ extern "C" {
 #include "util/util.h"
 
 class VDAllData;
+class VirtualData;
+struct VDBinData;
 
 class VDCellData {
  public:
@@ -83,9 +85,10 @@ class VDScript {
 
 class VDUser {
  public:
-  VDUser(CIdentity _id, uint128_t _am);
+  VDUser(CIdentity _id, CHash privkey, uint128_t _am);
 
   CIdentity id_;
+  CHash privkey_;
   uint128_t amount_ = 0;
   uint32_t nonce_ = 0;
 
@@ -132,7 +135,8 @@ class VDAllData {
   VDUser* find_user_tx_ed(CIdentity* id);
   CHash get_transfer_hash(VDTXTransfer* t, AutoSBuf* raw_buf);
   CBuffer get_transfer_sign(CHash* msg);
-  CBuffer gen_witness();
+  CBuffer gen_signature(VirtualData* vd, VDBinData* cur_bin);
+  CBuffer gen_witness(bool empty_sign, VirtualData* vd, VDBinData* cur_bin);
   CHash update_smt_root_hash(VDUsers& us);
 };
 
@@ -152,11 +156,16 @@ class VirtualData {
 
 class GenerateTransaction {
  public:
-  int add_cell(uint128_t amount,
-               const VDUsers& users,
-               bool is_cudt,
-               CBuffer proof,
-               bool use_xudt);
+  struct AddCellArgs {
+    uint128_t amount = 0;
+    VDUsers users;
+    CBuffer proof;
+    bool use_cudt_lock = true;
+    bool use_xudt = false;
+
+    CHash input_type_id, output_type_id;
+  };
+  int add_cell(const AddCellArgs& args);
 
   void add_transfer(int src_cell,
                     CIdentity src_user,

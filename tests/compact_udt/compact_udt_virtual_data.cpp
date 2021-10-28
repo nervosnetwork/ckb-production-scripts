@@ -4,7 +4,8 @@
 
 #include "simulator/compact_udt_cc.h"
 #include "simulator/compact_udt_lock_inc.h"
-#include "test_compact_udt_data.h"
+
+//#include "debug.h"
 
 //////////////////// VDCellData ///////////////////////////
 
@@ -140,8 +141,8 @@ CKBKey* VDScript::get_key() {
 
 //////////////////// VDUser ///////////////////////////////
 
-VDUser::VDUser(CIdentity _id, uint128_t _am)
-    : id_(_id), amount_(_am), nonce_(rand() % 200) {}
+VDUser::VDUser(CIdentity _id, CHash privkey, uint128_t _am)
+    : id_(_id), privkey_(privkey), amount_(_am), nonce_(rand() % 200) {}
 
 CHash VDUser::gen_smt_key() {
   CHash hash;
@@ -201,9 +202,205 @@ CBuffer VDAllData::get_transfer_sign(CHash* msg) {
   return key->signature(msg);
 }
 
-CBuffer VDAllData::gen_witness() {
-  // need use mol2
+namespace {
+class SigHash {
+ public:
+  SigHash(VirtualData* vd, VDBinData* cur_bin) : vd_(vd), cur_bin_(cur_bin) {}
 
+ private:
+  bool get_witness(uint8_t* buf,
+                   uint64_t& len,
+                   uint64_t offset,
+                   uint64_t index,
+                   bool all,
+                   bool& is_out_of) {
+    if (index > 0 && !all) {
+      is_out_of = true;
+      return false;
+    }
+
+    VDBinData* bin;
+    if (all) {
+      auto it = vd_->inputs_.begin();
+      advance(it, index);
+      if (it == vd_->inputs_.end()) {
+        is_out_of = true;
+        return false;
+      }
+      bin = it->get();
+    } else {
+      bin = cur_bin_;
+    }
+
+    uint64_t size = bin->witness_.size();
+    len = len < size - offset ? len : size - offset;
+
+    memcpy(buf, &bin->witness_[offset], len);
+    return true;
+  }
+
+  CHash get_tx_hash() { return CHash(); }
+
+  int calculate_inputs_len() { return 1; }
+
+  struct MolSegT {
+    uint8_t* ptr;
+    uint64_t size;
+  };
+
+  bool extract_witness_lock(uint8_t* witness,
+                            uint64_t len,
+                            MolSegT* lock_bytes_seg) {
+    if (len < 20) {
+      return false;
+    }
+    uint32_t lock_length = *((uint32_t*)(&witness[16]));
+    if (len < 20 + lock_length) {
+      return false;
+    } else {
+      lock_bytes_seg->ptr = &witness[20];
+      lock_bytes_seg->size = lock_length;
+    }
+    return true;
+  }
+
+  bool load_and_hash_witness(Blake2b* ctx,
+                             size_t start,
+                             size_t index,
+                             bool all,
+                             bool hash_length,
+                             bool& is_out_of) {
+    uint8_t temp[ONE_BATCH_SIZE] = {0};
+    uint64_t len = ONE_BATCH_SIZE;
+
+    auto ret = get_witness(temp, len, start, index, all, is_out_of);
+    if (!ret) {
+      return false;
+    }
+
+    if (hash_length) {
+      ctx->Update((uint8_t*)&len, sizeof(uint64_t));
+    }
+    uint64_t offset = (len > ONE_BATCH_SIZE) ? ONE_BATCH_SIZE : len;
+    ctx->Update(temp, offset);
+    while (offset < len) {
+      uint64_t current_len = ONE_BATCH_SIZE;
+      ret =
+          get_witness(temp, current_len, start + offset, index, all, is_out_of);
+      if (!ret) {
+        return false;
+      }
+      uint64_t current_read =
+          (current_len > ONE_BATCH_SIZE) ? ONE_BATCH_SIZE : current_len;
+      ctx->Update(temp, current_read);
+      offset += current_read;
+    }
+    return true;
+  }
+
+ public:
+  CHash generate_sighash_all() {
+    uint8_t temp[MAX_WITNESS_SIZE] = {0};
+
+    uint64_t read_len = MAX_WITNESS_SIZE;
+    uint64_t witness_len = MAX_WITNESS_SIZE;
+
+    // Load witness of first input
+    bool is_out_of = false;
+    auto ret = get_witness(temp, read_len, 0, 0, false, is_out_of);
+    if (!ret) {
+      ASSERT_DBG(false);
+      return CHash();
+    }
+
+    witness_len = read_len;
+    if (read_len > MAX_WITNESS_SIZE) {
+      read_len = MAX_WITNESS_SIZE;
+    }
+
+    // load signature
+    MolSegT lock_bytes_seg;
+    ret = extract_witness_lock(temp, read_len, &lock_bytes_seg);
+    if (!ret) {
+      ASSERT_DBG(false);
+      return CHash();
+    }
+
+    // Prepare sign message
+    Blake2b ctx;
+
+    // Load tx hash
+    auto tx_hash = get_tx_hash();
+    ctx.Update(&tx_hash);
+
+    // Clear lock field to zero, then digest the first witness
+    // lock_bytes_seg.ptr actually points to the memory in temp buffer
+    memset((void*)lock_bytes_seg.ptr, 0, lock_bytes_seg.size);
+    ctx.Update((uint8_t*)&witness_len, sizeof(uint64_t));
+    ctx.Update(temp, read_len);
+
+    // remaining of first witness
+    if (read_len < witness_len) {
+      ret = load_and_hash_witness(&ctx, read_len, 0, false, false, is_out_of);
+      if (!ret) {
+        ASSERT_DBG(false);
+        return CHash();
+      }
+    }
+
+    // Digest same group witnesses
+    size_t i = 1;
+    while (1) {
+      ret = load_and_hash_witness(&ctx, 0, i, false, true, is_out_of);
+      if (is_out_of) {
+        break;
+      }
+      if (!ret) {
+        ASSERT_DBG(false);
+        return CHash();
+      }
+      i += 1;
+    }
+
+    // Digest witnesses that not covered by inputs
+    /*
+    i = (size_t)calculate_inputs_len();
+    is_out_of = false;
+    while (1) {
+      ret = load_and_hash_witness(&ctx, 0, i, true, true, is_out_of);
+      if (is_out_of) {
+        break;
+      }
+      if (!ret) {
+        ASSERT_DBG(false);
+        return CHash();
+      }
+      i += 1;
+    }
+    */
+
+    return ctx.Final();
+  }
+
+ private:
+  VirtualData* vd_ = nullptr;
+  VDBinData* cur_bin_ = nullptr;
+};
+}  // namespace
+
+CBuffer VDAllData::gen_signature(VirtualData* vd, VDBinData* cur_bin) {
+  CBuffer ret;
+  SigHash sig_hash(vd, cur_bin);
+  auto msg = sig_hash.generate_sighash_all();
+
+  auto k = input_->get_key();
+  ret = k->signature(&msg);
+  return ret;
+}
+
+CBuffer VDAllData::gen_witness(bool empty_sign,
+                               VirtualData* vd,
+                               VDBinData* cur_bin) {
   // deposit
   auto deposit_vec = cudtmol_Deposit_Vec_Init();
   for (auto it = deposit_.begin(); it != deposit_.end(); it++) {
@@ -254,14 +451,12 @@ CBuffer VDAllData::gen_witness() {
 
     // signature
     CBuffer signature_buf;
+    auto user = find_user(&it->source_);
+    ASSERT_DBG(user);
 
-    if (input_->get_key()) {
-      CHash msg = get_transfer_hash(&(*it), &raw_buf);
-      signature_buf = get_transfer_sign(&msg);
-    } else {
-      signature_buf.resize(1);
-    }
-
+    CKBKey key(user->privkey_);
+    CHash transfer_msg = get_transfer_hash(&(*it), &raw_buf);
+    signature_buf = key.signature(&transfer_msg);
     AutoSBuf sign_buf =
         cudtmol_Bytes(signature_buf.data(), signature_buf.size());
 
@@ -287,9 +482,28 @@ CBuffer VDAllData::gen_witness() {
   // kv proof
   AutoSBuf kv_proof_buf = cudtmol_Bytes(smt_proof_.data(), smt_proof_.size());
 
-  AutoSBuf cudt_buf =
-      cudtmol_CompactUDTEntries(deposit_vec_buf.get(), transfer_vec_buf.get(),
-                                kv_state_vec_buf.get(), kv_proof_buf.get());
+  // signature
+  unique_ptr<AutoSBuf> sign_buf;
+  if (input_->get_key()) {
+    if (empty_sign) {
+      CBuffer zero_buf;
+      zero_buf.resize(65);
+      SBuffer sign_sbuf;
+      sign_sbuf.buf = zero_buf.data();
+      sign_sbuf.len = zero_buf.size();
+      sign_buf = make_unique<AutoSBuf>(cudtmol_OptSignature(&sign_sbuf));
+    } else {
+      auto temp_buf1 = gen_signature(vd, cur_bin);
+      ASSERT_DBG(!temp_buf1.empty());
+
+      SBuffer sbuf{temp_buf1.data(), (uint32_t)temp_buf1.size()};
+      sign_buf = make_unique<AutoSBuf>(cudtmol_OptSignature(&sbuf));
+    }
+  }
+
+  AutoSBuf cudt_buf = cudtmol_CompactUDTEntries(
+      deposit_vec_buf.get(), transfer_vec_buf.get(), kv_state_vec_buf.get(),
+      kv_proof_buf.get(), sign_buf->get());
 
   AutoSBuf witness_buf = cudtmol_Witness(NULL, cudt_buf.get(), NULL);
 
@@ -320,17 +534,32 @@ int VirtualData::run_simulator() {
 
 //////////////////// GenerateTransaction /////////////////////////////////
 
-int GenerateTransaction::add_cell(uint128_t amount,
-                                  const VDUsers& users,
-                                  bool is_cudt,
-                                  CBuffer proof,
-                                  bool use_xudt) {
+namespace {
+CHash get_cudt_script_code_hash() {
+  CBuffer v00 = {
+      0x31, 0x04, 0x27, 0xBB, 0xEB, 0xCD, 0x6C, 0xB6, 0xDD, 0x1B, 0xDC,
+      0x77, 0x20, 0xB2, 0x7C, 0x91, 0x4A, 0x14, 0xE6, 0x8E, 0xF8, 0xB2,
+      0xAF, 0x66, 0xBA, 0x0E, 0x9B, 0x5C, 0xB4, 0xFB, 0xF0, 0xC3,
+  };
+  return v00;
+}
+CHash get_other_script_code_hash() {
+  CBuffer v00 = {
+      0x5F, 0xEB, 0x73, 0x0B, 0xEC, 0x5F, 0x9C, 0x0B, 0x4F, 0x20, 0x92,
+      0x78, 0xFB, 0x23, 0xB7, 0x2E, 0xF6, 0xAE, 0xCF, 0x05, 0xB0, 0x54,
+      0x20, 0x6A, 0x13, 0x74, 0x4A, 0x6C, 0x79, 0xA7, 0x76, 0x08,
+  };
+  return v00;
+}
+}  // namespace
+
+int GenerateTransaction::add_cell(const AddCellArgs& args) {
   int id = cell_count_++;
 
   auto cellg = make_unique<VDAllData>();
 
   CHash script_hash;
-  if (is_cudt)
+  if (args.use_cudt_lock)
     script_hash = get_cudt_script_code_hash();
   else
     script_hash = get_other_script_code_hash();
@@ -341,19 +570,21 @@ int GenerateTransaction::add_cell(uint128_t amount,
   auto input = cellg->input_.get();
   auto output = cellg->output_.get();
 
-  input->set_args_type_id(get_new_type_id());
-  output->set_args_type_id(get_new_type_id());
+  input->set_args_type_id(args.input_type_id);
+  output->set_args_type_id(args.output_type_id);
 
-  input->data_.set_amount(amount);
+  input->data_.set_amount(args.amount);
   output->data_.set_amount(0);
 
-  if (use_xudt) {
+  input->using_identity();
+
+  if (args.use_xudt) {
     input->data_.set_xudt();
     output->data_.set_xudt();
   }
 
-  cellg->users_ = users;
-  cellg->smt_proof_ = proof;
+  cellg->users_ = args.users;
+  cellg->smt_proof_ = args.proof;
 
   cells_.insert(make_pair(id, cellg.get()));
   cells_data_.emplace_back(move(cellg));
@@ -396,7 +627,7 @@ VirtualData GenerateTransaction::build() {
       // fill scritp and cell data
       fill_scritp_data(bin.get(), it->get()->input_.get());
 
-      bin->witness_ = it->get()->gen_witness();
+      bin->witness_ = it->get()->gen_witness(true, nullptr, nullptr);
 
       vd.inputs_.emplace_back(move(bin));
     }
@@ -410,6 +641,13 @@ VirtualData GenerateTransaction::build() {
       fill_scritp_data(bin.get(), it->get()->output_.get());
       vd.outputs_.emplace_back(move(bin));
     }
+  }
+
+  // signature
+  auto it = cells_data_.begin();
+  auto it_bin = vd.inputs_.begin();
+  for (; it != cells_data_.end(); it++, it_bin++) {
+    it_bin->get()->witness_ = it->get()->gen_witness(false, &vd, it_bin->get());
   }
 
   return vd;

@@ -28,6 +28,8 @@ extern "C" {
 #define                                 MolReader_Signature_length(s)                   mol_fixvec_length(s)
 #define                                 MolReader_Signature_get(s, i)                   mol_fixvec_slice_by_index(s, 1, i)
 #define                                 MolReader_Signature_raw_bytes(s)                mol_fixvec_slice_raw_bytes(s)
+MOLECULE_API_DECORATOR  mol_errno       MolReader_SignatureOpt_verify                   (const mol_seg_t*, bool);
+#define                                 MolReader_SignatureOpt_is_none(s)               mol_option_is_none(s)
 #define                                 MolReader_ScriptHash_verify(s, c)               mol_verify_fixed_size(s, 32)
 #define                                 MolReader_ScriptHash_get_nth0(s)                mol_slice_by_offset(s, 0, 1)
 #define                                 MolReader_ScriptHash_get_nth1(s)                mol_slice_by_offset(s, 1, 1)
@@ -123,11 +125,12 @@ MOLECULE_API_DECORATOR  mol_errno       MolReader_TransferVec_verify            
 #define                                 MolReader_KVPairVec_get(s, i)                   mol_fixvec_slice_by_index(s, 64, i)
 MOLECULE_API_DECORATOR  mol_errno       MolReader_CompactUDTEntries_verify              (const mol_seg_t*, bool);
 #define                                 MolReader_CompactUDTEntries_actual_field_count(s) mol_table_actual_field_count(s)
-#define                                 MolReader_CompactUDTEntries_has_extra_fields(s) mol_table_has_extra_fields(s, 4)
+#define                                 MolReader_CompactUDTEntries_has_extra_fields(s) mol_table_has_extra_fields(s, 5)
 #define                                 MolReader_CompactUDTEntries_get_deposits(s)     mol_table_slice_by_index(s, 0)
 #define                                 MolReader_CompactUDTEntries_get_transfers(s)    mol_table_slice_by_index(s, 1)
 #define                                 MolReader_CompactUDTEntries_get_kv_state(s)     mol_table_slice_by_index(s, 2)
 #define                                 MolReader_CompactUDTEntries_get_kv_proof(s)     mol_table_slice_by_index(s, 3)
+#define                                 MolReader_CompactUDTEntries_get_signature(s)    mol_table_slice_by_index(s, 4)
 
 /*
  * Builder APIs
@@ -137,6 +140,10 @@ MOLECULE_API_DECORATOR  mol_errno       MolReader_CompactUDTEntries_verify      
 #define                                 MolBuilder_Signature_push(b, p)                 mol_fixvec_builder_push_byte(b, p)
 #define                                 MolBuilder_Signature_build(b)                   mol_fixvec_builder_finalize(b)
 #define                                 MolBuilder_Signature_clear(b)                   mol_builder_discard(b)
+#define                                 MolBuilder_SignatureOpt_init(b)                 mol_builder_initialize_fixed_size(b, 0)
+#define                                 MolBuilder_SignatureOpt_set(b, p, l)            mol_option_builder_set(b, p, l)
+#define                                 MolBuilder_SignatureOpt_build(b)                mol_builder_finalize_simple(b)
+#define                                 MolBuilder_SignatureOpt_clear(b)                mol_builder_discard(b)
 #define                                 MolBuilder_ScriptHash_init(b)                   mol_builder_initialize_fixed_size(b, 32)
 #define                                 MolBuilder_ScriptHash_set_nth0(b, p)            mol_builder_set_byte_by_offset(b, 0, p)
 #define                                 MolBuilder_ScriptHash_set_nth1(b, p)            mol_builder_set_byte_by_offset(b, 1, p)
@@ -243,11 +250,12 @@ MOLECULE_API_DECORATOR  mol_seg_res_t   MolBuilder_Transfer_build               
 #define                                 MolBuilder_KVPairVec_push(b, p)                 mol_fixvec_builder_push(b, p, 64)
 #define                                 MolBuilder_KVPairVec_build(b)                   mol_fixvec_builder_finalize(b)
 #define                                 MolBuilder_KVPairVec_clear(b)                   mol_builder_discard(b)
-#define                                 MolBuilder_CompactUDTEntries_init(b)            mol_table_builder_initialize(b, 256, 4)
+#define                                 MolBuilder_CompactUDTEntries_init(b)            mol_table_builder_initialize(b, 256, 5)
 #define                                 MolBuilder_CompactUDTEntries_set_deposits(b, p, l) mol_table_builder_add(b, 0, p, l)
 #define                                 MolBuilder_CompactUDTEntries_set_transfers(b, p, l) mol_table_builder_add(b, 1, p, l)
 #define                                 MolBuilder_CompactUDTEntries_set_kv_state(b, p, l) mol_table_builder_add(b, 2, p, l)
 #define                                 MolBuilder_CompactUDTEntries_set_kv_proof(b, p, l) mol_table_builder_add(b, 3, p, l)
+#define                                 MolBuilder_CompactUDTEntries_set_signature(b, p, l) mol_table_builder_add(b, 4, p, l)
 MOLECULE_API_DECORATOR  mol_seg_res_t   MolBuilder_CompactUDTEntries_build              (mol_builder_t);
 #define                                 MolBuilder_CompactUDTEntries_clear(b)           mol_builder_discard(b)
 
@@ -258,6 +266,7 @@ MOLECULE_API_DECORATOR  mol_seg_res_t   MolBuilder_CompactUDTEntries_build      
 #define ____ 0x00
 
 MOLECULE_API_DECORATOR const uint8_t MolDefault_Signature[4]     =  {____, ____, ____, ____};
+MOLECULE_API_DECORATOR const uint8_t MolDefault_SignatureOpt[0]  =  {};
 MOLECULE_API_DECORATOR const uint8_t MolDefault_ScriptHash[32]   =  {
     ____, ____, ____, ____, ____, ____, ____, ____, ____, ____, ____, ____,
     ____, ____, ____, ____, ____, ____, ____, ____, ____, ____, ____, ____,
@@ -327,10 +336,11 @@ MOLECULE_API_DECORATOR const uint8_t MolDefault_KVPair[64]       =  {
     ____, ____, ____, ____,
 };
 MOLECULE_API_DECORATOR const uint8_t MolDefault_KVPairVec[4]     =  {____, ____, ____, ____};
-MOLECULE_API_DECORATOR const uint8_t MolDefault_CompactUDTEntries[36] =  {
-    0x24, ____, ____, ____, 0x14, ____, ____, ____, 0x18, ____, ____, ____,
-    0x1c, ____, ____, ____, 0x20, ____, ____, ____, 0x04, ____, ____, ____,
-    0x04, ____, ____, ____, ____, ____, ____, ____, ____, ____, ____, ____,
+MOLECULE_API_DECORATOR const uint8_t MolDefault_CompactUDTEntries[40] =  {
+    0x28, ____, ____, ____, 0x18, ____, ____, ____, 0x1c, ____, ____, ____,
+    0x20, ____, ____, ____, 0x24, ____, ____, ____, 0x28, ____, ____, ____,
+    0x04, ____, ____, ____, 0x04, ____, ____, ____, ____, ____, ____, ____,
+    ____, ____, ____, ____,
 };
 
 #undef ____
@@ -339,6 +349,13 @@ MOLECULE_API_DECORATOR const uint8_t MolDefault_CompactUDTEntries[36] =  {
  * Reader Functions
  */
 
+MOLECULE_API_DECORATOR mol_errno MolReader_SignatureOpt_verify (const mol_seg_t *input, bool compatible) {
+    if (input->size != 0) {
+        return MolReader_Signature_verify(input, compatible);
+    } else {
+        return MOL_OK;
+    }
+}
 MOLECULE_API_DECORATOR mol_errno MolReader_Deposit_verify (const mol_seg_t *input, bool compatible) {
     if (input->size < MOL_NUM_T_SIZE) {
         return MOL_ERR_HEADER;
@@ -716,9 +733,9 @@ MOLECULE_API_DECORATOR mol_errno MolReader_CompactUDTEntries_verify (const mol_s
         return MOL_ERR_OFFSET;
     }
     mol_num_t field_count = offset / 4 - 1;
-    if (field_count < 4) {
+    if (field_count < 5) {
         return MOL_ERR_FIELD_COUNT;
-    } else if (!compatible && field_count > 4) {
+    } else if (!compatible && field_count > 5) {
         return MOL_ERR_FIELD_COUNT;
     }
     if (input->size < MOL_NUM_T_SIZE*(field_count+1)){
@@ -760,6 +777,12 @@ MOLECULE_API_DECORATOR mol_errno MolReader_CompactUDTEntries_verify (const mol_s
         inner.ptr = input->ptr + offsets[3];
         inner.size = offsets[4] - offsets[3];
         errno = MolReader_Bytes_verify(&inner, compatible);
+        if (errno != MOL_OK) {
+            return MOL_ERR_DATA;
+        }
+        inner.ptr = input->ptr + offsets[4];
+        inner.size = offsets[5] - offsets[4];
+        errno = MolReader_SignatureOpt_verify(&inner, compatible);
         if (errno != MOL_OK) {
             return MOL_ERR_DATA;
         }
@@ -1009,7 +1032,7 @@ MOLECULE_API_DECORATOR mol_seg_res_t MolBuilder_Transfer_build (mol_builder_t bu
 MOLECULE_API_DECORATOR mol_seg_res_t MolBuilder_CompactUDTEntries_build (mol_builder_t builder) {
     mol_seg_res_t res;
     res.errno = MOL_OK;
-    mol_num_t offset = 20;
+    mol_num_t offset = 24;
     mol_num_t len;
     res.seg.size = offset;
     len = builder.number_ptr[1];
@@ -1020,6 +1043,8 @@ MOLECULE_API_DECORATOR mol_seg_res_t MolBuilder_CompactUDTEntries_build (mol_bui
     res.seg.size += len == 0 ? 4 : len;
     len = builder.number_ptr[7];
     res.seg.size += len == 0 ? 4 : len;
+    len = builder.number_ptr[9];
+    res.seg.size += len == 0 ? 0 : len;
     res.seg.ptr = (uint8_t*)malloc(res.seg.size);
     uint8_t *dst = res.seg.ptr;
     mol_pack_number(dst, &res.seg.size);
@@ -1040,6 +1065,10 @@ MOLECULE_API_DECORATOR mol_seg_res_t MolBuilder_CompactUDTEntries_build (mol_bui
     dst += MOL_NUM_T_SIZE;
     len = builder.number_ptr[7];
     offset += len == 0 ? 4 : len;
+    mol_pack_number(dst, &offset);
+    dst += MOL_NUM_T_SIZE;
+    len = builder.number_ptr[9];
+    offset += len == 0 ? 0 : len;
     uint8_t *src = builder.data_ptr;
     len = builder.number_ptr[1];
     if (len == 0) {
@@ -1074,6 +1103,15 @@ MOLECULE_API_DECORATOR mol_seg_res_t MolBuilder_CompactUDTEntries_build (mol_bui
         memcpy(dst, &MolDefault_Bytes, len);
     } else {
         mol_num_t of = builder.number_ptr[6];
+        memcpy(dst, src+of, len);
+    }
+    dst += len;
+    len = builder.number_ptr[9];
+    if (len == 0) {
+        len = 0;
+        memcpy(dst, &MolDefault_SignatureOpt, len);
+    } else {
+        mol_num_t of = builder.number_ptr[8];
         memcpy(dst, src+of, len);
     }
     dst += len;

@@ -18,6 +18,13 @@ struct SignatureVTable *GetSignatureVTable(void);
 struct SignatureType make_Signature(mol2_cursor_t *cur);
 uint32_t Signature_len_impl(struct SignatureType *);
 uint8_t Signature_get_impl(struct SignatureType *, uint32_t, bool *);
+struct SignatureOptType;
+struct SignatureOptVTable;
+struct SignatureOptVTable *GetSignatureOptVTable(void);
+struct SignatureOptType make_SignatureOpt(mol2_cursor_t *cur);
+bool SignatureOpt_is_none_impl(struct SignatureOptType *);
+bool SignatureOpt_is_some_impl(struct SignatureOptType *);
+mol2_cursor_t SignatureOpt_unwrap_impl(struct SignatureOptType *);
 struct ScriptHashType;
 struct ScriptHashVTable;
 struct ScriptHashVTable *GetScriptHashVTable(void);
@@ -107,6 +114,8 @@ struct KVPairVecType CompactUDTEntries_get_kv_state_impl(
     struct CompactUDTEntriesType *);
 mol2_cursor_t CompactUDTEntries_get_kv_proof_impl(
     struct CompactUDTEntriesType *);
+struct SignatureOptType CompactUDTEntries_get_signature_impl(
+    struct CompactUDTEntriesType *);
 
 // ----definition-----------------
 typedef struct SignatureVTable {
@@ -117,6 +126,16 @@ typedef struct SignatureType {
   mol2_cursor_t cur;
   SignatureVTable *t;
 } SignatureType;
+
+typedef struct SignatureOptVTable {
+  bool (*is_none)(struct SignatureOptType *);
+  bool (*is_some)(struct SignatureOptType *);
+  mol2_cursor_t (*unwrap)(struct SignatureOptType *);
+} SignatureOptVTable;
+typedef struct SignatureOptType {
+  mol2_cursor_t cur;
+  SignatureOptVTable *t;
+} SignatureOptType;
 
 typedef struct ScriptHashVTable {
   uint32_t (*len)(struct ScriptHashType *);
@@ -229,6 +248,7 @@ typedef struct CompactUDTEntriesVTable {
   struct TransferVecType (*transfers)(struct CompactUDTEntriesType *);
   struct KVPairVecType (*kv_state)(struct CompactUDTEntriesType *);
   mol2_cursor_t (*kv_proof)(struct CompactUDTEntriesType *);
+  struct SignatureOptType (*signature)(struct CompactUDTEntriesType *);
 } CompactUDTEntriesVTable;
 typedef struct CompactUDTEntriesType {
   mol2_cursor_t cur;
@@ -266,6 +286,32 @@ uint8_t Signature_get_impl(SignatureType *this, uint32_t index,
     *existing = true;
   }
   ret = convert_to_Uint8(&res.cur);
+  return ret;
+}
+struct SignatureOptType make_SignatureOpt(mol2_cursor_t *cur) {
+  SignatureOptType ret;
+  ret.cur = *cur;
+  ret.t = GetSignatureOptVTable();
+  return ret;
+}
+struct SignatureOptVTable *GetSignatureOptVTable(void) {
+  static SignatureOptVTable s_vtable;
+  static int inited = 0;
+  if (inited) return &s_vtable;
+  s_vtable.is_none = SignatureOpt_is_none_impl;
+  s_vtable.is_some = SignatureOpt_is_some_impl;
+  s_vtable.unwrap = SignatureOpt_unwrap_impl;
+  return &s_vtable;
+}
+bool SignatureOpt_is_none_impl(SignatureOptType *this) {
+  return mol2_option_is_none(&this->cur);
+}
+bool SignatureOpt_is_some_impl(SignatureOptType *this) {
+  return !mol2_option_is_none(&this->cur);
+}
+mol2_cursor_t SignatureOpt_unwrap_impl(SignatureOptType *this) {
+  mol2_cursor_t ret;
+  ret = convert_to_rawbytes(&this->cur);
   return ret;
 }
 struct ScriptHashType make_ScriptHash(mol2_cursor_t *cur) {
@@ -633,6 +679,7 @@ struct CompactUDTEntriesVTable *GetCompactUDTEntriesVTable(void) {
   s_vtable.transfers = CompactUDTEntries_get_transfers_impl;
   s_vtable.kv_state = CompactUDTEntries_get_kv_state_impl;
   s_vtable.kv_proof = CompactUDTEntries_get_kv_proof_impl;
+  s_vtable.signature = CompactUDTEntries_get_signature_impl;
   return &s_vtable;
 }
 DepositVecType CompactUDTEntries_get_deposits_impl(
@@ -662,6 +709,14 @@ mol2_cursor_t CompactUDTEntries_get_kv_proof_impl(CompactUDTEntriesType *this) {
   mol2_cursor_t ret;
   mol2_cursor_t re2 = mol2_table_slice_by_index(&this->cur, 3);
   ret = convert_to_rawbytes(&re2);
+  return ret;
+}
+SignatureOptType CompactUDTEntries_get_signature_impl(
+    CompactUDTEntriesType *this) {
+  SignatureOptType ret;
+  mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 4);
+  ret.cur = cur;
+  ret.t = GetSignatureOptVTable();
   return ret;
 }
 #endif  // MOLECULEC_C2_DECLARATION_ONLY

@@ -96,7 +96,10 @@ SBuffer cudtmol_KVPair(SBuffer* k, SBuffer* v);
 SBuffer cudtmol_CompactUDTEntries(SBuffer* deposits,
                                   SBuffer* transfers,
                                   SBuffer* kv_state,
-                                  SBuffer* kv_proof);
+                                  SBuffer* kv_proof,
+                                  SBuffer* signature);
+
+SBuffer cudtmol_OptSignature(SBuffer* data);
 
 SBuffer cudtmol_Witness(SBuffer* lock, SBuffer* input, SBuffer* output);
 

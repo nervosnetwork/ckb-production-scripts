@@ -21,20 +21,13 @@ UTEST(success, main) {
   ASSERT_DBG(!ret_code);
 }
 
-UTEST(success, with_identity) {
-  // TODO
-  /*
+UTEST(success, none_identity) {
   GenerateTransaction transfaction;
   gen_test_data(&transfaction);
-  for (auto it = transfaction.cells_data_.begin();
-       it != transfaction.cells_data_.end(); it++) {
-    it->get()->input_->using_identity();
-  }
 
   auto virtual_data = transfaction.build();
   int ret_code = virtual_data.run_simulator();
   ASSERT_DBG(!ret_code);
-  */
 }
 
 UTEST(failed_amount, cell_data) {}

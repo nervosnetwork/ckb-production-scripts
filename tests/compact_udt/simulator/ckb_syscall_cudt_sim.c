@@ -30,6 +30,11 @@ void load_offset(uint8_t* source_buff,
 //////////////////////////////////////////////////////////////////////
 // ckb sim api
 
+int ckb_load_tx_hash(void* addr, uint64_t* len, size_t offset) {
+  *len = 32;
+  return 0;
+}
+
 int ckb_load_script_hash(void* addr, uint64_t* len, size_t offset) {
   CUDTMOL_Data param = {0};
   param.index = 0;
@@ -95,6 +100,10 @@ int ckb_checked_load_script(void* addr, uint64_t* len, size_t offset) {
     ret = CKB_LENGTH_NOT_ENOUGH;
   }
   return ret;
+}
+
+int ckb_calculate_inputs_len() {
+  return 1;
 }
 
 int ckb_load_witness(void* addr,

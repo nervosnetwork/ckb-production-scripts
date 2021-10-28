@@ -1,6 +1,7 @@
 import blockchain;
 
 vector Signature <byte>;
+option SignatureOpt (Signature);
 array ScriptHash [byte; 32];
 array Identity [byte; 21];
 
@@ -50,4 +51,5 @@ table CompactUDTEntries {
   transfers: TransferVec,
   kv_state: KVPairVec,
   kv_proof: Bytes,
+  signature: SignatureOpt,
 }

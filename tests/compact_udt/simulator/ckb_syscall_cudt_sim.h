@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+int ckb_load_tx_hash(void* addr, uint64_t* len, size_t offset);
 int ckb_load_script_hash(void* addr, uint64_t* len, size_t offset);
 int ckb_load_cell_data(void* addr,
                        uint64_t* len,
@@ -12,6 +13,7 @@ int ckb_load_cell_data(void* addr,
                        size_t source);
 int ckb_load_script(void* addr, uint64_t* len, size_t offset);
 int ckb_checked_load_script(void* addr, uint64_t* len, size_t offset);
+int ckb_calculate_inputs_len();
 int ckb_load_witness(void* addr,
                      uint64_t* len,
                      size_t offset,

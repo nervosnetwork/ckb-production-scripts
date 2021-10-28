@@ -37,8 +37,6 @@
     *a = 0;           \
   }
 
-#include "debug.h"
-
 #else  // CKB_USE_SIM
 #define ASSERT_DBG(i)
 #endif  // CKB_USE_SIM
@@ -51,6 +49,10 @@
 #ifndef uint128_t
 typedef __uint128_t uint128_t;
 #endif  // uint128_t
+
+#define MAX_WITNESS_SIZE 32768
+#define BLAKE2B_BLOCK_SIZE 32
+#define ONE_BATCH_SIZE 32768
 
 enum _CompactResult {
   CUDT_SUCCESS = 0,
@@ -71,6 +73,7 @@ enum _CompactResult {
 
   CUDTERR_WITNESS_INVALID,
   CUDTERR_WITNESS_OTHER_INVALID,
+  CUDTERR_CHECK_IDENTITY_INVALID,
 
   CUDTERR_KV_TOO_LONG,
   CUDTERR_KV_VERIFY,

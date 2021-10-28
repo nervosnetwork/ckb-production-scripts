@@ -278,7 +278,8 @@ SBuffer cudtmol_KVPair(SBuffer* k, SBuffer* v) {
 SBuffer cudtmol_CompactUDTEntries(SBuffer* deposits,
                                   SBuffer* transfers,
                                   SBuffer* kv_state,
-                                  SBuffer* kv_proof) {
+                                  SBuffer* kv_proof,
+                                  SBuffer* signature) {
   mol_builder_t b;
   MolBuilder_CompactUDTEntries_init(&b);
 
@@ -288,9 +289,32 @@ SBuffer cudtmol_CompactUDTEntries(SBuffer* deposits,
   MolBuilder_CompactUDTEntries_set_kv_state(&b, kv_state->buf, kv_state->len);
   MolBuilder_CompactUDTEntries_set_kv_proof(&b, kv_proof->buf, kv_proof->len);
 
+  if (signature && signature->buf) {
+    MolBuilder_CompactUDTEntries_set_signature(&b, signature->buf,
+                                               signature->len);
+  }
+
   mol_seg_res_t r = MolBuilder_CompactUDTEntries_build(b);
 
   return cudtmol_alloc_seg(&r);
+}
+
+SBuffer cudtmol_OptSignature(SBuffer* data) {
+  mol_builder_t b;
+  MolBuilder_Signature_init(&b);
+
+  for (uint32_t i = 0; i < data->len; i++)
+    MolBuilder_Signature_push(&b, data->buf[i]);
+  mol_seg_res_t r = MolBuilder_Signature_build(b);
+  SBuffer d = cudtmol_alloc_seg(&r);
+
+  mol_builder_t b_opt;
+  MolBuilder_SignatureOpt_init(&b_opt);
+  MolBuilder_SignatureOpt_set(&b_opt, d.buf, d.len);
+  mol_seg_res_t r_opt = MolBuilder_SignatureOpt_build(b_opt);
+  cudtmol_free(&d);
+
+  return cudtmol_alloc_seg(&r_opt);
 }
 
 SBuffer cudtmol_Witness(SBuffer* lock, SBuffer* input, SBuffer* output) {

@@ -126,11 +126,6 @@ static CKBResCode _get_witness_base(void* addr,
 ////////////////////////////////////////////////////////////////
 // reader
 
-int get_amount(size_t index, size_t source, uint128_t* amount) {
-  uint64_t len = sizeof(uint128_t);
-  return ckb_load_cell_data(amount, &len, 0, index, source);
-}
-
 CKBResCode _get_xudt_data(XudtDataType* data, size_t index, size_t source) {
   CKBResCode err = CKBERR_UNKNOW;
   mol2_cursor_t cur;

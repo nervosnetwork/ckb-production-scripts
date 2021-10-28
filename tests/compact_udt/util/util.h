@@ -39,6 +39,7 @@ class CData {
   }
   void copy(uint8_t* hash) const { memcpy(hash, buf_.data(), buf_.size()); }
   uint8_t* get() { return (uint8_t*)buf_.data(); }
+  const uint8_t* ptr() const { return buf_.data(); }
   static size_t len() { return T; }
 
   bool operator==(const CData<T>& o) {
@@ -53,6 +54,7 @@ class CData {
 
 typedef CData<32> CHash;
 typedef CData<21> CIdentity;
+CIdentity CHashToCId(const CHash* h);
 
 class AutoSBuf {
  public:
@@ -122,10 +124,15 @@ class SMT {
 class CKBKey {
  public:
   CKBKey();
+  CKBKey(CHash pri);
   ~CKBKey();
 
   CIdentity get_pubkey_hash();
   CBuffer signature(const CHash* msg);
+
+ private:
+  CHash priv_key_;
+  void* ctx_ = nullptr;
 };
 
 #endif  // _TESTS_COMPACT_UDT_UTIL_UTIL_H_

@@ -6,6 +6,9 @@
 
 extern "C" {
 #include "simulator/compact_udt_lock_inc.h"
+
+#include "secp256k1.h"
+#include "secp256k1_recovery.h"
 }
 
 int getbin(int x) {
@@ -43,6 +46,12 @@ void random_mem(uint8_t* data, uint32_t len) {
 
 void script_hash_randfull(Hash* hash) {
   random_mem((uint8_t*)hash, sizeof(Hash));
+}
+
+CIdentity CHashToCId(const CHash* h) {
+  CIdentity id;
+  memcpy(id.get(), h->ptr(), 21);
+  return id;
 }
 
 void script_hash_str(Hash* hash, const char* src) {
@@ -83,14 +92,72 @@ CHash SMT::calculate_root(const CBuffer& proof) {
   return ret;
 }
 
-CKBKey::CKBKey() {
-  ASSERT_DBG(false);
-  // TODO : Wait auth branch merge the master branch
+uint8_t SECP256k1_SECKEY[32] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11,
+                                12, 13, 14, 15, 16, 1,  2,  3,  4,  5,  6,
+                                7,  8,  9,  10, 11, 12, 13, 14, 15, 16};
+
+CKBKey::CKBKey() : priv_key_(SECP256k1_SECKEY, 32) {
+  ctx_ = secp256k1_context_create(SECP256K1_CONTEXT_SIGN |
+                                  SECP256K1_CONTEXT_VERIFY);
 }
-CKBKey::~CKBKey() {}
+CKBKey::CKBKey(CHash pri) : priv_key_(pri) {
+  ctx_ = secp256k1_context_create(SECP256K1_CONTEXT_SIGN |
+                                  SECP256K1_CONTEXT_VERIFY);
+}
+CKBKey::~CKBKey() {
+  secp256k1_context_destroy((secp256k1_context*)ctx_);
+}
 CIdentity CKBKey::get_pubkey_hash() {
-  return CIdentity();
+  uint8_t serialized_pubkey[33];
+  secp256k1_pubkey pubkey = {0};
+  size_t serialized_pubkey_len = 33;
+  Blake2b b2;
+
+  auto err = secp256k1_ec_pubkey_create((secp256k1_context*)ctx_, &pubkey,
+                                        priv_key_.get());
+  if (err == 0) {
+    ASSERT_DBG(false);
+    return CIdentity();
+  }
+  err = secp256k1_ec_pubkey_serialize((secp256k1_context*)ctx_,
+                                      serialized_pubkey, &serialized_pubkey_len,
+                                      &pubkey, SECP256K1_EC_COMPRESSED);
+  if (err == 0) {
+    ASSERT_DBG(false);
+    return CIdentity();
+  }
+
+  b2.Update(serialized_pubkey, serialized_pubkey_len);
+
+  CIdentity ret;
+  auto ret_ptr = ret.get();
+  ret_ptr[0] = 0;
+  memcpy(ret_ptr + 1, b2.Final().get(), 20);
+  return ret;
 }
 CBuffer CKBKey::signature(const CHash* msg) {
-  return CBuffer();
+  secp256k1_ecdsa_recoverable_signature sig;
+
+  secp256k1_context* ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN |
+                                                    SECP256K1_CONTEXT_VERIFY);
+  auto ret = secp256k1_ecdsa_sign_recoverable(ctx, &sig, msg->ptr(),
+                                              priv_key_.get(), NULL, NULL);
+  if (ret == 0) {
+    ASSERT_DBG(false);
+    return CBuffer();
+  }
+
+  CBuffer raw_sig;
+  raw_sig.resize(65);
+
+  int recid = 0;
+  ret = secp256k1_ecdsa_recoverable_signature_serialize_compact(
+      (secp256k1_context*)ctx_, raw_sig.data(), &recid, &sig);
+  if (ret == 0) {
+    ASSERT_DBG(false);
+    return CBuffer();
+  }
+  raw_sig[64] = (uint8_t)recid;
+
+  return raw_sig;
 }
