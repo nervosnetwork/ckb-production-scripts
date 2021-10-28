@@ -299,9 +299,11 @@ inline void gen_test_data(GenerateTransaction* tx) {
   int cell1 = tx->add_cell(50000, users01, true, proof_01, false);
   int cell2 = tx->add_cell(50000, users02, false, proof_02, false);
   tx->add_transfer(cell0, key_00, cell1, key_02, 50, 1);
+  tx->add_transfer(cell0, key_02, cell0, key_00, 300, 1);
   tx->add_transfer(cell1, key_02, cell2, key_06, 100, 10);
   tx->add_transfer(cell1, key_00, cell1, key_02, 10, 10);
   tx->add_transfer(cell2, key_04, cell0, key_00, 1000, 10);
+  tx->add_transfer(cell0, key_00, cell2, key_06, 20, 30);
 }
 inline CHash get_cudt_script_code_hash() {
   CBuffer v00 = {

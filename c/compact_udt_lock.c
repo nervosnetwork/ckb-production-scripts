@@ -48,6 +48,8 @@ typedef struct _CacheDeposit {
   uint128_t amount;
   uint128_t fee;
 
+  bool flag;
+
   struct _CacheDeposit* next;
 } CacheDeposit;
 
@@ -65,6 +67,8 @@ typedef struct _CacheTransfer {
 
   uint128_t amount;
   uint128_t fee;
+
+  bool flag;  // flag when check Deposit
 
   struct _CacheTransfer* next;
 } CacheTransfer;
@@ -241,6 +245,11 @@ CKBResCode load_transfer_vec(CacheData* data,
         ReadMemFromMol2(mbc, identity, &(tmp_buf->identity), sizeof(Identity));
         ReadMemFromMol2(mbc, script_hash, &(tmp_buf->script_hash),
                         sizeof(Hash));
+        if (memcmp(&(tmp_buf->script_hash),
+                   &(g_cudt_cache->cur_data.script_hash), sizeof(Hash)) == 0) {
+          ASSERT_DBG(false);
+          return CUDTERR_WITNESS_INVALID;
+        }
         break;
       default:
         return CUDTERR_WITNESS_INVALID;
@@ -387,8 +396,9 @@ CKBResCode load_other_cell_data(size_t index, CacheData** last, bool* goon) {
     if (cache == NULL) {
       cache = (CacheData*)alloc_cache(sizeof(CacheData));
       *last = cache;
-      last_deposit = &cache->deposits;
     }
+    if (last_deposit == NULL)
+      last_deposit = &cache->deposits;
 
     CacheDeposit* cache = (CacheDeposit*)alloc_cache(sizeof(CacheDeposit));
     *last_deposit = cache;
@@ -443,6 +453,8 @@ CKBResCode load_other_cell_data(size_t index, CacheData** last, bool* goon) {
     if (cache == NULL) {
       cache = (CacheData*)alloc_cache(sizeof(CacheData));
       *last = cache;
+    }
+    if (last_transfer == NULL) {
       last_transfer = &cache->transfers;
     }
 
@@ -583,20 +595,27 @@ CacheData* find_other_cache(Hash* script_hash) {
 CKBResCode check_deposit(CacheDeposit* cache) {
   CKBResCode err = CUDT_SUCCESS;
 
-  CacheData* other_data = find_other_cache(cache->source);
-  CHECK2(other_data, CUDTERR_DEPOSIT_INVALID);
+  CacheData* source_cache = NULL;
+
+  if (memcmp(cache->source, &(g_cudt_cache->cur_data.script_hash),
+             sizeof(Hash)) == 0) {
+    source_cache = &(g_cudt_cache->cur_data);
+  } else {
+    source_cache = find_other_cache(cache->source);
+  }
+  CHECK2(source_cache, CUDTERR_DEPOSIT_INVALID);
 
   bool has = false;
-  CacheTransfer* ct = other_data->transfers;
-  CacheTransfer** last_ct = &(other_data->transfers);
-  for (; ct != NULL; last_ct = &(ct->next), ct = ct->next) {
+  CacheTransfer* ct = source_cache->transfers;
+  for (; ct != NULL; ct = ct->next) {
     if (ct->amount != cache->amount)
       continue;
     if (ct->fee != cache->fee)
       continue;
+    if (ct->flag)
+      continue;
 
-    // remove
-    *last_ct = ct->next;
+    ct->flag = true;
     has = true;
     break;
   }
@@ -651,11 +670,12 @@ CKBResCode check_transfer(CacheTransfer* cache,
 
   bool has = false;
   CacheDeposit* cd = other_data->deposits;
-  CacheDeposit** last_cd = &(other_data->deposits);
-  for (; cd != NULL; last_cd = &(cd->next), cd = cd->next) {
+  for (; cd != NULL; cd = cd->next) {
     if (cd->amount != cache->amount)
       continue;
     if (cd->fee != cache->fee)
+      continue;
+    if (cd->flag)
       continue;
 
     if (identity) {
@@ -664,8 +684,8 @@ CKBResCode check_transfer(CacheTransfer* cache,
       }
     }
 
+    cd->flag = true;
     has = true;
-    *last_cd = cd->next;
     break;
   }
   CHECK2(has, CUDTERR_TRANSFER_INVALID);

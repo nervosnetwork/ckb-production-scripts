@@ -68,7 +68,8 @@ CBuffer VDCellData::get_cell_data_xudt() {
   AutoSBuf buf = cudtmol_bytes_vec(data_ptr_buf.data(), data_ptr_buf.size());
   AutoSBuf xudt_data_buf = cudtmol_xudtdata(lock_buf.get(), buf.get());
 
-  return AutoSBuf(cudtmol_Bytes(xudt_data_buf.ptr(), xudt_data_buf.len())).copy();
+  return AutoSBuf(cudtmol_Bytes(xudt_data_buf.ptr(), xudt_data_buf.len()))
+      .copy();
 }
 
 //////////////////// VDScript /////////////////////////////
@@ -454,7 +455,7 @@ void GenerateTransaction::gen_transfer_info() {
       transfer.amount_ = it->amount_;
       transfer.fee_ = it->fee_;
       transfer.source_ = it->src_user_;
-      if (*scr_script_code == *tar_script_code) {
+      if (*scr_script_code == *tar_script_code && tar_cell != src_cell) {
         transfer.target_cell_ = tar_cell;
         transfer.target_user_ = it->tar_user_;
         transfer.target_type_ = TargetType_MoveBetweenCompactSMT;
