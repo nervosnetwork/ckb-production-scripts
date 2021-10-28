@@ -153,26 +153,35 @@ CKBResCode get_cell_data(size_t index,
                          Hash* hash) {
   CKBResCode err = CKBERR_UNKNOW;
 
+  /*
   typedef struct _SUDTData {
     uint128_t amount;
     uint32_t flag;
     uint8_t smt_hash[32];
   } SUDTData;
-
   SUDTData data;
-  uint64_t data_len = sizeof(data);
-  CHECK(ckb_load_cell_data(&data, &data_len, 0, index, source));
-  CHECK2(data_len >= 4, CKBERR_CELLDATA_TOO_LOW);
+  */
+
+  const uint32_t sudt_data_size =
+      sizeof(uint128_t) + sizeof(uint32_t) + sizeof(Hash);
+  uint8_t sudt_data[sudt_data_size];
+
+  uint64_t data_len = sudt_data_size;
+  int ret_err = ckb_load_cell_data(sudt_data, &data_len, 0, index, source);
+  CHECK(ret_err);
+  CHECK2(data_len > sizeof(uint128_t), CKBERR_CELLDATA_TOO_LOW);
   if (amount)
-    *amount = data.amount;
+    *amount = *((uint128_t*)sudt_data);
 
   if (type == NULL && hash == NULL) {
     return CUDT_SUCCESS;
   }
 
-  if (data_len == sizeof(data) && data.flag == 0xFFFFFFFF) {
+  uint32_t flag = *(uint32_t*)(sudt_data + sizeof(uint128_t));
+  if (data_len == sudt_data_size && flag == 0xFFFFFFFF) {
     if (hash)
-      memcpy(hash, data.smt_hash, sizeof(data.smt_hash));
+      memcpy(hash, sudt_data + (sizeof(uint128_t) + sizeof(uint32_t)),
+             sizeof(Hash));
     if (type)
       *type = TypeScript_sUDT;
     return CUDT_SUCCESS;
@@ -252,25 +261,20 @@ CKBResCode get_args(TypeID* type_id, Identity* identity, bool* has_id) {
   mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
   mol_seg_t args_bytes_seg = MolReader_Bytes_raw_bytes(&args_seg);
 
-  typedef struct _CompactArgs {
-    uint8_t ver;
-    TypeID type_id;
-    Identity identity;
-  } CompactArgs;
+  const int args_size = 1 + sizeof(TypeID);
+  const int args_size_with_id = 1 + sizeof(TypeID) + sizeof(Identity);
 
-  CompactArgs* args = (CompactArgs*)args_bytes_seg.ptr;
-  if (args_bytes_seg.size == sizeof(CompactArgs)) {
-    memcpy(identity, &(args->identity), sizeof(Identity));
-    *has_id = true;
-  } else if (args_bytes_seg.size == sizeof(CompactArgs) - sizeof(Identity)) {
+  CHECK2((args_bytes_seg.ptr[0] == 0), CUDTERR_INVALID_VERSION);
+  *type_id = *(TypeID*)(args_bytes_seg.ptr + 1);
+
+  if (args_bytes_seg.size == args_size) {
     *has_id = false;
+  } else if (args_bytes_seg.size == args_size_with_id) {
+    *has_id = true;
+    *identity = *(Identity*)(args_bytes_seg.ptr + args_size);
   } else {
     CHECK(CUDTERR_ARGS_SIZE_INVALID);
   }
-
-  CHECK2(args->ver == 0, CUDTERR_INVALID_VERSION);
-  memcpy(type_id, &(args->type_id), sizeof(TypeID));
-
 exit_func:
   return err;
 }
