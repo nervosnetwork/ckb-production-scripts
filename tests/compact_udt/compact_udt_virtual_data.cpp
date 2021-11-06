@@ -662,8 +662,8 @@ void GenerateTransaction::fill_scritp_data(VDBinData* bin, VDScript* script) {
   CHash script_hash = script->get_script_hash();
   AutoSBuf sc_code(script_hash);
   auto args = script->get_args_data();
-  auto args_buf = cudtmol_Bytes(args.data(), args.size());
-  AutoSBuf buf = cudtmol_Script(sc_code.get(), 0, &args_buf);
+  AutoSBuf args_buf = cudtmol_Bytes(args.data(), args.size());
+  AutoSBuf buf = cudtmol_Script(sc_code.get(), 0, args_buf.get());
   bin->script_data_ = buf.copy();
   bin->scritp_hash_ = script_hash;
 

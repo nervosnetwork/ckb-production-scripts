@@ -154,10 +154,12 @@ CBuffer CKBKey::signature(const CHash* msg) {
   ret = secp256k1_ecdsa_recoverable_signature_serialize_compact(
       (secp256k1_context*)ctx_, raw_sig.data(), &recid, &sig);
   if (ret == 0) {
+    secp256k1_context_destroy(ctx);
     ASSERT_DBG(false);
     return CBuffer();
   }
   raw_sig[64] = (uint8_t)recid;
 
+  secp256k1_context_destroy(ctx);
   return raw_sig;
 }

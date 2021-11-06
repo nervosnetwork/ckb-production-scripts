@@ -149,6 +149,7 @@ SBuffer cudtmol_alloc(uint32_t len) {
 SBuffer cudtmol_alloc_buf(uint8_t* buf, uint32_t len) {
   SBuffer ret = cudtmol_alloc(len);
   memcpy(ret.buf, buf, len);
+  free(buf);
   return ret;
 }
 
@@ -414,7 +415,9 @@ SBuffer cudtmol_Witness(SBuffer* lock, SBuffer* input, SBuffer* output) {
   }
 
   mol_seg_res_t r = MolBuilder_WitnessArgs_build(b);
-  return cudtmol_alloc_seg(&r);
+  SBuffer ret = cudtmol_alloc_seg(&r);
+  //MolBuilder_WitnessArgs_clear(b);
+  return ret;
 }
 
 SBuffer cudtmol_bytes_vec(SBuffer** data, uint32_t len) {
