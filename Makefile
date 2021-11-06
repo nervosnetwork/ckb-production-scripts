@@ -105,8 +105,12 @@ mol:
 	make c/xudt_rce_mol2.h
 	make xudt/src/xudt_rce_mol.rs
 
+	rm -f tests/compact_udt_rust/src/blockchain_mol.rs
+	rm -f tests/compact_udt_rust/src/compact_udt_mol.rs
 	rm -f c/compact_udt_mol.h
 	rm -f c/compact_udt_mol2.h
+	make tests/compact_udt_rust/src/blockchain.rs
+	make tests/compact_udt_rust/src/compact_udt_mol.rs
 	make c/compact_udt_mol.h
 	make c/compact_udt_mol2.h
 
@@ -121,6 +125,12 @@ c/xudt_rce_mol.h: c/xudt_rce.mol
 c/xudt_rce_mol2.h: c/xudt_rce.mol
 	moleculec --language - --schema-file c/xudt_rce.mol --format json > build/blockchain_mol2.json
 	moleculec-c2 --input build/blockchain_mol2.json | clang-format -style=Google > c/xudt_rce_mol2.h
+
+tests/compact_udt_rust/src/blockchain.rs: c/blockchain.mol
+	${MOLC} --language rust --schema-file $< | rustfmt > $@
+
+tests/compact_udt_rust/src/compact_udt_mol.rs: c/xudt_rce.mol
+	${MOLC} --language rust --schema-file $< | rustfmt > $@
 
 build/xudt_rce: c/xudt_rce.c c/rce.h
 	$(CC) $(XUDT_RCE_CFLAGS) $(LDFLAGS) -o $@ $<

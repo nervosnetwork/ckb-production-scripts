@@ -1,30 +1,31 @@
 ﻿#ifndef _C_COMPACT_UDE_LOCK_H_
 #define _C_COMPACT_UDE_LOCK_H_
 
-#include <stdbool.h>
 #include <stdint.h>
 
 // check
 #undef CHECK2
 #undef CHECK
 
-#define CUDT_CHECK2(cond, code) \
-  do {                     \
-    if (!(cond)) {         \
-      err = code;          \
-      ASSERT_DBG(0);       \
-      goto exit_func;      \
-    }                      \
+#define CUDT_CHECK2(cond, code)                                    \
+  do {                                                             \
+    if (!(cond)) {                                                 \
+      err = code;                                                  \
+      ASSERT_DBG(0);                                               \
+      printf("Check error(%d): %s:%d\n", err, __FILE__, __LINE__); \
+      goto exit_func;                                              \
+    }                                                              \
   } while (0)
 
-#define CUDT_CHECK(_code)    \
-  do {                  \
-    int code = (_code); \
-    if (code != 0) {    \
-      err = code;       \
-      ASSERT_DBG(0);    \
-      goto exit_func;   \
-    }                   \
+#define CUDT_CHECK(_code)                                          \
+  do {                                                             \
+    int code = (_code);                                            \
+    if (code != 0) {                                               \
+      err = code;                                                  \
+      ASSERT_DBG(0);                                               \
+      printf("Check error(%d): %s:%d\n", err, __FILE__, __LINE__); \
+      goto exit_func;                                              \
+    }                                                              \
   } while (0)
 
 #ifdef CKB_USE_SIM
@@ -57,25 +58,27 @@ typedef __uint128_t uint128_t;
 enum _CompactResult {
   CUDT_SUCCESS = 0,
 
-  CUDTERR_LOAD_SCRIPT,
+  CUDTERR_LOAD_SCRIPT = 1,
   CUDTERR_LOAD_SCRIPT_TOO_LONG,
   CUDTERR_LOAD_SCRIPT_ENCODING,
   CUDTERR_ARGS_SIZE_INVALID,
   CUDTERR_ARGS_UNKNOW,
 
-  CUDTERR_LOAD_CELL_DATA,
+  CUDTERR_LOAD_INPUT_CELL_DATA = 6,
+  CUDTERR_LOAD_OUTPUT_CELL_DATA,
+  CUDTERR_LOAD_UDT_INVALID,
   CUDTERR_CELL_NOT_ONLY,
   CDUTERR_CELL_DATA_TOO_LOW,
   CUDTERR_LOAD_SCRIPT_HASH,
   CUDTERR_INVALID_VERSION,
 
-  CUDTERR_LOAD_OTHER_DATA,
+  CUDTERR_LOAD_OTHER_DATA = 13,
 
-  CUDTERR_WITNESS_INVALID,
+  CUDTERR_WITNESS_INVALID = 14,
   CUDTERR_WITNESS_OTHER_INVALID,
   CUDTERR_CHECK_IDENTITY_INVALID,
 
-  CUDTERR_KV_TOO_LONG,
+  CUDTERR_KV_TOO_LONG = 17,
   CUDTERR_KV_VERIFY,
 
   CUDTERR_SMTPROOF_SIZE_INVALID,

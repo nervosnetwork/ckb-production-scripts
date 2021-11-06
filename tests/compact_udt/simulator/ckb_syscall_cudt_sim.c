@@ -1,4 +1,4 @@
-﻿#include "ckb_syscall_cudt_sim.h"
+#include "ckb_syscall_cudt_sim.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -11,6 +11,8 @@
 
 #include "compact_udt_cc.h"
 
+#include "dump_data.h"
+
 void load_offset(uint8_t* source_buff,
                  uint64_t source_size,
                  void* addr,
@@ -18,7 +20,7 @@ void load_offset(uint8_t* source_buff,
                  size_t offset) {
   ASSERT_DBG(source_size > offset);
   if (*len == 0) {
-    *len = source_size;
+    *len = source_size - offset;
     return;
   }
 
@@ -31,11 +33,17 @@ void load_offset(uint8_t* source_buff,
 // ckb sim api
 
 int ckb_load_tx_hash(void* addr, uint64_t* len, size_t offset) {
+  if (dd_using_dump()) {
+    return dd_load_tx_hash(addr, len, offset);
+  }
   *len = 32;
   return 0;
 }
 
 int ckb_load_script_hash(void* addr, uint64_t* len, size_t offset) {
+  if (dd_using_dump()) {
+    return dd_load_script_hash(addr, len, offset);
+  }
   CUDTMOL_Data param = {0};
   param.index = 0;
   param.source = CKB_SOURCE_INPUT;
@@ -60,6 +68,9 @@ int ckb_load_cell_data(void* addr,
                        size_t offset,
                        size_t index,
                        size_t source) {
+  if (dd_using_dump()) {
+    return dd_load_cell_data(addr, len, offset, index, source);
+  }
   CUDTMOL_Data param = {0};
   param.index = index;
   param.source = source;
@@ -77,6 +88,9 @@ int ckb_load_cell_data(void* addr,
 }
 
 int ckb_load_script(void* addr, uint64_t* len, size_t offset) {
+  if (dd_using_dump()) {
+    return dd_load_script(addr, len, offset);
+  }
   CUDTMOL_Data param = {0};
   param.index = 0;
   param.source = CKB_SOURCE_GROUP_INPUT;
@@ -103,7 +117,10 @@ int ckb_checked_load_script(void* addr, uint64_t* len, size_t offset) {
 }
 
 int ckb_calculate_inputs_len() {
-  return 1;
+  if (dd_using_dump()) {
+    return dd_calculate_inputs_len();
+  }
+  return cudtmol_get_input_len();
 }
 
 int ckb_load_witness(void* addr,
@@ -111,6 +128,9 @@ int ckb_load_witness(void* addr,
                      size_t offset,
                      size_t index,
                      size_t source) {
+  if (dd_using_dump()) {
+    return dd_load_witness(addr, len, offset, index, source);
+  }
   CUDTMOL_Data param = {0};
   param.index = index;
   param.source = source;
@@ -152,6 +172,9 @@ int ckb_load_cell_by_field(void* addr,
                            size_t index,
                            size_t source,
                            size_t field) {
+  if (dd_using_dump()) {
+    return dd_load_cell_by_field(addr, len, offset, index, source, field);
+  }
   CUDTMOL_Data param = {0};
   param.index = index;
   param.source = source;

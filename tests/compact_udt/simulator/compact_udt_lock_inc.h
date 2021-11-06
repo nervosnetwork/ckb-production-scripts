@@ -126,6 +126,7 @@ typedef struct __CUDTMOL_Data {
 } CUDTMOL_Data;
 
 uint8_t* cudtmol_get_data(CUDTMOL_Data* param);
+uint32_t cudtmol_get_input_len();
 
 #ifdef __cplusplus
 }

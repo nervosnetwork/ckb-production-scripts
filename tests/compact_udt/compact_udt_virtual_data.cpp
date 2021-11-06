@@ -69,8 +69,13 @@ CBuffer VDCellData::get_cell_data_xudt() {
   AutoSBuf buf = cudtmol_bytes_vec(data_ptr_buf.data(), data_ptr_buf.size());
   AutoSBuf xudt_data_buf = cudtmol_xudtdata(lock_buf.get(), buf.get());
 
-  return AutoSBuf(cudtmol_Bytes(xudt_data_buf.ptr(), xudt_data_buf.len()))
-      .copy();
+  //AutoSBuf xudt_byte_buf = cudtmol_Bytes(xudt_data_buf.ptr(), xudt_data_buf.len());
+  CBuffer ret_buf;
+  ret_buf.resize(sizeof(uint128_t) + xudt_data_buf.len());
+  memcpy(ret_buf.data(), &amount_, sizeof(uint128_t));
+  memcpy(ret_buf.data() + sizeof(uint128_t), xudt_data_buf.ptr(), xudt_data_buf.len());
+
+  return ret_buf;
 }
 
 //////////////////// VDScript /////////////////////////////
@@ -505,7 +510,7 @@ CBuffer VDAllData::gen_witness(bool empty_sign,
       deposit_vec_buf.get(), transfer_vec_buf.get(), kv_state_vec_buf.get(),
       kv_proof_buf.get(), sign_buf->get());
 
-  AutoSBuf witness_buf = cudtmol_Witness(NULL, cudt_buf.get(), NULL);
+  AutoSBuf witness_buf = cudtmol_Witness(cudt_buf.get(), NULL, NULL);
 
   return witness_buf.copy();
 }

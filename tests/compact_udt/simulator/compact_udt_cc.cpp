@@ -4,6 +4,7 @@
 
 #include "ckb_consts.h"
 #include "compact_udt_virtual_data.h"
+#include "dump_data.h"
 
 #include <stddef.h>
 #include <iterator>
@@ -30,6 +31,8 @@ uint8_t* cc_get_Data_by_field(CUDTMOL_Data* param) {
   if (param->field == CKB_CELL_FIELD_LOCK_HASH) {
     ptr = bin->scritp_hash_.get();
     param->len = bin->scritp_hash_.len();
+
+  } else if (param->field == CKB_CELL_FIELD_LOCK_HASH) {
 
   } else {
     ASSERT_DBG(false);
@@ -108,5 +111,12 @@ extern "C" {
 uint8_t* cc_get_data(CUDTMOL_Data* param) {
   return cc_get_data_tr(param);
 }
+
+uint32_t cc_get_input_len() {
+  auto* vd = GlobalData::get()->get_virtual_data();
+  ASSERT_DBG(vd);
+  return vd->inputs_.size();
+}
+
 
 }  // extern "C"

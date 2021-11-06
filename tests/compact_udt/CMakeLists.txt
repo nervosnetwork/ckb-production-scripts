@@ -9,14 +9,18 @@ set(CUDT_LOCK_C_DIR ${PROJECT_SOURCE_DIR}/../../c)
 set(CUDT_LOCK_DEPS ${CUDT_LOCK_DIR}/deps)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
 
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fsanitize=undefined")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize=undefined")
+
 if (${EnableCoverage}_ STREQUAL "Enable_" )
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage")
 endif()
 
 add_definitions(-DCKB_SIMULATOR)
@@ -27,6 +31,8 @@ add_definitions(-DCKB_USE_SIM)
 
 if (${CMAKE_BUILD_TYPE}_ STREQUAL "Debug_")
     add_definitions(-DDEBUG_CKB)
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0")
 endif()
 add_definitions(-DHAVE_CONFIG_H=1)
 
@@ -49,11 +55,13 @@ add_executable(cudt_simulator
 	${PROJECT_SOURCE_DIR}/simulator/ckb_syscall_cudt_sim.c
 	${PROJECT_SOURCE_DIR}/simulator/compact_udt_lock_inc.c
 	${PROJECT_SOURCE_DIR}/simulator/compact_udt_cc.cpp
+	${PROJECT_SOURCE_DIR}/simulator/dump_data.cpp
+	${PROJECT_SOURCE_DIR}/simulator/autogenerate_data.h
 	
 	${PROJECT_SOURCE_DIR}/util/util.cpp
-	${CUDT_LOCK_DEPS}/secp256k1/src/secp256k1.c
+	${PROJECT_SOURCE_DIR}/util/util_secp256k1.c
 )
-#target_link_libraries(cudt_simulator PRIVATE -fsanitize=address -fsanitize=undefined)
+target_link_libraries(cudt_simulator PRIVATE -fsanitize=address -fsanitize=undefined)
 
 if (${EnableCoverage}_ STREQUAL "Enable_" )
 	target_link_libraries(cudt_simulator PRIVATE -fprofile-arcs -ftest-coverage)

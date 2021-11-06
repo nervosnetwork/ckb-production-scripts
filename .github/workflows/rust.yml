@@ -26,3 +26,5 @@ jobs:
 #      run: cd tests/xudt_rce && bash run.sh
     - name: Run compact UDT lock simulator tests
       run: tests/compact_udt/run.sh
+    - name: Run compact UDT lock rust tests
+      run: cd tests/compact_udt_rust && cargo test
