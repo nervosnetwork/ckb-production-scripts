@@ -13,17 +13,20 @@ jobs:
       run: git submodule update --init
     - name: Build contract
       run: make all-via-docker
-# TODO Temporarily comment out these item
-#    - name: Build test extensions
-#      run: make -f tests/xudt_rce/extension_scripts.Makefile all-via-docker
-#    - name: Run simulator tests
-#      run: bash tests/validate_signature_rsa/run.sh
-#    - name: Run tests
-#      run: cargo test
-#    - name: Run xudt tests
-#      run: cd tests/xudt_rce_rust && cargo test
-#    - name: Run xudt simulator tests
-#      run: cd tests/xudt_rce && bash run.sh
+    - name: Build test extensions
+      run: make -f tests/xudt_rce/extension_scripts.Makefile all-via-docker
+    - name: Run simulator tests
+      run: bash tests/validate_signature_rsa/run.sh
+    - name: Run tests
+      run: cargo test
+    - name: Run xudt tests
+      run: cd tests/xudt_rce_rust && cargo test
+    - name: Run xudt simulator tests
+      run: cd tests/xudt_rce && bash run.sh
+    - name: Run auth simulator tests
+      run: cd tests/auth && bash run.sh
+    - name: Run auth_rust tests
+      run: cd tests/auth_rust && bash run.sh
     - name: Run compact UDT lock simulator tests
       run: tests/compact_udt/run.sh
     - name: Run compact UDT lock rust tests

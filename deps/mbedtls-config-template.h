@@ -30,8 +30,9 @@
 #if defined(_MSC_VER) && !defined(_CRT_SECURE_NO_DEPRECATE)
 #define _CRT_SECURE_NO_DEPRECATE 1
 #endif
+#ifndef NULL
 #define NULL ((void*)0)
-
+#endif
 
 /**
  * \name SECTION: System support
