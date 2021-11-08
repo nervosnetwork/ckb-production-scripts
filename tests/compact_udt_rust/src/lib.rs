@@ -17,7 +17,7 @@ use ckb_types::{
 };
 use rand::{thread_rng, Rng};
 use sparse_merkle_tree::{default_store::DefaultStore, SparseMerkleTree, H256};
-use std::{collections::HashMap, convert::TryInto, vec};
+use std::{collections::HashMap, convert::TryInto, u128, vec};
 
 pub struct CKBBlake2bHasher(ckb_hash::Blake2b);
 
@@ -205,6 +205,9 @@ pub struct TXBuilder {
     pub transfer_count: u32,
 
     cudt_hash: Option<Byte32>,
+
+    // test
+    test_data_rm_user_output: Vec<(CellID, UserID)>,
 }
 
 impl TXBuilder {
@@ -229,6 +232,7 @@ impl TXBuilder {
             transfers: HashMap::new(),
             transfer_count: 0,
             cudt_hash: Option::None,
+            test_data_rm_user_output: Vec::new(),
         }
     }
 
@@ -380,6 +384,19 @@ impl TXBuilder {
         )
     }
 
+    // test
+    pub fn remove_user_output(
+        mut self,
+        cell_id: u32,
+        user_id: u32,
+    ) -> Self {
+        self.test_data_rm_user_output.push((
+            CellID::new(cell_id),
+            UserID::new(user_id),
+        ));
+        self
+    }
+
     fn add_cell_deps(mut self, builder: TransactionBuilder) -> (Self, TransactionBuilder) {
         let mut builder = builder;
         for (_id, bin) in self.script_codes.clone() {
@@ -501,47 +518,76 @@ impl TXBuilder {
         }
         self
     }
+    fn gen_kv_users(mut self, cell: TXCell, id: CellID, user: &TXUser) -> Self {
+        let identity = self.get_user_identity(user.index);
+
+        let mut nonce = user.nonce;
+        let kv_pair = WitnessKVPair {
+            index: user.index,
+            identity: identity.clone(),
+            amount: user.amount,
+            nonce: nonce,
+        };
+        let cell_mut = self.cells.get_mut(&id).unwrap();
+        cell_mut.input_kv_pairs.push(kv_pair.clone());
+
+        let mut amount: u128 = user.amount;
+        for deposit in &cell.deposit_vec {
+            if deposit.target == user.index {
+                amount += deposit.amount;
+            }
+        }
+
+        for transfer in &cell.transfer_vec {
+            if transfer.source == user.index {
+                if transfer.amount > amount {
+                    amount = 0;
+                } else {
+                    amount -= transfer.amount;
+                }
+
+                if transfer.fee > amount {
+                    amount = 0;
+                } else {
+                    amount -= transfer.fee;
+                }
+
+                if nonce == 0xffffffff {
+                    nonce = 0;
+                } else {
+                    nonce += 1;
+                }
+            }
+        }
+        let kv_pair = WitnessKVPair {
+            index: user.index,
+            identity: identity,
+            amount: amount,
+            nonce: nonce,
+        };
+        let cell_mut = self.cells.get_mut(&id).unwrap();
+
+        for (cell_id, user_id) in self.test_data_rm_user_output.clone() {
+            if cell_id == cell.id && user_id == user.index {
+                return self;
+            }
+        }
+
+        cell_mut.output_kv_pairs.push(kv_pair.clone());
+        self
+    }
+    fn gen_kv_info(mut self, cell: TXCell, id: CellID) -> Self {
+        if cell.lock_script_id != self.cudt_scritp_id.unwrap() {
+            return self;
+        }
+        for user in &cell.users_info {
+            self = self.gen_kv_users(cell.clone(), id, user);
+        }
+        self
+    }
     fn gen_smt_info(mut self) -> Self {
         for (id, cell) in self.cells.clone() {
-            if cell.lock_script_id != self.cudt_scritp_id.unwrap() {
-                continue;
-            }
-            for user in &cell.users_info {
-                let identity = self.get_user_identity(user.index);
-
-                let mut nonce = user.nonce;
-                let kv_pair = WitnessKVPair {
-                    index: user.index,
-                    identity: identity.clone(),
-                    amount: user.amount,
-                    nonce: nonce,
-                };
-                let cell_mut = self.cells.get_mut(&id).unwrap();
-                cell_mut.input_kv_pairs.push(kv_pair.clone());
-
-                let mut amount: u128 = user.amount;
-                for deposit in &cell.deposit_vec {
-                    if deposit.target == user.index {
-                        amount += deposit.amount;
-                    }
-                }
-
-                for transfer in &cell.transfer_vec {
-                    if transfer.source == user.index {
-                        amount -= transfer.amount;
-                        amount -= transfer.fee;
-                        nonce += 1;
-                    }
-                }
-                let kv_pair = WitnessKVPair {
-                    index: user.index,
-                    identity: identity,
-                    amount: amount,
-                    nonce: nonce,
-                };
-                let cell_mut = self.cells.get_mut(&id).unwrap();
-                cell_mut.output_kv_pairs.push(kv_pair.clone());
-            }
+            self = self.gen_kv_info(cell, id);
         }
 
         for (id, cell) in self.cells.clone() {
@@ -652,7 +698,7 @@ impl TXBuilder {
         xudt_builder = xudt_builder.data(bc_builder.build());
 
         let xudt_data = xudt_builder.build().as_bytes();
-    
+
         let mut ret = BytesMut::with_capacity(xudt_data.len() + 16);
         ret.put_u128_le(*amount);
         ret.put(xudt_data);

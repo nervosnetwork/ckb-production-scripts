@@ -149,7 +149,36 @@ fn success_mixed_cell() {
     assert!(res.is_ok(), "error: {}", res.unwrap_err().to_string());
 }
 
-// TODO failed and success xudt
+#[test]
+fn success_amount_overflow() {
+    #[rustfmt::skip]
+    let cells_data = vec![MiscCellData {
+        lock_scritp: 0,
+        type_scritp: 1,
+        i_amount: 0xffffffffffffffff,
+        o_amount: 100,
+        users: vec![
+            MiscUserData {id: 0, n: 20, a: 10  },
+            MiscUserData {id: 1, n: 30, a: 100 },
+            MiscUserData {id: 2, n: 12, a: 500 },
+            MiscUserData {id: 3, n: 55, a: 10  },
+        ],
+    }];
+    
+    #[rustfmt::skip]
+    let transfer_data = vec![
+        MiscTransferData {sc: 0, sd: 0, tc: 0, td: 2, tt: 2, a: 5,  fee: 1 },
+        MiscTransferData {sc: 0, sd: 1, tc: 0, td: 3, tt: 2, a: 10, fee: 1 },
+    ];
+
+    let builder = TXBuilder::new();
+    let builder = gen_tx_builder(builder, cells_data, transfer_data);
+
+    let tx = builder.build();
+    let res = tx.run(false);
+    assert!(res.is_ok(), "error: {}", res.unwrap_err().to_string());
+}
+
 #[test]
 fn failed_mixed_cell() {
     #[rustfmt::skip]
@@ -187,6 +216,106 @@ fn failed_mixed_cell() {
 
     let tx = builder.build();
     let res = tx.run(true);
+    assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
+}
+
+#[test]
+fn failed_nonce_overflow() {
+    #[rustfmt::skip]
+    let cells_data = vec![MiscCellData {
+        lock_scritp: 0,
+        type_scritp: 1,
+        i_amount: 10000,
+        o_amount: 100,
+        users: vec![
+            MiscUserData {id: 0, n: 20, a: 10  },
+            MiscUserData {id: 1, n: 0xffffffff, a: 100 },
+            MiscUserData {id: 2, n: 12, a: 500 },
+            MiscUserData {id: 3, n: 55, a: 10  },
+        ],
+    }];
+    
+    #[rustfmt::skip]
+    let transfer_data = vec![
+        MiscTransferData {sc: 0, sd: 0, tc: 0, td: 2, tt: 2, a: 5,  fee: 1 },
+        MiscTransferData {sc: 0, sd: 1, tc: 0, td: 3, tt: 2, a: 10, fee: 1 },
+    ];
+
+    let builder = TXBuilder::new();
+    let builder = gen_tx_builder(builder, cells_data, transfer_data);
+
+    let tx = builder.build();
+    let res = tx.run(false);
+    assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
+}
+
+#[test]
+fn faliled_amount_overflow() {
+    #[rustfmt::skip]
+    let cells_data = vec![MiscCellData {
+        lock_scritp: 0,
+        type_scritp: 1,
+        i_amount: 0xffffffffffffffff,
+        o_amount: 100,
+        users: vec![
+            MiscUserData {id: 0, n: 20, a: 10  },
+            MiscUserData {id: 1, n: 30, a: 100 },
+            MiscUserData {id: 2, n: 12, a: 500 },
+            MiscUserData {id: 3, n: 55, a: 10  },
+        ],
+    },MiscCellData {
+        lock_scritp: 0,
+        type_scritp: 1,
+        i_amount: 100000,
+        o_amount: 100,
+        users: vec![
+            MiscUserData {id: 0, n: 20, a: 10  },
+            MiscUserData {id: 1, n: 600, a: 100 },
+        ],
+    }];
+    
+    #[rustfmt::skip]
+    let transfer_data = vec![
+        MiscTransferData {sc: 0, sd: 0, tc: 0, td: 2, tt: 2, a: 5,  fee: 1 },
+        MiscTransferData {sc: 1, sd: 1, tc: 0, td: 1, tt: 2, a: 10, fee: 1 },
+    ];
+
+    let builder = TXBuilder::new();
+    let builder = gen_tx_builder(builder, cells_data, transfer_data);
+
+    let tx = builder.build();
+    let res = tx.run(false);
+    assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
+}
+
+#[test]
+fn faliled_def_user() {
+    #[rustfmt::skip]
+    let cells_data = vec![MiscCellData {
+        lock_scritp: 0,
+        type_scritp: 1,
+        i_amount: 10000,
+        o_amount: 100,
+        users: vec![
+            MiscUserData {id: 0, n: 20, a: 10  },
+            MiscUserData {id: 1, n: 30, a: 100 },
+            MiscUserData {id: 2, n: 12, a: 500 },
+            MiscUserData {id: 3, n: 55, a: 10  },
+        ],
+    }];
+    
+    #[rustfmt::skip]
+    let transfer_data = vec![
+        MiscTransferData {sc: 0, sd: 0, tc: 0, td: 2, tt: 2, a: 5,  fee: 1 },
+        MiscTransferData {sc: 0, sd: 1, tc: 0, td: 3, tt: 2, a: 10, fee: 1 },
+    ];
+
+    let builder = TXBuilder::new();
+    let builder = gen_tx_builder(builder, cells_data, transfer_data);
+    let builder = builder.remove_user_output(0, 2);
+
+    let tx = builder.build();
+    let res = tx.run(false);
     assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
 }
 
