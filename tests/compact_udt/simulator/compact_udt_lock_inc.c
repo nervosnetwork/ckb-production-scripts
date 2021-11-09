@@ -1,9 +1,39 @@
 
 
-#include "compact_udt_lock.c"
+#include <stdbool.h>
+
+#include "ckb_syscall_auth_sim.h"
+#include "ckb_syscall_cudt_sim.h"
 
 #include "compact_udt_cc.h"
 #include "compact_udt_lock_inc.h"
+
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnonnull-compare"
+#endif
+
+#define CKB_PRODUCTION_SCRIPTS_CKB_AUTH_H_
+#include "auth.c"
+
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#pragma GCC diagnostic pop
+#endif
+
+#include "compact_udt_lock.c"
+
+int ckb_auth(CkbEntryType* entry,
+             CkbAuthType* id,
+             const uint8_t* signature,
+             uint32_t signature_size,
+             const uint8_t* message32) {
+  return ckb_auth_validate(id->algorithm_id, signature, signature_size,
+                           message32, 32, id->content, 20);
+}
 
 void test() {
   uint8_t proof[] = {
@@ -72,14 +102,14 @@ void test() {
 
   uint8_t ref_hash[32] = {0};
   smt_calculate_root(ref_hash, &smt_state, proof, sizeof(proof));
-  //PRINT_MEM2(ref_hash, 32);
+  // PRINT_MEM2(ref_hash, 32);
 }
 
 int compact_udt_lock_main() {
   test();
   int argc = 1;
   char* argv[] = {"./"};
-  int ret_code = simulator_main(argc, argv);
+  int ret_code = simulator_cudt_main(argc, argv);
   return ret_code;
 }
 
@@ -416,7 +446,7 @@ SBuffer cudtmol_Witness(SBuffer* lock, SBuffer* input, SBuffer* output) {
 
   mol_seg_res_t r = MolBuilder_WitnessArgs_build(b);
   SBuffer ret = cudtmol_alloc_seg(&r);
-  //MolBuilder_WitnessArgs_clear(b);
+  // MolBuilder_WitnessArgs_clear(b);
   return ret;
 }
 
@@ -441,12 +471,4 @@ SBuffer cudtmol_xudtdata(SBuffer* lock, SBuffer* data) {
 
   mol_seg_res_t r = MolBuilder_XudtData_build(b);
   return cudtmol_alloc_seg(&r);
-}
-
-uint8_t* cudtmol_get_data(CUDTMOL_Data* param) {
-  return cc_get_data(param);
-}
-
-uint32_t cudtmol_get_input_len() {
-  return cc_get_input_len();
 }

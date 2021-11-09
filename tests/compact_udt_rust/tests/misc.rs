@@ -12,6 +12,10 @@ lazy_static! {
         Bytes::from(include_bytes!("../../../build/always_success").as_ref());
     pub static ref XUDT_SCRIPT_BIN: Bytes =
         Bytes::from(include_bytes!("../../../build/always_success").as_ref());
+    pub static ref AUTH_SCRIPT_DL: Bytes =
+        Bytes::from(include_bytes!("../../../build/auth").as_ref());
+    pub static ref SECP256K1_DATA_BIN: Bytes =
+        Bytes::from(include_bytes!("../../../build/secp256k1_data").as_ref());
 }
 
 pub struct MiscUserData {
@@ -60,6 +64,14 @@ pub fn gen_tx_builder(
 
     let (builder_tmp, sc_id) = builder.add_script_code(XUDT_SCRIPT_BIN.clone());
     builder = builder_tmp.set_scritp_xudt_id(sc_id);
+    scritp_code_id_vec.push(sc_id);
+
+    let (builder_tmp, sc_id) = builder.add_script_code(AUTH_SCRIPT_DL.clone());
+    builder = builder_tmp;
+    scritp_code_id_vec.push(sc_id);
+
+    let (builder_tmp, sc_id) = builder.add_script_code(SECP256K1_DATA_BIN.clone());
+    builder = builder_tmp;
     scritp_code_id_vec.push(sc_id);
 
     // gen max users

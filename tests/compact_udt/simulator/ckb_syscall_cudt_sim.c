@@ -13,20 +13,26 @@
 
 #include "dump_data.h"
 
-void load_offset(uint8_t* source_buff,
-                 uint64_t source_size,
+void load_offset(CUDTMOL_Data* param,
                  void* addr,
                  uint64_t* len,
                  size_t offset) {
-  ASSERT_DBG(source_size > offset);
+  ASSERT_DBG(param->out_len > offset);
   if (*len == 0) {
-    *len = source_size - offset;
+    *len = param->out_len - offset;
     return;
   }
 
-  uint64_t size = source_size - offset < *len ? source_size - offset : *len;
-  memcpy(addr, source_buff + offset, size);
+  uint64_t size =
+      param->out_len - offset < *len ? param->out_len - offset : *len;
+  memcpy(addr, param->out_ptr + offset, size);
   *len = size;
+
+  if (param->out_need_free) {
+    free(param->out_ptr);
+    param->out_ptr = NULL;
+    param->out_len = 0;
+  }
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -48,18 +54,16 @@ int ckb_load_script_hash(void* addr, uint64_t* len, size_t offset) {
   param.index = 0;
   param.source = CKB_SOURCE_INPUT;
   param.type = CUDTMOLType_Witness;
-  param.len = 0;
   param.index_out_of_bound = false;
   param.by_field = true;
   param.field = CKB_CELL_FIELD_LOCK_HASH;
 
-  uint8_t* ptr = cudtmol_get_data(&param);
+  bool ret = cc_get_data(&param);
   if (param.index_out_of_bound)
     return CKB_INDEX_OUT_OF_BOUND;
+  ASSERT_DBG(ret);
 
-  ASSERT_DBG(ptr);
-
-  load_offset(ptr, param.len, addr, len, offset);
+  load_offset(&param, addr, len, offset);
   return 0;
 }
 
@@ -75,15 +79,13 @@ int ckb_load_cell_data(void* addr,
   param.index = index;
   param.source = source;
   param.type = CUDTMOLType_CellData;
-  param.len = 0;
   param.index_out_of_bound = false;
-  uint8_t* ptr = cudtmol_get_data(&param);
+  bool ret = cc_get_data(&param);
   if (param.index_out_of_bound)
     return CKB_INDEX_OUT_OF_BOUND;
+  ASSERT_DBG(ret);
 
-  ASSERT_DBG(ptr);
-
-  load_offset(ptr, param.len, addr, len, offset);
+  load_offset(&param, addr, len, offset);
   return 0;
 }
 
@@ -95,15 +97,14 @@ int ckb_load_script(void* addr, uint64_t* len, size_t offset) {
   param.index = 0;
   param.source = CKB_SOURCE_GROUP_INPUT;
   param.type = CUDTMOLType_Scritp;
-  param.len = 0;
   param.index_out_of_bound = false;
-  uint8_t* ptr = cudtmol_get_data(&param);
+  bool ret = cc_get_data(&param);
   if (param.index_out_of_bound)
     return CKB_INDEX_OUT_OF_BOUND;
 
-  ASSERT_DBG(ptr);
+  ASSERT_DBG(ret);
 
-  load_offset(ptr, param.len, addr, len, offset);
+  load_offset(&param, addr, len, offset);
   return 0;
 }
 
@@ -120,7 +121,7 @@ int ckb_calculate_inputs_len() {
   if (dd_using_dump()) {
     return dd_calculate_inputs_len();
   }
-  return cudtmol_get_input_len();
+  return cc_get_input_len();
 }
 
 int ckb_load_witness(void* addr,
@@ -135,15 +136,14 @@ int ckb_load_witness(void* addr,
   param.index = index;
   param.source = source;
   param.type = CUDTMOLType_Witness;
-  param.len = 0;
   param.index_out_of_bound = false;
-  uint8_t* ptr = cudtmol_get_data(&param);
+  bool ret = cc_get_data(&param);
   if (param.index_out_of_bound)
     return CKB_INDEX_OUT_OF_BOUND;
 
-  ASSERT_DBG(ptr);
+  ASSERT_DBG(ret);
 
-  load_offset(ptr, param.len, addr, len, offset);
+  load_offset(&param, addr, len, offset);
   return 0;
 }
 
@@ -179,17 +179,29 @@ int ckb_load_cell_by_field(void* addr,
   param.index = index;
   param.source = source;
   param.type = CUDTMOLType_Witness;
-  param.len = 0;
   param.index_out_of_bound = false;
   param.by_field = true;
   param.field = field;
 
-  uint8_t* ptr = cudtmol_get_data(&param);
+  bool ret = cc_get_data(&param);
   if (param.index_out_of_bound)
     return CKB_INDEX_OUT_OF_BOUND;
+  ASSERT_DBG(ret);
 
-  ASSERT_DBG(ptr);
-
-  load_offset(ptr, param.len, addr, len, offset);
+  load_offset(&param, addr, len, offset);
   return 0;
+}
+
+int ckb_checked_load_cell_by_field(void* addr,
+                                   uint64_t* len,
+                                   size_t offset,
+                                   size_t index,
+                                   size_t source,
+                                   size_t field) {
+  uint64_t old_len = *len;
+  int ret = ckb_load_cell_by_field(addr, len, offset, index, source, field);
+  if (ret == CKB_SUCCESS && (*len) > old_len) {
+    ret = CKB_LENGTH_NOT_ENOUGH;
+  }
+  return ret;
 }

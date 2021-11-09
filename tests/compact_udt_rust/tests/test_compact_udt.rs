@@ -7,6 +7,7 @@ use misc::*;
 //  1: sudt
 //  2: always_success
 
+/*
 #[test]
 fn success_single_cell() {
     #[rustfmt::skip]
@@ -36,6 +37,7 @@ fn success_single_cell() {
     let res = tx.run(false);
     assert!(res.is_ok(), "error: {}", res.unwrap_err().to_string());
 }
+*/
 
 #[test]
 fn success_mulit_all_cudt() {
@@ -108,7 +110,7 @@ fn success_mulit_all_cudt() {
     let res = tx.run(false);
     assert!(res.is_ok(), "error: {}", res.unwrap_err().to_string());
 }
-
+/*
 #[test]
 fn success_mixed_cell() {
     #[rustfmt::skip]
@@ -318,4 +320,4 @@ fn faliled_def_user() {
     let res = tx.run(false);
     assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
 }
-
+*/

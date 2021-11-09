@@ -106,28 +106,6 @@ SBuffer cudtmol_Witness(SBuffer* lock, SBuffer* input, SBuffer* output);
 SBuffer cudtmol_bytes_vec(SBuffer** data, uint32_t len);
 SBuffer cudtmol_xudtdata(SBuffer* lock, SBuffer* data);
 
-enum _CompactUDTMolType {
-  CUDTMOLType_Scritp,
-  CUDTMOLType_CellData,
-  CUDTMOLType_Witness,
-};
-typedef uint8_t CompactUDTMolType;
-
-typedef struct __CUDTMOL_Data {
-  CompactUDTMolType type;
-  size_t index;
-  size_t source;
-  uint32_t len;
-  bool index_out_of_bound;
-
-  size_t field;
-  bool by_field;
-
-} CUDTMOL_Data;
-
-uint8_t* cudtmol_get_data(CUDTMOL_Data* param);
-uint32_t cudtmol_get_input_len();
-
 #ifdef __cplusplus
 }
 #endif  // __cplusplus

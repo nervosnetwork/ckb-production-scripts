@@ -39,24 +39,27 @@ void free_temporary_cache(uint32_t len) {
   g_now_is_temporary_cache_ -= len;
 }
 
-int ckb_auth_validate(uint8_t auth_algorithm_id,
-                      const uint8_t* signature,
-                      uint32_t signature_size,
-                      const uint8_t* message,
-                      uint32_t message_size,
-                      uint8_t* pubkey_hash,
-                      uint32_t pubkey_hash_size) {
-  return 0;
-}
+// clang-format off
+const uint8_t g_auth_dl_cell_hash[] = {
+  0x07, 0xE7, 0xA0, 0x23, 0x1A, 0x3C, 0xF8, 0x15, 0x93, 0x70, 0x9D, 0x12, 0xCF, 0x8F, 0x8F, 0xBF, 
+  0x6C, 0xAE, 0x2D, 0xAB, 0x8A, 0xE3, 0x2A, 0x97, 0x39, 0xC9, 0x3D, 0x1F, 0xBC, 0x9F, 0x81, 0x62,
+};
+// clang-format on
 
 int auth_validate(const uint8_t* signature,
                   uint32_t signature_size,
                   const Hash* message,
                   const Identity* pubkey_hash) {
-  uint8_t type = ((uint8_t*)pubkey_hash)[0];
-  return ckb_auth_validate(type, signature, signature_size,
-                           (const uint8_t*)message, sizeof(Hash),
-                           (uint8_t*)pubkey_hash + 1, sizeof(Identity) - 1);
+  CkbEntryType entry;
+  memcpy(entry.code_hash, g_auth_dl_cell_hash, sizeof(Hash));
+  entry.hash_type = 2;  // ScriptHashType::Data1
+  entry.entry_category = EntryCategoryDynamicLinking;
+
+  CkbAuthType auth;
+  memcpy(&auth, pubkey_hash, sizeof(Identity));
+
+  return ckb_auth(&entry, &auth, signature, signature_size,
+                  (const uint8_t*)message);
 }
 
 static int extract_witness_lock(uint8_t* witness,
@@ -1019,7 +1022,7 @@ exit_func:
 
 int CKBMAIN(int argc, char* argv[]) {
   CKBResCode err = CKBERR_UNKNOW;
-  //printf("\n\n------------------------Begin------------------------\n");
+  // printf("\n\n------------------------Begin------------------------\n");
 
   CUDT_CHECK(load_all_data());
   CUDT_CHECK(check_total_udt());
@@ -1029,6 +1032,6 @@ int CKBMAIN(int argc, char* argv[]) {
   CUDT_CHECK(check_smt_root(&(g_cudt_cache->output_smt_hash)));
   err = CUDT_SUCCESS;
 exit_func:
-  //printf("------------------------End------------------------\n");
+  // printf("------------------------End------------------------\n");
   return err;
 }

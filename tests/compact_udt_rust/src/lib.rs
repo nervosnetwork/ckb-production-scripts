@@ -62,7 +62,7 @@ mod xudt_rce_mol;
 
 #[allow(dead_code)]
 mod dump_data;
-use dump_data::*;
+pub use dump_data::*;
 
 mod dummy_data_loader;
 use dummy_data_loader::DummyDataLoader;

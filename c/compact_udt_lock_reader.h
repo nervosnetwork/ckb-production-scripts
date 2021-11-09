@@ -1,15 +1,19 @@
-﻿#include "compact_udt_lock.h"
+﻿#ifndef _C_COMPACT_UDE_LOCK_READER_H_
+#define _C_COMPACT_UDE_LOCK_READER_H_
+
+#include "compact_udt_lock.h"
 
 #ifdef CKB_USE_SIM
 #include "simulator/ckb_syscall_cudt_sim.h"
-#define CKBMAIN simulator_main
+#define CKBMAIN simulator_cudt_main
 #else  // CKB_USE_SIM
+#include "ckb_auth.h"
 #include "ckb_consts.h"
 #include "ckb_syscalls.h"
+#include "blake2b.h"
 #define CKBMAIN main
 #endif  // CKB_USE_SIM
 
-#include "blake2b.h"
 
 #include "blockchain-api2.h"
 #include "ckb_consts.h"
@@ -386,3 +390,5 @@ CKBResCode get_scritp_code_hash(size_t index, size_t source, Hash* data) {
   memcpy(data, code_hash.ptr, sizeof(Hash));
   return CUDT_SUCCESS;
 }
+
+#endif  // _C_COMPACT_UDE_LOCK_READER_H_
