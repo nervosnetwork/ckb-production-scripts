@@ -27,6 +27,7 @@ class CDumpData {
   static CDumpData* get();
 
   bool using_dump();
+  bool case_success();  // Used to get the success or failure of this use case
 
   bool set_data(string name);
   bool set_default_data();  // TODO
@@ -73,6 +74,7 @@ class CDumpData {
 
  private:
   bool using_dump_ = false;
+  bool case_suc_ = false;
   int group_index_ = -1;
   std::unique_ptr<Data> data_;
 };

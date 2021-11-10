@@ -58,6 +58,7 @@ UTEST(rust_failed, dev) {
 }
 */
 
+/*
 UTEST(test_data, all) {
   string test_data_dir = string(COMPACT_UDT_UNITTEST_SRC_PATH) +
                          string("/../compact_udt_rust/test_data/");
@@ -76,6 +77,7 @@ UTEST(test_data, all) {
     auto dump_ptr = CDumpData::get();
     dump_ptr->set_data(file_name);
 
+    bool is_success = true;
     for (int i = 0; i < CDumpData::get()->get_cell_count(); i++) {
       if (!CDumpData::get()->set_group_index(i))
         continue;
@@ -84,17 +86,26 @@ UTEST(test_data, all) {
 
       auto virtual_data = transfaction.build();
       int ret_code = virtual_data.run_simulator();
-      ASSERT_DBG(!ret_code);
+      if (ret_code != 0) {
+        is_success = false;
+        break;
+      }
+    }
+    if (dump_ptr->case_success()) {
+      ASSERT_DBG(is_success);
+    } else {
+      ASSERT_DBG(!is_success);
     }
   }
   closedir(dp);
 }
+*/
 
-/*
 UTEST(test_data, all) {
   auto dump_ptr = CDumpData::get();
-  dump_ptr->set_data("success_single_cell.json");
+  dump_ptr->set_data("failed_amount_overflow.json");
 
+  bool is_success = true;
   for (int i = 0; i < CDumpData::get()->get_cell_count(); i++) {
     if (!CDumpData::get()->set_group_index(i))
       continue;
@@ -103,9 +114,17 @@ UTEST(test_data, all) {
 
     auto virtual_data = transfaction.build();
     int ret_code = virtual_data.run_simulator();
-    ASSERT_DBG(!ret_code);
+    if (ret_code != 0) {
+      is_success = false;
+      break;
+    }
+  }
+
+  if (dump_ptr->case_success()) {
+    ASSERT_DBG(is_success);
+  } else {
+    ASSERT_DBG(!is_success);
   }
 }
-*/
 
 UTEST_MAIN()

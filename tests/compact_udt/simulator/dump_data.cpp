@@ -59,12 +59,28 @@ bool CDumpData::using_dump() {
   return using_dump_;
 }
 
+bool CDumpData::case_success() {
+  return case_suc_;
+}
+
 #define GetVecFromJson(js, out_data) \
   {                                  \
     string js_data = js;             \
     out_data = decode_hex(js_data);  \
   }
 bool CDumpData::set_data(string name) {
+  auto fi_suc = name.find("success_");
+  auto fi_fai = name.find("failed_");
+  if (fi_suc != name.npos && fi_fai != name.npos && fi_suc != fi_fai) {
+    ASSERT_DBG(false);
+    return false;
+  }
+
+  if (fi_suc == name.npos)
+    case_suc_ = true;
+  if (fi_suc == name.npos)
+    case_suc_ = false;
+
   string path = string(COMPACT_UDT_UNITTEST_SRC_PATH) +
                 string("/../compact_udt_rust/test_data/") + name;
 

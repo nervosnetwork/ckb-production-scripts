@@ -746,6 +746,10 @@ CKBResCode load_other_cell(size_t index, CacheData** last, bool* goon) {
   g_cudt_cache->other_cell_input_amount += input_amount;
   g_cudt_cache->other_cell_output_amount += output_amount;
 
+  if (g_cudt_cache->other_cell_input_amount < input_amount || g_cudt_cache->other_cell_output_amount < output_amount) {
+    CUDT_CHECK(CUDTERR_AMOUNT_OVERFLOW);
+  }
+
   if (memcmp(&lock_code_hash, &g_cudt_cache->compact_udt_code_hash,
              sizeof(Hash)) != 0) {
     is_compact_udt_lock = false;
