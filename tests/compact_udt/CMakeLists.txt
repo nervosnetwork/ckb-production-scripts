@@ -35,6 +35,7 @@ if (${CMAKE_BUILD_TYPE}_ STREQUAL "Debug_")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0")
 endif()
 add_definitions(-DHAVE_CONFIG_H=1)
+add_definitions(-DCOMPACT_UDT_UNITTEST_SRC_PATH="\\"${PROJECT_SOURCE_DIR}"\\")
 
 set(CMAKE_INCLUDE_DIRECTORIES_BEFORE ON)
 
@@ -127,7 +128,6 @@ add_executable(cudt_simulator
 	${PROJECT_SOURCE_DIR}/simulator/compact_udt_lock_inc.c
 	${PROJECT_SOURCE_DIR}/simulator/compact_udt_cc.cpp
 	${PROJECT_SOURCE_DIR}/simulator/dump_data.cpp
-	${PROJECT_SOURCE_DIR}/simulator/autogenerate_data.h
 	
 	${PROJECT_SOURCE_DIR}/util/util.cpp
 )

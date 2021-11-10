@@ -6,14 +6,14 @@ use misc::*;
 //  0: compact_udt
 //  1: sudt
 //  2: always_success
+//  3: xudt
 
-/*
-#[test]
-fn success_single_cell() {
+fn get_test_data_signle() -> (Vec<MiscCellData>, Vec<MiscTransferData>) {
     #[rustfmt::skip]
     let cells_data = vec![MiscCellData {
         lock_scritp: 0,
         type_scritp: 1,
+        enable_identity: true,
         i_amount: 10000,
         o_amount: 100,
         users: vec![
@@ -23,29 +23,22 @@ fn success_single_cell() {
             MiscUserData {id: 3, n: 55, a: 10  },
         ],
     }];
-    
+
     #[rustfmt::skip]
     let transfer_data = vec![
         MiscTransferData {sc: 0, sd: 0, tc: 0, td: 2, tt: 2, a: 5,  fee: 1 },
         MiscTransferData {sc: 0, sd: 1, tc: 0, td: 3, tt: 2, a: 10, fee: 1 },
     ];
-
-    let builder = TXBuilder::new();
-    let builder = gen_tx_builder(builder, cells_data, transfer_data);
-
-    let tx = builder.build();
-    let res = tx.run(false);
-    assert!(res.is_ok(), "error: {}", res.unwrap_err().to_string());
+    (cells_data, transfer_data)
 }
-*/
 
-#[test]
-fn success_mulit_all_cudt() {
+fn get_test_data_mulit() -> (Vec<MiscCellData>, Vec<MiscTransferData>) {
     #[rustfmt::skip]
     let cells_data = vec![
         MiscCellData {
             lock_scritp: 0,
             type_scritp: 1,
+            enable_identity: true,
             i_amount: 10000,
             o_amount: 100,
             users: vec![
@@ -56,8 +49,9 @@ fn success_mulit_all_cudt() {
             ],
         },
         MiscCellData {
-            lock_scritp: 0,
+            lock_scritp: 2,
             type_scritp: 3,
+            enable_identity: false,
             i_amount: 50000,
             o_amount: 300,
             users: vec![
@@ -70,6 +64,7 @@ fn success_mulit_all_cudt() {
         MiscCellData {
             lock_scritp: 0,
             type_scritp: 1,
+            enable_identity: true,
             i_amount: 50000,
             o_amount: 10000,
             users: vec![
@@ -81,6 +76,7 @@ fn success_mulit_all_cudt() {
         MiscCellData {
             lock_scritp: 0,
             type_scritp: 1,
+            enable_identity: false,
             i_amount: 12220,
             o_amount: 2000,
             users: vec![
@@ -94,7 +90,7 @@ fn success_mulit_all_cudt() {
 
     #[rustfmt::skip]
     let transfer_data = vec![
-        MiscTransferData {sc: 0, sd: 0, tc: 1, td: 2, tt: 3, a: 50,  fee: 1  },
+        MiscTransferData {sc: 0, sd: 0, tc: 1, td: 2, tt: 1, a: 50,  fee: 1  },
         MiscTransferData {sc: 0, sd: 2, tc: 0, td: 0, tt: 2, a: 300, fee: 1  },
         MiscTransferData {sc: 1, sd: 2, tc: 2, td: 6, tt: 3, a: 1,   fee: 10 },
         MiscTransferData {sc: 1, sd: 0, tc: 1, td: 2, tt: 2, a: 10,  fee: 10 },
@@ -102,54 +98,48 @@ fn success_mulit_all_cudt() {
         MiscTransferData {sc: 0, sd: 0, tc: 2, td: 6, tt: 3, a: 20,  fee: 30 },
         MiscTransferData {sc: 1, sd: 2, tc: 3, td: 5, tt: 3, a: 99,  fee: 30 },
     ];
+    (cells_data, transfer_data)
+}
+
+#[test]
+fn success_single_cell() {
+    let (cells_data, transfer_data) = get_test_data_signle();
 
     let builder = TXBuilder::new();
     let builder = gen_tx_builder(builder, cells_data, transfer_data);
 
     let tx = builder.build();
-    let res = tx.run(false);
+    let res = tx.run();
+    tx.output_json("success_single_cell");
+    assert!(res.is_ok(), "error: {}", res.unwrap_err().to_string());
+}
+
+#[test]
+fn success_mulit_all_cudt() {
+    let (cells_data, transfer_data) = get_test_data_mulit();
+
+    let builder = TXBuilder::new();
+    let builder = gen_tx_builder(builder, cells_data, transfer_data);
+
+    let tx = builder.build();
+    let res = tx.run();
+    tx.output_json("success_mulit_all_cudt");
     assert!(res.is_ok(), "error: {}", res.unwrap_err().to_string());
 }
 /*
 #[test]
 fn success_mixed_cell() {
-    #[rustfmt::skip]
-    let cells_data = vec![
-        MiscCellData {
-            lock_scritp: 0,
-            type_scritp: 1,
-            i_amount: 10000,
-            o_amount: 100,
-            users: vec![
-                MiscUserData {id: 0, n: 20, a: 10  },
-                MiscUserData {id: 1, n: 30, a: 100 },
-                MiscUserData {id: 2, n: 12, a: 500 },
-                MiscUserData {id: 3, n: 55, a: 10  },
-            ],
-        },
-        MiscCellData {
-            lock_scritp: 2,
-            type_scritp: 1,
-            i_amount: 20000,
-            o_amount: 300,
-            users: vec![],
-        },
-    ];
-    
-    #[rustfmt::skip]
-    let transfer_data = vec![
-        MiscTransferData {sc: 0, sd: 0, tc: 0, td: 2, tt: 2, a: 5,   fee: 1 },
-        MiscTransferData {sc: 0, sd: 1, tc: 0, td: 3, tt: 2, a: 10,  fee: 1 },
-        MiscTransferData {sc: 1, sd: 0, tc: 0, td: 3, tt: 2, a: 100, fee: 2 },
-    ];
+    let (cells_data, transfer_data) = get_test_data_mulit();
 
     let builder = TXBuilder::new();
     let builder = gen_tx_builder(builder, cells_data, transfer_data);
 
     let tx = builder.build();
-    let res = tx.run(false);
+    let res = tx.run();
+    tx.output_json("success_mulit_all_cudt");
     assert!(res.is_ok(), "error: {}", res.unwrap_err().to_string());
 }
+
 
 #[test]
 fn success_amount_overflow() {
@@ -166,7 +156,7 @@ fn success_amount_overflow() {
             MiscUserData {id: 3, n: 55, a: 10  },
         ],
     }];
-    
+
     #[rustfmt::skip]
     let transfer_data = vec![
         MiscTransferData {sc: 0, sd: 0, tc: 0, td: 2, tt: 2, a: 5,  fee: 1 },
@@ -177,7 +167,7 @@ fn success_amount_overflow() {
     let builder = gen_tx_builder(builder, cells_data, transfer_data);
 
     let tx = builder.build();
-    let res = tx.run(false);
+    let res = tx.run();
     assert!(res.is_ok(), "error: {}", res.unwrap_err().to_string());
 }
 
@@ -205,7 +195,7 @@ fn failed_mixed_cell() {
             users: vec![],
         },
     ];
-    
+
     #[rustfmt::skip]
     let transfer_data = vec![
         MiscTransferData {sc: 0, sd: 0, tc: 0, td: 2, tt: 2, a: 5,   fee: 1 },
@@ -217,7 +207,7 @@ fn failed_mixed_cell() {
     let builder = gen_tx_builder(builder, cells_data, transfer_data);
 
     let tx = builder.build();
-    let res = tx.run(true);
+    let res = tx.run();
     assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
 }
 
@@ -236,7 +226,7 @@ fn failed_nonce_overflow() {
             MiscUserData {id: 3, n: 55, a: 10  },
         ],
     }];
-    
+
     #[rustfmt::skip]
     let transfer_data = vec![
         MiscTransferData {sc: 0, sd: 0, tc: 0, td: 2, tt: 2, a: 5,  fee: 1 },
@@ -247,7 +237,7 @@ fn failed_nonce_overflow() {
     let builder = gen_tx_builder(builder, cells_data, transfer_data);
 
     let tx = builder.build();
-    let res = tx.run(false);
+    let res = tx.run();
     assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
 }
 
@@ -275,7 +265,7 @@ fn faliled_amount_overflow() {
             MiscUserData {id: 1, n: 600, a: 100 },
         ],
     }];
-    
+
     #[rustfmt::skip]
     let transfer_data = vec![
         MiscTransferData {sc: 0, sd: 0, tc: 0, td: 2, tt: 2, a: 5,  fee: 1 },
@@ -286,7 +276,7 @@ fn faliled_amount_overflow() {
     let builder = gen_tx_builder(builder, cells_data, transfer_data);
 
     let tx = builder.build();
-    let res = tx.run(false);
+    let res = tx.run();
     assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
 }
 
@@ -305,7 +295,7 @@ fn faliled_def_user() {
             MiscUserData {id: 3, n: 55, a: 10  },
         ],
     }];
-    
+
     #[rustfmt::skip]
     let transfer_data = vec![
         MiscTransferData {sc: 0, sd: 0, tc: 0, td: 2, tt: 2, a: 5,  fee: 1 },
@@ -317,7 +307,7 @@ fn faliled_def_user() {
     let builder = builder.remove_user_output(0, 2);
 
     let tx = builder.build();
-    let res = tx.run(false);
+    let res = tx.run();
     assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
 }
 */

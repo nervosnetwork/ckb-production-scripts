@@ -39,7 +39,14 @@
   }
 
 #else  // CKB_USE_SIM
+#ifdef ENABLE_DEBUG
+#define ASSERT_DBG(i)                                         \
+  if (!(i)) {                                                 \
+    printf("assert failed(%d): %s:%d\n", __FILE__, __LINE__); \
+  }
+#else  // ENABLE_DEBUG
 #define ASSERT_DBG(i)
+#endif  // ENABLE_DEBUG
 #endif  // CKB_USE_SIM
 
 // mol

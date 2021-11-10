@@ -3,20 +3,21 @@ use lazy_static::lazy_static;
 
 use compact_udt_rust::{CellID, TXBuilder, TXTransfer, TXUser, UserID, WitnessTransferTargetType};
 
-lazy_static! {
-    pub static ref COMPACT_UDT_LOCK_SCRIPT_BIN: Bytes =
-        Bytes::from(include_bytes!("../../../build/compact_udt_lock").as_ref());
-    pub static ref SIMPLE_UDT_TYPE_SCRIPT_BIN: Bytes =
-        Bytes::from(include_bytes!("../../../build/simple_udt").as_ref());
-    pub static ref ALWAYS_SUCCESS_SCRIPT_BIN: Bytes =
-        Bytes::from(include_bytes!("../../../build/always_success").as_ref());
-    pub static ref XUDT_SCRIPT_BIN: Bytes =
-        Bytes::from(include_bytes!("../../../build/always_success").as_ref());
-    pub static ref AUTH_SCRIPT_DL: Bytes =
-        Bytes::from(include_bytes!("../../../build/auth").as_ref());
-    pub static ref SECP256K1_DATA_BIN: Bytes =
-        Bytes::from(include_bytes!("../../../build/secp256k1_data").as_ref());
+macro_rules! generate_static_cell_data {
+    ($name: tt, $p: expr) => {
+        lazy_static! {
+            pub static ref $name: (String, Bytes) =
+                (String::from($p), Bytes::from(include_bytes!($p).as_ref()));
+        }
+    };
 }
+
+generate_static_cell_data!(CUDT_LOCK_SCRIPT_BIN, "../../../build/compact_udt_lock");
+generate_static_cell_data!(SIMPLE_UDT_TYPE_SCRIPT_BIN, "../../../build/simple_udt");
+generate_static_cell_data!(XUDT_SCRIPT_BIN, "../../../build/always_success");
+generate_static_cell_data!(ALWAYS_SUCCESS_SCRIPT_BIN, "../../../build/always_success");
+generate_static_cell_data!(AUTH_SCRIPT_DL_BIN, "../../../build/auth");
+generate_static_cell_data!(SECP256K1_DATA_BIN, "../../../build/secp256k1_data");
 
 pub struct MiscUserData {
     pub id: u32,
@@ -27,6 +28,7 @@ pub struct MiscUserData {
 pub struct MiscCellData {
     pub lock_scritp: u32,
     pub type_scritp: u32,
+    pub enable_identity: bool,
 
     pub i_amount: u128,
     pub o_amount: u128,
@@ -50,7 +52,7 @@ pub fn gen_tx_builder(
 ) -> TXBuilder {
     let mut builder = builder;
     let mut scritp_code_id_vec = Vec::new();
-    let (builder_tmp, sc_id) = builder.add_script_code(COMPACT_UDT_LOCK_SCRIPT_BIN.clone());
+    let (builder_tmp, sc_id) = builder.add_script_code(CUDT_LOCK_SCRIPT_BIN.clone());
     builder = builder_tmp.set_script_cudt_id(sc_id);
     scritp_code_id_vec.push(sc_id);
 
@@ -66,7 +68,7 @@ pub fn gen_tx_builder(
     builder = builder_tmp.set_scritp_xudt_id(sc_id);
     scritp_code_id_vec.push(sc_id);
 
-    let (builder_tmp, sc_id) = builder.add_script_code(AUTH_SCRIPT_DL.clone());
+    let (builder_tmp, sc_id) = builder.add_script_code(AUTH_SCRIPT_DL_BIN.clone());
     builder = builder_tmp;
     scritp_code_id_vec.push(sc_id);
 
@@ -105,10 +107,12 @@ pub fn gen_tx_builder(
         let (builder_tmp, cid) = builder.add_cell(
             scritp_code_id_vec[cell.lock_scritp as usize],
             scritp_code_id_vec[cell.type_scritp as usize],
+            cell.enable_identity,
             cell.i_amount,
             cell.o_amount,
             tx_users,
         );
+
         builder = builder_tmp;
         cell_id_vec.push(cid);
     }

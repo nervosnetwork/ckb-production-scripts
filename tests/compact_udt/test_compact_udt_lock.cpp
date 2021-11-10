@@ -2,6 +2,7 @@
 extern "C" {
 //#include "util/update_sim_data.h"
 }
+#include <dirent.h>
 #include <vector>
 
 #include "util/utest.h"
@@ -13,6 +14,7 @@ extern "C" {
 
 using namespace std;
 
+/*
 UTEST(success, main) {
   GenerateTransaction transfaction;
   gen_test_data(&transfaction);
@@ -39,9 +41,60 @@ UTEST(success, single_cell) {
   int ret_code = virtual_data.run_simulator();
   ASSERT_DBG(!ret_code);
 }
+*/
 
 /*
 UTEST(rust_failed, dev) {
+  for (int i = 0; i < CDumpData::get()->get_cell_count(); i++) {
+    if (!CDumpData::get()->set_group_index(i))
+      continue;
+    GenerateTransaction transfaction;
+    gen_test_data_single(&transfaction);
+
+    auto virtual_data = transfaction.build();
+    int ret_code = virtual_data.run_simulator();
+    ASSERT_DBG(!ret_code);
+  }
+}
+*/
+
+UTEST(test_data, all) {
+  string test_data_dir = string(COMPACT_UDT_UNITTEST_SRC_PATH) +
+                         string("/../compact_udt_rust/test_data/");
+  auto dp = opendir(test_data_dir.c_str());
+  ASSERT_DBG(dp);
+
+  struct dirent* dirp = nullptr;
+  while (true) {
+    dirp = readdir(dp);
+    if (!dirp)
+      break;
+    if (dirp->d_type != DT_REG)
+      continue;
+    string file_name = dirp->d_name;
+
+    auto dump_ptr = CDumpData::get();
+    dump_ptr->set_data(file_name);
+
+    for (int i = 0; i < CDumpData::get()->get_cell_count(); i++) {
+      if (!CDumpData::get()->set_group_index(i))
+        continue;
+      GenerateTransaction transfaction;
+      gen_test_data_single(&transfaction);
+
+      auto virtual_data = transfaction.build();
+      int ret_code = virtual_data.run_simulator();
+      ASSERT_DBG(!ret_code);
+    }
+  }
+  closedir(dp);
+}
+
+/*
+UTEST(test_data, all) {
+  auto dump_ptr = CDumpData::get();
+  dump_ptr->set_data("success_single_cell.json");
+
   for (int i = 0; i < CDumpData::get()->get_cell_count(); i++) {
     if (!CDumpData::get()->set_group_index(i))
       continue;

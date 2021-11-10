@@ -48,6 +48,44 @@ void script_hash_randfull(Hash* hash) {
   random_mem((uint8_t*)hash, sizeof(Hash));
 }
 
+CBuffer load_file(std::string path) {
+  FILE* input = fopen(path.c_str(), "rb");
+  ASSERT_DBG(input);
+
+  fseek(input, 0, SEEK_END);
+  long filelen = ftell(input);
+  fseek(input, 0, SEEK_SET);
+  ASSERT_DBG(filelen);
+
+  CBuffer ret;
+  ret.resize(filelen);
+
+  size_t read_item = fread(ret.data(), ret.size(), 1, input);
+  ASSERT_DBG(read_item == 1);
+  return ret;
+}
+
+CBuffer decode_hex(std::string data) {
+  CBuffer buf;
+  buf.resize(data.size());
+
+  size_t length = 0;
+  for (size_t i = 0; i < data.size(); i++) {
+    if (data[i] == '-')
+      continue;
+    buf[length] = (getbin(data[i]) << 4) + getbin(data[i + 1]);
+    length++;
+    i++;
+  }
+
+  ASSERT_DBG(length);
+  CBuffer ret;
+  ret.resize(length);
+  memcpy(ret.data(), buf.data(), length);
+
+  return ret;
+}
+
 CIdentity CHashToCId(const CHash* h) {
   CIdentity id;
   memcpy(id.get(), h->ptr(), 21);

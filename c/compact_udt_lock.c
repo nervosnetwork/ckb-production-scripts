@@ -1,4 +1,12 @@
-﻿#include "compact_udt_lock.h"
+﻿
+//#define ENABLE_DEBUG
+
+#ifdef ENABLE_DEBUG
+#define CKB_C_STDLIB_PRINTF
+#include "debug.h"
+#endif  // ENABLE_DEBUG
+
+#include "compact_udt_lock.h"
 #include "compact_udt_lock_reader.h"
 
 uint8_t g_tx_buffer[1024 * 1024 * 1];
@@ -41,8 +49,8 @@ void free_temporary_cache(uint32_t len) {
 
 // clang-format off
 const uint8_t g_auth_dl_cell_hash[] = {
-  0x07, 0xE7, 0xA0, 0x23, 0x1A, 0x3C, 0xF8, 0x15, 0x93, 0x70, 0x9D, 0x12, 0xCF, 0x8F, 0x8F, 0xBF, 
-  0x6C, 0xAE, 0x2D, 0xAB, 0x8A, 0xE3, 0x2A, 0x97, 0x39, 0xC9, 0x3D, 0x1F, 0xBC, 0x9F, 0x81, 0x62,
+  0xBD, 0x78, 0x78, 0xA1, 0xF8, 0xC7, 0x71, 0x50, 0x22, 0x0C, 0x76, 0xD8, 0xEE, 0x9C, 0x18, 0x01, 
+  0x8B, 0xEF, 0xC2, 0xD9, 0x93, 0xCA, 0xDA, 0xC0, 0x95, 0x1B, 0xBB, 0x07, 0xCE, 0x1D, 0x5F, 0x90
 };
 // clang-format on
 
@@ -53,7 +61,7 @@ int auth_validate(const uint8_t* signature,
   CkbEntryType entry;
   memcpy(entry.code_hash, g_auth_dl_cell_hash, sizeof(Hash));
   entry.hash_type = 2;  // ScriptHashType::Data1
-  entry.entry_category = EntryCategoryDynamicLinking;
+  entry.entry_category = EntryCategoryExec;
 
   CkbAuthType auth;
   memcpy(&auth, pubkey_hash, sizeof(Identity));
@@ -176,6 +184,7 @@ int generate_sighash_all(Hash* msg) {
     i += 1;
   }
 
+  /*
   // Digest witnesses that not covered by inputs
   i = (size_t)ckb_calculate_inputs_len();
   while (1) {
@@ -188,6 +197,7 @@ int generate_sighash_all(Hash* msg) {
     }
     i += 1;
   }
+  */
 
   blake2b_final(&blake2b_ctx, msg, BLAKE2B_BLOCK_SIZE);
 
@@ -335,7 +345,8 @@ CKBResCode get_transfer_hash(const TransferType* t,
   CKBResCode err = CUDT_SUCCESS;
 
   blake2b_state b2 = {0};
-  ASSERT_DBG(blake2b_init(&b2, sizeof(Hash)) == 0);
+  err = blake2b_init(&b2, sizeof(Hash));
+  ASSERT_DBG(err == 0);
 
   blake2b_update(&b2, &(g_cudt_cache->type_id), sizeof(Hash));
   CacheKVPair* kv_pair = find_kv_pair(&(cache->source));
@@ -569,7 +580,8 @@ CKBResCode load_other_cudt_cell_data(size_t index, CacheData* cache) {
   CKBResCode err = CUDT_SUCCESS;
 
   CompactUDTEntriesType cudt_witness;
-  CUDT_CHECK(get_cudt_witness(index, CKB_SOURCE_INPUT, &cudt_witness));
+  err = get_cudt_witness(index, CKB_SOURCE_INPUT, &cudt_witness);
+  CUDT_CHECK(err);
 
   uint128_t total_deposit = 0, total_transfer = 0, total_fee = 0;
 
@@ -785,15 +797,19 @@ CKBResCode load_all_data() {
 
   Identity identity;
   bool has_id = false;
-  CUDT_CHECK(get_args(&(g_cudt_cache->type_id), &identity, &has_id,
-                      &(g_cudt_cache->compact_udt_code_hash)));
+  err = get_args(&(g_cudt_cache->type_id), &identity, &has_id,
+                 &(g_cudt_cache->compact_udt_code_hash));
+  CUDT_CHECK(err);
   if (has_id) {
     g_cudt_cache->identity = (Identity*)alloc_cache(sizeof(Identity));
     memcpy(g_cudt_cache->identity, &identity, sizeof(Identity));
   }
 
-  CUDT_CHECK(load_cur_cell_data());
-  CUDT_CHECK(load_all_other_cell_data());
+  err = load_cur_cell_data();
+  CUDT_CHECK(err);
+
+  err = load_all_other_cell_data();
+  CUDT_CHECK(err);
 
 exit_func:
   return err;
@@ -807,7 +823,7 @@ CKBResCode check_total_udt() {
   CacheData* cur_cache = &(g_cudt_cache->cur_data);
 
   // cur total deposit
-  uint128_t total_deposit = 0;
+  uint128_t total_deposit = 0, total_deposit_other = 0;
   for (CacheDeposit* cache = cur_cache->deposits; cache != NULL;
        cache = cache->next) {
     total_deposit += cache->amount;
@@ -815,11 +831,16 @@ CKBResCode check_total_udt() {
       ASSERT_DBG(false);
       ckb_exit(CUDTERR_AMOUNT_OVERFLOW);
     }
+    if (cache->source &&
+        memcmp(cache->source, &(g_cudt_cache->cur_data.script_hash),
+               sizeof(Hash)) != 0) {
+      total_deposit_other += cache->amount;
+    }
   }
 
   // cur total transfer (to other)
-  uint128_t total_transfer = 0;
-  uint128_t total_fee = 0;
+  uint128_t total_transfer = 0, total_transfer_other = 0;
+  uint128_t total_fee = 0, total_fee_other = 0;
   for (CacheTransfer* cache = cur_cache->transfers; cache != NULL;
        cache = cache->next) {
     total_transfer += cache->amount;
@@ -828,18 +849,34 @@ CKBResCode check_total_udt() {
       ASSERT_DBG(false);
       ckb_exit(CUDTERR_AMOUNT_OVERFLOW);
     }
+
+    if (cache->target_type == TargetType_ScriptHash) {
+      if (memcmp(&(cache->target), &(g_cudt_cache->cur_data.script_hash),
+                 sizeof(Hash)) != 0) {
+        total_transfer_other += cache->amount;
+        total_fee_other += cache->fee;
+      }
+    } else if (cache->target_type == TargetType_MoveBetweenCompactSMT) {
+      if (memcmp(&(cache->target[sizeof(Identity)]),
+                 &(g_cudt_cache->cur_data.script_hash), sizeof(Hash)) != 0) {
+        total_transfer_other += cache->amount;
+        total_fee_other += cache->fee;
+      }
+    }
   }
 
   if (cur_cache->input_amount + total_deposit <
       cur_cache->output_amount + total_transfer + total_fee) {
-    return CUDTERR_NO_ENOUGH_UDT;
+    CUDT_CHECK(CUDTERR_NO_ENOUGH_UDT);
   }
 
-  if (g_cudt_cache->other_cell_input_amount + total_transfer + total_fee <
-      g_cudt_cache->other_cell_output_amount + total_deposit) {
-    return CUDTERR_NO_ENOUGH_UDT;
+  if (g_cudt_cache->other_cell_input_amount + total_transfer_other +
+          total_fee_other <
+      g_cudt_cache->other_cell_output_amount + total_deposit_other) {
+    CUDT_CHECK(CUDTERR_NO_ENOUGH_UDT);
   }
 
+exit_func:
   return err;
 }
 
@@ -924,7 +961,8 @@ CKBResCode check_each_deposit() {
 
   for (CacheDeposit* cache = g_cudt_cache->cur_data.deposits; cache != NULL;
        cache = cache->next) {
-    CUDT_CHECK(check_deposit(cache));
+    err = check_deposit(cache);
+    CUDT_CHECK(err);
 
     CacheKVPair* kv_pair = find_kv_pair(&(cache->target));
     CUDT_CHECK2(kv_pair, CUDTERR_DEPOSIT_NO_KVPAIR);
@@ -1001,7 +1039,8 @@ CKBResCode check_each_transfer() {
       } break;
     }
 
-    CUDT_CHECK(check_transfer(cache, hash, identity));
+    err = check_transfer(cache, hash, identity);
+    CUDT_CHECK(err);
 
     CacheKVPair* src_kv = find_kv_pair(&(cache->source));
     CUDT_CHECK2(src_kv, CUDTERR_TRANSFER_NO_KVPAIR);
@@ -1022,16 +1061,32 @@ exit_func:
 
 int CKBMAIN(int argc, char* argv[]) {
   CKBResCode err = CKBERR_UNKNOW;
-  // printf("\n\n------------------------Begin------------------------\n");
+#ifdef ENABLE_DEBUG
+  printf("\n\n------------------------Begin------------------------\n");
+#endif  // ENABLE_DEBUG
 
-  CUDT_CHECK(load_all_data());
-  CUDT_CHECK(check_total_udt());
-  CUDT_CHECK(check_smt_root(&(g_cudt_cache->input_smt_hash)));
-  CUDT_CHECK(check_each_deposit());
-  CUDT_CHECK(check_each_transfer());
-  CUDT_CHECK(check_smt_root(&(g_cudt_cache->output_smt_hash)));
+  err = load_all_data();
+  CUDT_CHECK(err);
+
+  err = check_total_udt();
+  CUDT_CHECK(err);
+
+  err = check_smt_root(&(g_cudt_cache->input_smt_hash));
+  CUDT_CHECK(err);
+
+  err = check_each_deposit();
+  CUDT_CHECK(err);
+
+  err = check_each_transfer();
+  CUDT_CHECK(err);
+
+  err = check_smt_root(&(g_cudt_cache->output_smt_hash));
+  CUDT_CHECK(err);
+
   err = CUDT_SUCCESS;
 exit_func:
-  // printf("------------------------End------------------------\n");
+#ifdef ENABLE_DEBUG
+  printf("------------------------End------------------------\n");
+#endif  // ENABLE_DEBUG
   return err;
 }

@@ -115,7 +115,8 @@ int compact_udt_lock_main() {
 
 void* cudt_blake2b_init(size_t l) {
   blake2b_state* s = (blake2b_state*)malloc(sizeof(blake2b_state));
-  ASSERT_DBG(blake2b_init(s, l) == 0);
+  int ret = blake2b_init(s, l);
+  ASSERT_DBG(ret == 0);
   return s;
 }
 void cudt_blake2b_uninit(void* s) {

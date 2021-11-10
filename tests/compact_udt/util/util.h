@@ -16,6 +16,8 @@ void random_mem(uint8_t* data, uint32_t len);
 void script_hash_randfull(Hash* hash);
 
 typedef vector<uint8_t> CBuffer;
+CBuffer load_file(std::string path);
+CBuffer decode_hex(std::string data);
 
 template <size_t T>
 class CData {
@@ -44,6 +46,9 @@ class CData {
 
   bool operator==(const CData<T>& o) {
     return memcmp(buf_.data(), o.buf_.data(), buf_.size()) == 0;
+  }
+  bool operator!=(const CData<T>& o) {
+    return memcmp(buf_.data(), o.buf_.data(), buf_.size()) != 0;
   }
 
   void operator=(const CData<T>& o) { buf_ = o.buf_; }

@@ -212,12 +212,6 @@ pub struct TXBuilder {
 
 impl TXBuilder {
     pub fn new() -> TXBuilder {
-        let mut users = HashMap::new();
-        for i in 0..8 {
-            let user_key = Generator::random_privkey();
-            users.insert(UserID::new(i), user_key);
-        }
-
         TXBuilder {
             data_loader: DummyDataLoader::new(),
             script_codes: HashMap::new(),
@@ -225,7 +219,7 @@ impl TXBuilder {
             cudt_scritp_id: Option::None,
             sudt_scritp_id: Option::None,
             xudt_scritp_id: Option::None,
-            users: users,
+            users: HashMap::new(),
             users_count: 0,
             cells: HashMap::new(),
             cells_count: 0,
@@ -237,14 +231,15 @@ impl TXBuilder {
     }
 
     // script
-    pub fn add_script_code(mut self, script_code: Bytes) -> (Self, ScriptCodeID) {
+    pub fn add_script_code(mut self, script: (String, Bytes)) -> (Self, ScriptCodeID) {
         let ret = ScriptCodeID::new(self.script_codes_count);
         self.script_codes_count += 1;
 
-        let code_hash = CellOutput::calc_data_hash(&script_code);
+        let code_hash = CellOutput::calc_data_hash(&script.1);
         let script = TXScriptCode {
-            code: script_code,
+            code: script.1,
             code_hash: code_hash,
+            path: script.0,
         };
         self.script_codes.insert(ret, script);
         (self, ret)
@@ -275,6 +270,7 @@ impl TXBuilder {
         mut self,
         lock_script_id: ScriptCodeID,
         type_script_id: ScriptCodeID,
+        enable_identity: bool,
         input_amount: u128,
         output_amount: u128,
         users_info: Vec<TXUser>,
@@ -282,7 +278,7 @@ impl TXBuilder {
         let cid = CellID::new(self.cells_count);
         self.cells_count += 1;
 
-        let cell = TXCell {
+        let mut cell = TXCell {
             id: cid,
             lock_script_id: lock_script_id,
             type_script_id: type_script_id,
@@ -308,6 +304,10 @@ impl TXBuilder {
             cell_out_point: Option::None,
             cell_output: Option::None,
         };
+
+        if enable_identity {
+            cell.enable_identity();
+        }
 
         self.cells.insert(cid, cell);
         (self, cid)
@@ -338,8 +338,14 @@ impl TXBuilder {
     }
     pub fn get_user_identity(&self, index: UserID) -> Identity {
         let privkey = self.get_user_key(index);
-        let pub_hash = privkey.pubkey().unwrap().serialize();
-        Identity::from(pub_hash[0..21].to_vec())
+        let pubkey = privkey.pubkey().unwrap().serialize();
+        let pub_hash = blake2b_256(pubkey.as_slice());
+        let mut data = BytesMut::with_capacity(21);
+        // Don't test auth, use AuthAlgorithmIdCkb directly here
+        data.put_u8(0);
+
+        data.put(Bytes::from(Vec::from(&pub_hash[0..20])));
+        Identity::from(data.freeze().to_vec())
     }
 
     // transfer
@@ -376,24 +382,23 @@ impl TXBuilder {
             tx_builder = tx_builder_tmp;
         }
         let tx_view = tx_builder.build();
-        let tx_view = self.sign_cells(tx_view, cell_indexs);
+        let tx_view = builder.sign_cells(tx_view, cell_indexs);
         TX::new(
             &tx_view,
             builder.data_loader,
             builder.cudt_hash.clone().unwrap(),
+            builder
+                .script_codes
+                .into_iter()
+                .map(|(_id, sc)| sc.clone())
+                .collect(),
         )
     }
 
     // test
-    pub fn remove_user_output(
-        mut self,
-        cell_id: u32,
-        user_id: u32,
-    ) -> Self {
-        self.test_data_rm_user_output.push((
-            CellID::new(cell_id),
-            UserID::new(user_id),
-        ));
+    pub fn remove_user_output(mut self, cell_id: u32, user_id: u32) -> Self {
+        self.test_data_rm_user_output
+            .push((CellID::new(cell_id), UserID::new(user_id)));
         self
     }
 
@@ -661,7 +666,10 @@ impl TXBuilder {
                 .pubkey()
                 .expect("args identity pubkey");
             let pub_hash = blake2b_256(pubkey.serialize().as_slice());
-            args.put(&pub_hash[0..21]);
+            let mut data = BytesMut::with_capacity(21);
+            data.put_u8(0);
+            data.put(Bytes::from(Vec::from(&pub_hash[0..20])));
+            args.put(data.freeze());
         }
 
         args.freeze()
@@ -851,11 +859,10 @@ impl TXBuilder {
         // witness len
         let witness_len: u64 = witness.len() as u64;
         b2b.update(&witness_len.to_le_bytes());
-
         let witness = WitnessArgs::new_unchecked(witness.clone());
         let zero_lock: Bytes = {
             let mut buf = Vec::new();
-            buf.resize(witness_len as usize, 0);
+            buf.resize((witness_len - 20) as usize, 0);
             buf.into()
         };
         let witness_for_digest = witness
@@ -863,6 +870,7 @@ impl TXBuilder {
             .as_builder()
             .lock(Some(zero_lock).pack())
             .build();
+
         b2b.update(&witness_for_digest.as_bytes());
 
         // TODO
@@ -877,12 +885,14 @@ impl TXBuilder {
 
         let mut message = [0; 32];
         b2b.finalize(&mut message);
+
         let key = cell.identity.clone().unwrap();
-        Bytes::from(
+        let sign = Bytes::from(
             key.sign_recoverable(&ckb_types::H256(message))
                 .unwrap()
                 .serialize(),
-        )
+        );
+        sign
     }
 }
 
@@ -892,6 +902,7 @@ impl TXBuilder {
 pub struct TXScriptCode {
     pub code: Bytes,
     pub code_hash: Byte32,
+    pub path: String,
 }
 
 #[derive(Clone)]
@@ -929,6 +940,9 @@ impl TXCell {
             }
         }
         0xFFFFFFFF
+    }
+    pub fn enable_identity(&mut self) {
+        self.identity = Option::Some(Generator::random_privkey());
     }
 }
 
@@ -990,10 +1004,16 @@ pub struct TX {
     tx_backup: TransactionView,
     data_loader_backup: DummyDataLoader,
     cudt_hash: Byte32,
+    deps_info: Vec<TXScriptCode>,
 }
 
 impl TX {
-    pub fn new(tx: &TransactionView, data_loader: DummyDataLoader, cudt_hash: Byte32) -> TX {
+    pub fn new(
+        tx: &TransactionView,
+        data_loader: DummyDataLoader,
+        cudt_hash: Byte32,
+        deps_info: Vec<TXScriptCode>,
+    ) -> TX {
         let data_loader_backup = data_loader.clone();
         let resolved_cell_deps = tx
             .cell_deps()
@@ -1029,10 +1049,11 @@ impl TX {
             tx_backup: tx.clone(),
             data_loader_backup,
             cudt_hash,
+            deps_info,
         }
     }
 
-    pub fn run(&self, print_dump_data: bool) -> Result<u64, ckb_error::Error> {
+    pub fn run(&self) -> Result<u64, ckb_error::Error> {
         let consensus = TX::gen_consensus();
         let tx_env = TX::gen_tx_env();
         let mut verifier = TransactionScriptsVerifier::new(
@@ -1044,18 +1065,32 @@ impl TX {
         verifier.set_debug_printer(TX::debug_printer);
         let ret = verifier.verify(MAX_CYCLES);
 
-        if print_dump_data {
-            dump_data(
-                self.tx_backup.clone(),
-                self.data_loader_backup.clone(),
-                self.cudt_hash.clone(),
-            );
-        }
-
         ret
     }
 
-    pub fn debug_printer(_script: &Byte32, msg: &str) {
+    pub fn output_ctrl(&self, name: &str) {
+        let data = dump_data(
+            self.tx_backup.clone(),
+            name.into(),
+            self.data_loader_backup.clone(),
+            self.cudt_hash.clone(),
+            self.deps_info.clone(),
+        );
+        data.output_ctrl();
+    }
+
+    pub fn output_json(&self, name: &str) {
+        let data = dump_data(
+            self.tx_backup.clone(),
+            name.into(),
+            self.data_loader_backup.clone(),
+            self.cudt_hash.clone(),
+            self.deps_info.clone(),
+        );
+        data.output_json();
+    }
+
+    fn debug_printer(_script: &Byte32, msg: &str) {
         print!("{}", msg);
     }
 

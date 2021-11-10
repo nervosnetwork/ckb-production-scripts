@@ -21,6 +21,7 @@ sparse-merkle-tree = "0.5.2"
 super = "0.0.0"
 molecule = "0.7.1"
 lazy_static = "1.4.0"
+json = "0.12.4"
 
 [dev-dependencies]
 

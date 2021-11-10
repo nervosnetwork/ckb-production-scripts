@@ -12,10 +12,15 @@ extern "C" {
 #endif  // __cplusplus
 
 #ifdef __cplusplus
+#include <memory>
+#include <string>
+
+using namespace std;
 
 class CDumpData {
  private:
   CDumpData();
+  struct Data;
 
  public:
   ~CDumpData();
@@ -23,6 +28,8 @@ class CDumpData {
 
   bool using_dump();
 
+  bool set_data(string name);
+  bool set_default_data();  // TODO
   bool set_group_index(int index);
   int get_cell_count();
 
@@ -48,8 +55,26 @@ class CDumpData {
                          size_t field);
 
  private:
+  int load_cell_by_field_lock_hash(void* addr,
+                                   uint64_t* len,
+                                   size_t offset,
+                                   size_t index,
+                                   size_t source);
+  int load_cell_by_field_lock(void* addr,
+                              uint64_t* len,
+                              size_t offset,
+                              size_t index,
+                              size_t source);
+  int load_cell_by_field_data_hash(void* addr,
+                                   uint64_t* len,
+                                   size_t offset,
+                                   size_t index,
+                                   size_t source);
+
+ private:
   bool using_dump_ = false;
   int group_index_ = -1;
+  std::unique_ptr<Data> data_;
 };
 
 #endif  // __cplusplus

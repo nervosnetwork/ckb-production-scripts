@@ -115,7 +115,8 @@ static CKBResCode _make_cursor(size_t index,
 
   CKBResCode err = 0;
   uint64_t len = 0;
-  CUDT_CHECK(func(NULL, &len, offset, index, source));
+  err = func(NULL, &len, offset, index, source);
+  CUDT_CHECK(err);
 
   CUDT_CHECK2(len != 0, CKBERR_DATA_EMTPY);
   CUDT_CHECK2(len <= sizeof(g_read_data_source), CKBERR_DATA_TOO_LONG);
@@ -250,7 +251,8 @@ CKBResCode get_cell_data(size_t index,
   }
 
   XudtDataType xudt_data;
-  CUDT_CHECK(_get_xudt_data(&xudt_data, index, source));
+  err = _get_xudt_data(&xudt_data, index, source);
+  CUDT_CHECK(err);
   mol2_cursor_t mol_lock_data = xudt_data.t->lock(&xudt_data);
   CUDT_CHECK2((mol_lock_data.size == sizeof(Hash)), CUDTERR_ARGS_UNKNOW);
   if (hash) {
@@ -289,7 +291,8 @@ CKBResCode _get_cursor_from_witness(WitnessArgsType* witness,
                                     size_t source) {
   CKBResCode err = 0;
   mol2_cursor_t cur;
-  CUDT_CHECK(_make_cursor(index, source, 0, _get_witness_base, &cur));
+  err = _make_cursor(index, source, 0, _get_witness_base, &cur);
+  CUDT_CHECK(err);
 
   *witness = make_WitnessArgs(&cur);
 
@@ -364,7 +367,8 @@ exit_func:
 CKBResCode get_scritp_hash(Hash* data) {
   CKBResCode err = CUDT_SUCCESS;
   uint64_t len = sizeof(Hash);
-  CUDT_CHECK(ckb_load_script_hash(data, &len, 0));
+  err = ckb_load_script_hash(data, &len, 0);
+  CUDT_CHECK(err);
 exit_func:
   return err;
 }
