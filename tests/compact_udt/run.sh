@@ -8,6 +8,7 @@ rm -rf $CUR_DIR/$FOLDER
 mkdir -p $CUR_DIR/$FOLDER
 cd $CUR_DIR/$FOLDER
 
+#cmake -G "Unix Makefiles" ../ -DCMAKE_BUILD_TYPE=Debug
 cmake -G "Unix Makefiles" ../
 if (( $? == 0 ))
 then
@@ -25,11 +26,4 @@ else
 fi
 
 ./cudt_simulator
-if (( $? == 0 ))
-then
-    echo "succcess"
-else
-    exit 1
-fi
-
-cd $CUR_PWD
+echo "Done"
