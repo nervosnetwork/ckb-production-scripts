@@ -82,7 +82,7 @@ void dbg_print_data(size_t index, size_t source) {
 
 uint8_t g_read_data_source[DEFAULT_DATA_SOURCE_LENGTH];
 
-typedef CKBResCode (*func_get_data)(void* addr,
+typedef ckb_res_code (*func_get_data)(void* addr,
                                     uint64_t* len,
                                     size_t offset,
                                     size_t index,
@@ -92,7 +92,7 @@ static uint32_t _read_from_cursor(uintptr_t arg[],
                                   uint8_t* ptr,
                                   uint32_t len,
                                   uint32_t offset) {
-  CKBResCode err;
+  ckb_res_code err;
   uint64_t output_len = len;
   func_get_data func = (func_get_data)arg[0];
   err = func(ptr, &output_len, offset + arg[3], arg[1], arg[2]);
@@ -106,14 +106,14 @@ static uint32_t _read_from_cursor(uintptr_t arg[],
   }
 }
 
-static CKBResCode _make_cursor(size_t index,
+static ckb_res_code _make_cursor(size_t index,
                                size_t source,
                                size_t offset,
                                func_get_data func,
                                mol2_cursor_t* cur) {
   ASSERT_DBG(cur);
 
-  CKBResCode err = 0;
+  ckb_res_code err = 0;
   uint64_t len = 0;
   err = func(NULL, &len, offset, index, source);
   CUDT_CHECK(err);
@@ -143,7 +143,7 @@ exit_func:
   return err;
 }
 
-static CKBResCode _get_cell_data_base(void* addr,
+static ckb_res_code _get_cell_data_base(void* addr,
                                       uint64_t* len,
                                       size_t offset,
                                       size_t index,
@@ -151,12 +151,12 @@ static CKBResCode _get_cell_data_base(void* addr,
   return ckb_load_cell_data(addr, len, offset, index, source);
 }
 
-static CKBResCode _get_witness_base(void* addr,
+static ckb_res_code _get_witness_base(void* addr,
                                     uint64_t* len,
                                     size_t offset,
                                     size_t index,
                                     size_t source) {
-  CKBResCode ret_code = ckb_load_witness(addr, len, offset, index, source);
+  ckb_res_code ret_code = ckb_load_witness(addr, len, offset, index, source);
   return ret_code;
 }
 
@@ -182,8 +182,8 @@ static CKBResCode _get_witness_base(void* addr,
 ////////////////////////////////////////////////////////////////
 // reader
 
-CKBResCode _get_xudt_data(XudtDataType* data, size_t index, size_t source) {
-  CKBResCode err = CKBERR_UNKNOW;
+ckb_res_code _get_xudt_data(XudtDataType* data, size_t index, size_t source) {
+  ckb_res_code err = CKBERR_UNKNOW;
   mol2_cursor_t cur;
   err =
       _make_cursor(index, source, sizeof(uint128_t), _get_cell_data_base, &cur);
@@ -198,7 +198,7 @@ exit_func:
   return err;
 }
 
-CKBResCode get_cell_udt(size_t index, size_t source, uint128_t* amount) {
+ckb_res_code get_cell_udt(size_t index, size_t source, uint128_t* amount) {
   uint64_t data_len = sizeof(uint128_t);
   int ret_err = ckb_load_cell_data(amount, &data_len, 0, index, source);
   if (ret_err != 0 || data_len < sizeof(uint128_t)) {
@@ -208,12 +208,12 @@ CKBResCode get_cell_udt(size_t index, size_t source, uint128_t* amount) {
   return CUDT_SUCCESS;
 }
 
-CKBResCode get_cell_data(size_t index,
+ckb_res_code get_cell_data(size_t index,
                          size_t source,
                          CellDataTypeScript* type,
                          uint128_t* amount,
                          Hash* hash) {
-  CKBResCode err = CKBERR_UNKNOW;
+  ckb_res_code err = CKBERR_UNKNOW;
 
   /*
   typedef struct _SUDTData {
@@ -272,7 +272,7 @@ int get_cell_hash(Hash* hash, size_t index, size_t source) {
                                 CKB_CELL_FIELD_LOCK_HASH);
 }
 
-CKBResCode find_output_cell(const Hash* hash) {
+ckb_res_code find_output_cell(const Hash* hash) {
   for (size_t index = 0;; index++) {
     Hash t_hash = {0};
     int ret = get_cell_hash(&t_hash, index, CKB_SOURCE_OUTPUT);
@@ -286,10 +286,10 @@ CKBResCode find_output_cell(const Hash* hash) {
   return -1;
 }
 
-CKBResCode _get_cursor_from_witness(WitnessArgsType* witness,
+ckb_res_code _get_cursor_from_witness(WitnessArgsType* witness,
                                     size_t index,
                                     size_t source) {
-  CKBResCode err = 0;
+  ckb_res_code err = 0;
   mol2_cursor_t cur;
   err = _make_cursor(index, source, 0, _get_witness_base, &cur);
   CUDT_CHECK(err);
@@ -300,7 +300,7 @@ exit_func:
   return err;
 }
 
-CKBResCode get_cudt_witness(size_t index,
+ckb_res_code get_cudt_witness(size_t index,
                             size_t source,
                             CompactUDTEntriesType* cudt_data) {
   int err = 0;
@@ -316,11 +316,11 @@ exit_func:
   return err;
 }
 
-CKBResCode get_args(TypeID* type_id,
+ckb_res_code get_args(TypeID* type_id,
                     Identity* identity,
                     bool* has_id,
                     Hash* lock_script_code_hash) {
-  CKBResCode err = CUDT_SUCCESS;
+  ckb_res_code err = CUDT_SUCCESS;
 
   unsigned char script[SCRIPT_SIZE];
   uint64_t len = SCRIPT_SIZE;
@@ -364,8 +364,8 @@ exit_func:
   return err;
 }
 
-CKBResCode get_scritp_hash(Hash* data) {
-  CKBResCode err = CUDT_SUCCESS;
+ckb_res_code get_scritp_hash(Hash* data) {
+  ckb_res_code err = CUDT_SUCCESS;
   uint64_t len = sizeof(Hash);
   err = ckb_load_script_hash(data, &len, 0);
   CUDT_CHECK(err);
@@ -373,7 +373,7 @@ exit_func:
   return err;
 }
 
-CKBResCode get_scritp_code_hash(size_t index, size_t source, Hash* data) {
+ckb_res_code get_scritp_code_hash(size_t index, size_t source, Hash* data) {
   uint8_t temp[1024] = {0};
   uint64_t temp_len = 1024;
   int ret = ckb_load_cell_by_field(temp, &temp_len, 0, index, source,

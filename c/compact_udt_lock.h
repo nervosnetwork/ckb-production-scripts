@@ -123,7 +123,7 @@ enum _CompactResult {
 
   CKBERR_UNKNOW = 255,
 };
-typedef uint8_t CKBResCode;
+typedef uint8_t ckb_res_code;
 
 enum _CellDataTypeScript {
   Unknow = 0,
