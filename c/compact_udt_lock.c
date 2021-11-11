@@ -1,5 +1,4 @@
-﻿
-//#define ENABLE_DEBUG
+﻿//#define ENABLE_DEBUG
 
 #ifdef ENABLE_DEBUG
 #define CKB_C_STDLIB_PRINTF
@@ -61,7 +60,7 @@ int auth_validate(const uint8_t* signature,
   CkbEntryType entry;
   memcpy(entry.code_hash, g_auth_dl_cell_hash, sizeof(Hash));
   entry.hash_type = 2;  // ScriptHashType::Data1
-  entry.entry_category = EntryCategoryExec;
+  entry.entry_category = EntryCategoryDynamicLinking;
 
   CkbAuthType auth;
   memcpy(&auth, pubkey_hash, sizeof(Identity));
@@ -726,7 +725,7 @@ CKBResCode load_other_cell(size_t index, CacheData** last, bool* goon) {
   // is itself
   if (memcmp(&g_cudt_cache->cur_data.script_hash, &script_hash,
              sizeof(script_hash)) == 0) {
-    return false;
+    return CUDT_SUCCESS;
   }
 
   // load amount
@@ -746,7 +745,8 @@ CKBResCode load_other_cell(size_t index, CacheData** last, bool* goon) {
   g_cudt_cache->other_cell_input_amount += input_amount;
   g_cudt_cache->other_cell_output_amount += output_amount;
 
-  if (g_cudt_cache->other_cell_input_amount < input_amount || g_cudt_cache->other_cell_output_amount < output_amount) {
+  if (g_cudt_cache->other_cell_input_amount < input_amount ||
+      g_cudt_cache->other_cell_output_amount < output_amount) {
     CUDT_CHECK(CUDTERR_AMOUNT_OVERFLOW);
   }
 
@@ -830,15 +830,18 @@ CKBResCode check_total_udt() {
   uint128_t total_deposit = 0, total_deposit_other = 0;
   for (CacheDeposit* cache = cur_cache->deposits; cache != NULL;
        cache = cache->next) {
-    total_deposit += cache->amount;
-    if (total_deposit < cache->amount) {
-      ASSERT_DBG(false);
-      ckb_exit(CUDTERR_AMOUNT_OVERFLOW);
-    }
     if (cache->source &&
         memcmp(cache->source, &(g_cudt_cache->cur_data.script_hash),
                sizeof(Hash)) != 0) {
       total_deposit_other += cache->amount;
+      if (total_deposit_other < cache->amount) {
+        CUDT_CHECK(CUDTERR_AMOUNT_OVERFLOW);
+      }
+    } else {
+      total_deposit += cache->amount;
+      if (total_deposit < cache->amount) {
+        CUDT_CHECK(CUDTERR_AMOUNT_OVERFLOW);
+      }
     }
   }
 
@@ -847,38 +850,55 @@ CKBResCode check_total_udt() {
   uint128_t total_fee = 0, total_fee_other = 0;
   for (CacheTransfer* cache = cur_cache->transfers; cache != NULL;
        cache = cache->next) {
-    total_transfer += cache->amount;
-    total_fee += cache->fee;
-    if (total_transfer < cache->amount || total_fee < cache->fee) {
-      ASSERT_DBG(false);
-      ckb_exit(CUDTERR_AMOUNT_OVERFLOW);
-    }
-
+    Hash* target_cell = NULL;
     if (cache->target_type == TargetType_ScriptHash) {
-      if (memcmp(&(cache->target), &(g_cudt_cache->cur_data.script_hash),
-                 sizeof(Hash)) != 0) {
-        total_transfer_other += cache->amount;
-        total_fee_other += cache->fee;
-      }
+      if (memcmp(cache->target, &(g_cudt_cache->cur_data.script_hash),
+                 sizeof(Hash)) != 0)
+        target_cell = (Hash*)cache->target;
     } else if (cache->target_type == TargetType_MoveBetweenCompactSMT) {
       if (memcmp(&(cache->target[sizeof(Identity)]),
-                 &(g_cudt_cache->cur_data.script_hash), sizeof(Hash)) != 0) {
-        total_transfer_other += cache->amount;
-        total_fee_other += cache->fee;
+                 &(g_cudt_cache->cur_data.script_hash), sizeof(Hash)) != 0)
+        target_cell = (Hash*)&(cache->target[sizeof(Identity)]);
+    }
+    if (target_cell) {
+      total_transfer_other += cache->amount;
+      total_fee_other += cache->fee;
+      if (total_transfer_other < cache->amount ||
+          total_fee_other < cache->fee) {
+        CUDT_CHECK(CUDTERR_AMOUNT_OVERFLOW);
+      }
+    } else {
+      total_transfer += cache->amount;
+      total_fee += cache->fee;
+      if (total_transfer < cache->amount || total_fee < cache->fee) {
+        CUDT_CHECK(CUDTERR_AMOUNT_OVERFLOW);
       }
     }
   }
 
-  if (cur_cache->input_amount + total_deposit <
-      cur_cache->output_amount + total_transfer + total_fee) {
-    CUDT_CHECK(CUDTERR_NO_ENOUGH_UDT);
-  }
+  CUDT_CHECK2((total_deposit == total_transfer), CUDTERR_NO_ENOUGH_UDT);
 
-  if (g_cudt_cache->other_cell_input_amount + total_transfer_other +
-          total_fee_other <
-      g_cudt_cache->other_cell_output_amount + total_deposit_other) {
-    CUDT_CHECK(CUDTERR_NO_ENOUGH_UDT);
-  }
+  CUDT_CHECK2(
+      cur_cache->input_amount + total_deposit_other >= cur_cache->input_amount,
+      CUDTERR_AMOUNT_OVERFLOW);
+  CUDT_CHECK2(cur_cache->input_amount + total_deposit_other >=
+                  total_fee + total_fee_other,
+              CUDTERR_NO_ENOUGH_UDT);
+  CUDT_CHECK2(cur_cache->input_amount + total_deposit_other - total_fee -
+                      total_fee_other >=
+                  cur_cache->output_amount,
+              CUDTERR_NO_ENOUGH_UDT);
+
+  CUDT_CHECK2(g_cudt_cache->other_cell_input_amount + total_transfer_other >=
+                  total_transfer_other,
+              CUDTERR_AMOUNT_OVERFLOW);
+  CUDT_CHECK2(g_cudt_cache->other_cell_input_amount + total_transfer_other >=
+                  total_deposit_other,
+              CUDTERR_NO_ENOUGH_UDT);
+  CUDT_CHECK2(g_cudt_cache->other_cell_input_amount + total_transfer_other -
+                      total_deposit_other >=
+                  g_cudt_cache->other_cell_output_amount,
+              CUDTERR_NO_ENOUGH_UDT);
 
 exit_func:
   return err;
@@ -1053,10 +1073,7 @@ CKBResCode check_each_transfer() {
                 CUDTERR_TRANSFER_ENOUGH_UDT);
     src_kv->value.amount -= (cache->amount + cache->fee);
     src_kv->value.nonce += 1;
-    if (src_kv->value.nonce == 0) {
-      ASSERT_DBG(false);
-      ckb_exit(CUDTERR_NONCE_OVERFLOW);
-    }
+    CUDT_CHECK2(src_kv->value.nonce != 0, CUDTERR_NONCE_OVERFLOW);
   }
 
 exit_func:

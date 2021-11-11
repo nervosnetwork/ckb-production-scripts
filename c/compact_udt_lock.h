@@ -31,12 +31,18 @@
 #ifdef CKB_USE_SIM
 #undef ASSERT_DBG
 #include <assert.h>
+#ifdef ENABLE_DEBUG
 #define ASSERT_DBG(i) \
   if (!(i)) {         \
     assert(false);    \
     int* a = NULL;    \
     *a = 0;           \
   }
+#else  // ENABLE_DEBUG
+#define ASSERT_DBG(i) \
+  if (!(i)) {         \
+  }
+#endif  // ENABLE_DEBUG
 
 #else  // CKB_USE_SIM
 #ifdef ENABLE_DEBUG

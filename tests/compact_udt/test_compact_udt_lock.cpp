@@ -58,7 +58,6 @@ UTEST(rust_failed, dev) {
 }
 */
 
-/*
 UTEST(test_data, all) {
   string test_data_dir = string(COMPACT_UDT_UNITTEST_SRC_PATH) +
                          string("/../compact_udt_rust/test_data/");
@@ -99,11 +98,11 @@ UTEST(test_data, all) {
   }
   closedir(dp);
 }
-*/
 
+/*
 UTEST(test_data, all) {
   auto dump_ptr = CDumpData::get();
-  dump_ptr->set_data("failed_amount_overflow.json");
+  dump_ptr->set_data("failed_nonce_overflow.json");
 
   bool is_success = true;
   for (int i = 0; i < CDumpData::get()->get_cell_count(); i++) {
@@ -126,5 +125,6 @@ UTEST(test_data, all) {
     ASSERT_DBG(!is_success);
   }
 }
+*/
 
 UTEST_MAIN()

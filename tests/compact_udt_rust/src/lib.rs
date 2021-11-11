@@ -204,10 +204,14 @@ pub struct TXBuilder {
     pub transfers: HashMap<TransferID, TXTransfer>,
     pub transfer_count: u32,
 
-    cudt_hash: Option<Byte32>,
+    pub cudt_hash: Option<Byte32>,
 
     // test
-    test_data_rm_user_output: Vec<(CellID, UserID)>,
+    pub test_data_rm_user_output: Vec<(CellID, UserID)>,
+
+    // test data
+    pub test_data_err_pub_key: bool,
+    pub test_data_err_transfer_sign: bool,
 }
 
 impl TXBuilder {
@@ -227,6 +231,8 @@ impl TXBuilder {
             transfer_count: 0,
             cudt_hash: Option::None,
             test_data_rm_user_output: Vec::new(),
+            test_data_err_pub_key: false,
+            test_data_err_transfer_sign: false,
         }
     }
 
@@ -665,7 +671,10 @@ impl TXBuilder {
                 .unwrap()
                 .pubkey()
                 .expect("args identity pubkey");
-            let pub_hash = blake2b_256(pubkey.serialize().as_slice());
+            let mut pub_hash = blake2b_256(pubkey.serialize().as_slice());
+            if self.test_data_err_pub_key{
+                pub_hash = gen_data();
+            }
             let mut data = BytesMut::with_capacity(21);
             data.put_u8(0);
             data.put(Bytes::from(Vec::from(&pub_hash[0..20])));
@@ -768,6 +777,9 @@ impl TXBuilder {
             let mut message = [0; 32];
             b2b.finalize(&mut message);
 
+            if self.test_data_err_transfer_sign {
+                message = gen_data();
+            }
             let key = self.get_user_key(t.source);
             let sign = key
                 .sign_recoverable(&ckb_types::H256::from(message))
