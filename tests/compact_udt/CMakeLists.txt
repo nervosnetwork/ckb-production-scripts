@@ -9,14 +9,17 @@ set(CUDT_LOCK_C_DIR ${PROJECT_SOURCE_DIR}/../../c)
 set(CUDT_LOCK_DEPS ${CUDT_LOCK_DIR}/deps)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+if (${CMAKE_BUILD_TYPE}_ STREQUAL "Debug_")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
+endif(S)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
-
-#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fsanitize=undefined")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize=undefined")
+if (${EnableSanitize}_ STREQUAL "Enable_" )
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fsanitize=undefined")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize=undefined")
+endif()
 
 if (${EnableCoverage}_ STREQUAL "Enable_" )
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage")
@@ -133,8 +136,10 @@ add_executable(cudt_simulator
 )
 target_link_libraries(cudt_simulator mbedtls)
 
-target_link_libraries(cudt_simulator PRIVATE -fsanitize=address -fsanitize=undefined)
+if (${EnableSanitize}_ STREQUAL "Enable_")
+    target_link_libraries(cudt_simulator PRIVATE -fsanitize=address -fsanitize=undefined)
+endif()
 
-if (${EnableCoverage}_ STREQUAL "Enable_" )
+if (${EnableCoverage}_ STREQUAL "Enable_")
 	target_link_libraries(cudt_simulator PRIVATE -fprofile-arcs -ftest-coverage)
 endif()
