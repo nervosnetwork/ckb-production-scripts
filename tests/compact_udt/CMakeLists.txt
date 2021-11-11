@@ -2,6 +2,9 @@
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
+SET(CMAKE_C_COMPILER "clang")
+SET(CMAKE_CXX_COMPILER "clang++")
+
 project(cudt_simulator CXX C)
 
 set(CUDT_LOCK_DIR ${PROJECT_SOURCE_DIR}/../..)
@@ -14,7 +17,8 @@ if (${CMAKE_BUILD_TYPE}_ STREQUAL "Debug_")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
-endif(S)
+endif()
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libstdc++")
 
 if (${EnableSanitize}_ STREQUAL "Enable_" )
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fsanitize=undefined")

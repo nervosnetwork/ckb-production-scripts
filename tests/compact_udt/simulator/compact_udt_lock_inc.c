@@ -8,21 +8,21 @@
 #include "compact_udt_cc.h"
 #include "compact_udt_lock_inc.h"
 
-#ifdef __GNUC__
+/*#ifdef __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnonnull-compare"
-#endif
+#endif*/
 
 #define CKB_PRODUCTION_SCRIPTS_CKB_AUTH_H_
 #include "auth.c"
 
-#ifdef __GNUC__
+/*#ifdef __GNUC__
 #pragma GCC diagnostic pop
 #pragma GCC diagnostic pop
-#endif
+#endif*/
 
 #include "compact_udt_lock.c"
 
