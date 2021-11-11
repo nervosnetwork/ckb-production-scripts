@@ -2,10 +2,13 @@ cmake_minimum_required(VERSION 3.12)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 17)
 
-SET(CMAKE_C_COMPILER "clang")
-SET(CMAKE_CXX_COMPILER "clang++")
-#SET(CMAKE_C_COMPILER "gcc")
-#SET(CMAKE_CXX_COMPILER "g++")
+if (${EnableGCC}_ STREQUAL "Enable_" )
+    SET(CMAKE_C_COMPILER "gcc")
+    SET(CMAKE_CXX_COMPILER "g++")
+else()
+    SET(CMAKE_C_COMPILER "clang")
+    SET(CMAKE_CXX_COMPILER "clang++")
+endif()
 
 project(cudt_simulator CXX C)
 

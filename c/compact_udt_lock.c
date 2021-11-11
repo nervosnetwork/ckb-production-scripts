@@ -907,7 +907,7 @@ ckb_res_code check_total_udt() {
     }
     if (target_cell) {
       ADD_SELF_AND_CHECK_OVERFOLW(total_transfer_other, cache->amount);
-      ADD_SELF_AND_CHECK_OVERFOLW(total_transfer_other, cache->amount);
+      ADD_SELF_AND_CHECK_OVERFOLW(total_fee_other, cache->fee);
     } else {
       ADD_SELF_AND_CHECK_OVERFOLW(total_transfer, cache->amount);
       ADD_SELF_AND_CHECK_OVERFOLW(total_fee, cache->fee);

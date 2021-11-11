@@ -1,5 +1,5 @@
 use ckb_types::packed::Byte32;
-use compact_udt_rust::TXBuilder;
+use compact_udt_rust::{CellID, TXBuilder, UserID};
 mod misc;
 use misc::*;
 
@@ -102,6 +102,41 @@ fn get_test_data_mulit() -> (Vec<MiscCellData>, Vec<MiscTransferData>) {
     (cells_data, transfer_data)
 }
 
+fn get_test_data_spec() -> (Vec<MiscCellData>, Vec<MiscTransferData>) {
+    #[rustfmt::skip]
+    let cells_data = vec![
+        MiscCellData {
+            lock_scritp: 0,
+            type_scritp: 1,
+            enable_identity: true,
+            i_amount: 1000,
+            o_amount: 900,
+            users: vec![
+                MiscUserData {id: 0, n: 5, a: 400 },    // Alice
+                MiscUserData {id: 1, n: 1, a: 10  },    // Bob
+            ],
+        },
+        MiscCellData {
+            lock_scritp: 0,
+            type_scritp: 1,
+            enable_identity: true,
+            i_amount: 400,
+            o_amount: 500,
+            users: vec![
+                MiscUserData {id: 0, n: 4, a: 5 },  // Alice
+                MiscUserData {id: 2, n: 0, a: 0 },  // Charlie
+            ],
+        },
+    ];
+    #[rustfmt::skip]
+    let transfer_data = vec![
+        MiscTransferData {sc: 0, sd: 0, tc: 0, td: 1, tt: 2, a: 50,  fee: 0 },
+        MiscTransferData {sc: 0, sd: 0, tc: 1, td: 2, tt: 3, a: 100, fee: 0 },
+        MiscTransferData {sc: 1, sd: 2, tc: 1, td: 0, tt: 2, a: 20, fee: 0 },
+    ];
+    (cells_data, transfer_data)
+}
+
 #[test]
 fn success_single_cell() {
     let (cells_data, transfer_data) = get_test_data_signle();
@@ -140,6 +175,43 @@ fn success_amount_near_overflow() {
     let tx = builder.build();
     let res = tx.run();
     tx.output_json("success_amount_near_overflow");
+    assert!(res.is_ok(), "error: {}", res.unwrap_err().to_string());
+}
+
+#[test]
+fn success_from_spec() {
+    let (cells_data, transfer_data) = get_test_data_spec();
+
+    let builder = TXBuilder::new();
+    let builder = gen_tx_builder(builder, cells_data, transfer_data);
+
+    let tx = builder.build();
+
+    let cell1 = tx.builder.cells.get(&CellID::new(0)).unwrap();
+    let cell2 = tx.builder.cells.get(&CellID::new(1)).unwrap();
+
+    let (alice_s_1, bob_s_1) = if cell1.output_kv_pairs[0].index == UserID::new(0) {
+        // Alice
+        (&cell1.output_kv_pairs[0], &cell1.output_kv_pairs[1])
+    } else {
+        (&cell1.output_kv_pairs[1], &cell1.output_kv_pairs[0])
+    };
+
+    let (alice_s_2, charlie_s_2) = if cell2.output_kv_pairs[0].index == UserID::new(0) {
+        // Alice
+        (&cell2.output_kv_pairs[0], &cell2.output_kv_pairs[1])
+    } else {
+        (&cell2.output_kv_pairs[1], &cell2.output_kv_pairs[0])
+    };
+
+    assert!(alice_s_1.amount == 250 && alice_s_1.nonce == 7);
+    assert!(bob_s_1.amount == 60 && bob_s_1.nonce == 1);
+
+    assert!(alice_s_2.amount == 25 && alice_s_2.nonce == 4);
+    assert!(charlie_s_2.amount == 80 && charlie_s_2.nonce == 1);
+
+    let res = tx.run();
+    tx.output_json("success_from_spec");
     assert!(res.is_ok(), "error: {}", res.unwrap_err().to_string());
 }
 

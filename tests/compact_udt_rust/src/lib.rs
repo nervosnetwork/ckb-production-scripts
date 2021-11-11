@@ -389,16 +389,7 @@ impl TXBuilder {
         }
         let tx_view = tx_builder.build();
         let tx_view = builder.sign_cells(tx_view, cell_indexs);
-        TX::new(
-            &tx_view,
-            builder.data_loader,
-            builder.cudt_hash.clone().unwrap(),
-            builder
-                .script_codes
-                .into_iter()
-                .map(|(_id, sc)| sc.clone())
-                .collect(),
-        )
+        TX::new(&tx_view, builder)
     }
 
     // test
@@ -672,7 +663,7 @@ impl TXBuilder {
                 .pubkey()
                 .expect("args identity pubkey");
             let mut pub_hash = blake2b_256(pubkey.serialize().as_slice());
-            if self.test_data_err_pub_key{
+            if self.test_data_err_pub_key {
                 pub_hash = gen_data();
             }
             let mut data = BytesMut::with_capacity(21);
@@ -1017,22 +1008,22 @@ pub struct TX {
     data_loader_backup: DummyDataLoader,
     cudt_hash: Byte32,
     deps_info: Vec<TXScriptCode>,
+
+    pub builder: TXBuilder,
 }
 
 impl TX {
-    pub fn new(
-        tx: &TransactionView,
-        data_loader: DummyDataLoader,
-        cudt_hash: Byte32,
-        deps_info: Vec<TXScriptCode>,
-    ) -> TX {
-        let data_loader_backup = data_loader.clone();
+    pub fn new(tx: &TransactionView, builder: TXBuilder) -> TX {
+        let data_loader_backup = builder.data_loader.clone();
         let resolved_cell_deps = tx
             .cell_deps()
             .into_iter()
             .map(|deps_out_point| {
-                let (dep_output, dep_data) =
-                    data_loader.cells.get(&deps_out_point.out_point()).unwrap();
+                let (dep_output, dep_data) = builder
+                    .data_loader
+                    .cells
+                    .get(&deps_out_point.out_point())
+                    .unwrap();
                 CellMetaBuilder::from_cell_output(dep_output.to_owned(), dep_data.to_owned())
                     .out_point(deps_out_point.out_point())
                     .build()
@@ -1042,14 +1033,21 @@ impl TX {
         let mut resolved_inputs = Vec::new();
         for i in 0..tx.inputs().len() {
             let previous_out_point = tx.inputs().get(i).unwrap().previous_output();
-            let (input_output, input_data) = data_loader.cells.get(&previous_out_point).unwrap();
+            let (input_output, input_data) =
+                builder.data_loader.cells.get(&previous_out_point).unwrap();
             resolved_inputs.push(
                 CellMetaBuilder::from_cell_output(input_output.to_owned(), input_data.to_owned())
                     .out_point(previous_out_point)
                     .build(),
             );
         }
-
+        let cudt_hash = builder.cudt_hash.clone().unwrap();
+        let deps_info = builder
+            .script_codes
+            .clone()
+            .into_iter()
+            .map(|(_id, sc)| sc.clone())
+            .collect();
         TX {
             resolved_tx: ResolvedTransaction {
                 transaction: tx.clone(),
@@ -1062,6 +1060,7 @@ impl TX {
             data_loader_backup,
             cudt_hash,
             deps_info,
+            builder,
         }
     }
 
