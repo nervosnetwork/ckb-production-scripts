@@ -62,6 +62,20 @@
 #endif  // ENABLE_DEBUG
 #endif  // CKB_USE_SIM
 
+#define ADD_AND_CHECK_OVERFOLW(a, b, res) \
+  if (a + b < a) {                        \
+    ASSERT_DBG(false);                    \
+    CUDT_CHECK(CUDTERR_AMOUNT_OVERFLOW);  \
+  }                                       \
+  res = a + b;
+
+#define ADD_SELF_AND_CHECK_OVERFOLW(res, a) \
+  res += a;                                 \
+  if (res < a) {                            \
+    ASSERT_DBG(false);                      \
+    CUDT_CHECK(CUDTERR_AMOUNT_OVERFLOW);    \
+  }
+
 // mol
 #ifndef MOL2_EXIT
 #define MOL2_EXIT ckb_exit

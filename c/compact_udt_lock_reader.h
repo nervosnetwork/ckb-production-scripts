@@ -167,15 +167,20 @@ static ckb_res_code _get_witness_base(void* addr,
         mol2_read_at(&tmp, (uint8_t*)target, target_size); \
     if (cudt_mol2_read_len != target_size) {               \
       ASSERT_DBG(false);                                   \
-      ckb_exit((int8_t)CKBERR_UNKNOW);                             \
+      ckb_exit((int8_t)CKBERR_UNKNOW);                     \
     }                                                      \
   }
 
-#define ReadUint128FromMol2(m, source, target)               \
-  {                                                          \
-    mol2_cursor_t tmp = m.t->source(&m);                     \
-    memset((void*)(&target), 0, sizeof(uint128_t));          \
-    mol2_read_at(&tmp, (uint8_t*)(&target), sizeof(target)); \
+#define ReadUint128FromMol2(m, source, target)                   \
+  {                                                              \
+    mol2_cursor_t tmp = m.t->source(&m);                         \
+    memset((void*)(&target), 0, sizeof(uint128_t));              \
+    uint32_t cudt_mol2_read_len =                                \
+        mol2_read_at(&tmp, (uint8_t*)(&target), sizeof(target)); \
+    if (cudt_mol2_read_len != sizeof(target)) {                  \
+      ASSERT_DBG(false);                                         \
+      ckb_exit((int8_t)CKBERR_UNKNOW);                           \
+    }                                                            \
   }
 
 ////////////////////////////////////////////////////////////////
@@ -255,7 +260,12 @@ ckb_res_code get_cell_data(size_t index,
   mol2_cursor_t mol_lock_data = xudt_data.t->lock(&xudt_data);
   CUDT_CHECK2((mol_lock_data.size == sizeof(Hash)), CUDTERR_ARGS_UNKNOW);
   if (hash) {
-    mol2_read_at(&mol_lock_data, (uint8_t*)hash, sizeof(Hash));
+    uint32_t molread_len =
+        mol2_read_at(&mol_lock_data, (uint8_t*)hash, sizeof(Hash));
+    if (molread_len != sizeof(Hash)) {
+      ASSERT_DBG(false);
+      ckb_exit((int8_t)CKBERR_UNKNOW);
+    }
   }
   if (type)
     *type = TypeScript_xUDT;

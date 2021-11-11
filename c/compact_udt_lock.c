@@ -107,10 +107,12 @@ int load_and_hash_witness(blake2b_state* ctx,
   }
 
   if (hash_length) {
-    blake2b_update(ctx, (char*)&len, sizeof(uint64_t));
+    err = blake2b_update(ctx, (char*)&len, sizeof(uint64_t));
+    CUDT_CHECK2(err == 0, CKBERR_UNKNOW);
   }
   uint64_t offset = (len > ONE_BATCH_SIZE) ? ONE_BATCH_SIZE : len;
-  blake2b_update(ctx, temp, offset);
+  err = blake2b_update(ctx, temp, offset);
+  CUDT_CHECK2(err == 0, CKBERR_UNKNOW);
   while (offset < len) {
     uint64_t current_len = ONE_BATCH_SIZE;
     err = ckb_load_witness(temp, &current_len, start + offset, index, source);
@@ -119,7 +121,8 @@ int load_and_hash_witness(blake2b_state* ctx,
     }
     uint64_t current_read =
         (current_len > ONE_BATCH_SIZE) ? ONE_BATCH_SIZE : current_len;
-    blake2b_update(ctx, temp, current_read);
+    err = blake2b_update(ctx, temp, current_read);
+    CUDT_CHECK2(err == 0, CKBERR_UNKNOW);
     offset += current_read;
   }
 
@@ -160,14 +163,18 @@ int generate_sighash_all(Hash* msg) {
 
   // Prepare sign message
   blake2b_state blake2b_ctx;
-  blake2b_init(&blake2b_ctx, BLAKE2B_BLOCK_SIZE);
-  blake2b_update(&blake2b_ctx, tx_hash, BLAKE2B_BLOCK_SIZE);
+  err = blake2b_init(&blake2b_ctx, BLAKE2B_BLOCK_SIZE);
+  CUDT_CHECK2(err == 0, CKBERR_UNKNOW);
+  err = blake2b_update(&blake2b_ctx, tx_hash, BLAKE2B_BLOCK_SIZE);
+  CUDT_CHECK2(err == 0, CKBERR_UNKNOW);
 
   // Clear lock field to zero, then digest the first witness
   // lock_bytes_seg.ptr actually points to the memory in temp buffer
   memset((void*)lock_bytes_seg.ptr, 0, lock_bytes_seg.size);
-  blake2b_update(&blake2b_ctx, (char*)&witness_len, sizeof(uint64_t));
-  blake2b_update(&blake2b_ctx, temp, read_len);
+  err = blake2b_update(&blake2b_ctx, (char*)&witness_len, sizeof(uint64_t));
+  CUDT_CHECK2(err == 0, CKBERR_UNKNOW);
+  err = blake2b_update(&blake2b_ctx, temp, read_len);
+  CUDT_CHECK2(err == 0, CKBERR_UNKNOW);
   // remaining of first witness
   if (read_len < witness_len) {
     err = load_and_hash_witness(&blake2b_ctx, read_len, 0,
@@ -360,15 +367,25 @@ ckb_res_code get_transfer_hash(const TransferType* t,
   err = blake2b_init(&b2, sizeof(Hash));
   ASSERT_DBG(err == 0);
 
-  blake2b_update(&b2, &(g_cudt_cache->type_id), sizeof(Hash));
+  err = blake2b_update(&b2, &(g_cudt_cache->type_id), sizeof(Hash));
+  CUDT_CHECK2(err == 0, CKBERR_UNKNOW);
   CacheKVPair* kv_pair = find_kv_pair(&(cache->source));
   CUDT_CHECK2(kv_pair, CUDTERR_TRANSFER_SRC_NO_KV_PAIR);
-  blake2b_update(&b2, &(kv_pair->value.nonce), sizeof(kv_pair->value.nonce));
+  err = blake2b_update(&b2, &(kv_pair->value.nonce),
+                       sizeof(kv_pair->value.nonce));
+  CUDT_CHECK2(err == 0, CKBERR_UNKNOW);
 
-  mol2_read_at(&(raw->cur), tmp_buffer, raw->cur.size);
-  blake2b_update(&b2, tmp_buffer, raw->cur.size);
+  uint32_t tmp_buffer_read_len =
+      mol2_read_at(&(raw->cur), tmp_buffer, raw->cur.size);
+  if (tmp_buffer_read_len != raw->cur.size) {
+    ASSERT_DBG(false);
+    ckb_exit((int8_t)CKBERR_UNKNOW);
+  }
+  err = blake2b_update(&b2, tmp_buffer, raw->cur.size);
+  CUDT_CHECK2(err == 0, CKBERR_UNKNOW);
 
-  blake2b_final(&b2, transfer_hash, sizeof(Hash));
+  err = blake2b_final(&b2, transfer_hash, sizeof(Hash));
+  CUDT_CHECK2(err == 0, CKBERR_UNKNOW);
 
 #if defined(CKB_USE_SIM) && defined(__clang__)
   free_temporary_cache(tmp_buffer_len);
@@ -459,11 +476,11 @@ ckb_res_code load_transfer_vec(CacheData* data,
         if (memcmp(&(tmp_buf->script_hash),
                    &(g_cudt_cache->cur_data.script_hash), sizeof(Hash)) == 0) {
           ASSERT_DBG(false);
-          return CUDTERR_WITNESS_INVALID;
+          ckb_exit((int8_t)CUDTERR_WITNESS_INVALID);
         }
         break;
       default:
-        return CUDTERR_WITNESS_INVALID;
+        CUDT_CHECK(CUDTERR_WITNESS_INVALID);
     }
     cache->target = target_buf;
   }
@@ -526,7 +543,7 @@ ckb_res_code check_identity(CompactUDTEntriesType* cudt_witness) {
   bool has_sign = signature_opt.t->is_some(&signature_opt);
   if (has_sign != (g_cudt_cache->identity != NULL)) {
     ASSERT_DBG(false);
-    return CUDTERR_WITNESS_INVALID;
+    ckb_exit((int8_t)CUDTERR_WITNESS_INVALID);
   }
   if (!has_sign) {
     return err;
@@ -628,11 +645,7 @@ ckb_res_code load_other_cudt_cell_data(size_t index, CacheData* cache) {
 
     uint128_t amount = 0;
     ReadUint128FromMol2(d, amount, amount);
-    total_deposit += amount;
-    if (total_deposit < amount) {
-      ASSERT_DBG(false);
-      ckb_exit((int8_t)CUDTERR_NONCE_OVERFLOW);
-    }
+    ADD_SELF_AND_CHECK_OVERFOLW(total_deposit, amount);
 
     Hash hash;
     ReadMemFromMol2(d, source, &hash, sizeof(hash));
@@ -670,8 +683,8 @@ ckb_res_code load_other_cudt_cell_data(size_t index, CacheData* cache) {
     uint128_t amount = 0, fee = 0;
     ReadUint128FromMol2(raw, amount, amount);
     ReadUint128FromMol2(raw, fee, fee);
-    total_transfer += amount;
-    total_fee += fee;
+    ADD_SELF_AND_CHECK_OVERFOLW(total_transfer, amount)
+    ADD_SELF_AND_CHECK_OVERFOLW(total_fee, fee);
 
     CacheTransferSourceType target_type = target.t->item_id(&target);
     Hash hash;
@@ -689,7 +702,7 @@ ckb_res_code load_other_cudt_cell_data(size_t index, CacheData* cache) {
         break;
       }
       default:
-        return CUDTERR_WITNESS_INVALID;
+        CUDT_CHECK(CUDTERR_WITNESS_INVALID);
     }
 
     if (memcmp(&hash, &(g_cudt_cache->cur_data.script_hash), sizeof(hash)) != 0)
@@ -714,8 +727,12 @@ ckb_res_code load_other_cudt_cell_data(size_t index, CacheData* cache) {
     // For MoveBetweenCompactSMT, other not need identity
   }
 
-  if (cache->input_amount + total_deposit < total_transfer + total_fee) {
-    return CUDTERR_OTHER_NO_ENOUGH_UDT;
+  uint128_t input_res = 0, output_res = 0;
+  ADD_AND_CHECK_OVERFOLW(cache->input_amount, total_deposit, input_res);
+  ADD_AND_CHECK_OVERFOLW(total_transfer, total_fee, output_res);
+
+  if (input_res < output_res) {
+    CUDT_CHECK(CUDTERR_OTHER_NO_ENOUGH_UDT);
   }
 
 exit_func:
@@ -777,13 +794,10 @@ ckb_res_code load_other_cell(size_t index, CacheData** last, bool* goon) {
   CUDT_CHECK(err);
   bool is_compact_udt_lock = true;
 
-  g_cudt_cache->other_cell_input_amount += input_amount;
-  g_cudt_cache->other_cell_output_amount += output_amount;
-
-  if (g_cudt_cache->other_cell_input_amount < input_amount ||
-      g_cudt_cache->other_cell_output_amount < output_amount) {
-    CUDT_CHECK(CUDTERR_AMOUNT_OVERFLOW);
-  }
+  ADD_SELF_AND_CHECK_OVERFOLW(g_cudt_cache->other_cell_input_amount,
+                              input_amount);
+  ADD_SELF_AND_CHECK_OVERFOLW(g_cudt_cache->other_cell_output_amount,
+                              output_amount);
 
   if (memcmp(&lock_code_hash, &g_cudt_cache->compact_udt_code_hash,
              sizeof(Hash)) != 0 ||
@@ -870,15 +884,9 @@ ckb_res_code check_total_udt() {
     if (cache->source &&
         memcmp(cache->source, &(g_cudt_cache->cur_data.script_hash),
                sizeof(Hash)) != 0) {
-      total_deposit_other += cache->amount;
-      if (total_deposit_other < cache->amount) {
-        CUDT_CHECK(CUDTERR_AMOUNT_OVERFLOW);
-      }
+      ADD_SELF_AND_CHECK_OVERFOLW(total_deposit_other, cache->amount);
     } else {
-      total_deposit += cache->amount;
-      if (total_deposit < cache->amount) {
-        CUDT_CHECK(CUDTERR_AMOUNT_OVERFLOW);
-      }
+      ADD_SELF_AND_CHECK_OVERFOLW(total_deposit, cache->amount);
     }
   }
 
@@ -898,42 +906,30 @@ ckb_res_code check_total_udt() {
         target_cell = (Hash*)&(cache->target[sizeof(Identity)]);
     }
     if (target_cell) {
-      total_transfer_other += cache->amount;
-      total_fee_other += cache->fee;
-      if (total_transfer_other < cache->amount ||
-          total_fee_other < cache->fee) {
-        CUDT_CHECK(CUDTERR_AMOUNT_OVERFLOW);
-      }
+      ADD_SELF_AND_CHECK_OVERFOLW(total_transfer_other, cache->amount);
+      ADD_SELF_AND_CHECK_OVERFOLW(total_transfer_other, cache->amount);
     } else {
-      total_transfer += cache->amount;
-      total_fee += cache->fee;
-      if (total_transfer < cache->amount || total_fee < cache->fee) {
-        CUDT_CHECK(CUDTERR_AMOUNT_OVERFLOW);
-      }
+      ADD_SELF_AND_CHECK_OVERFOLW(total_transfer, cache->amount);
+      ADD_SELF_AND_CHECK_OVERFOLW(total_fee, cache->fee);
     }
   }
 
   CUDT_CHECK2((total_deposit == total_transfer), CUDTERR_NO_ENOUGH_UDT);
 
+  uint128_t cur_cache_input_amount = 0, total_fee_all = 0;
+  ADD_AND_CHECK_OVERFOLW(cur_cache->input_amount, total_deposit_other,
+                         cur_cache_input_amount);
+  ADD_AND_CHECK_OVERFOLW(total_fee, total_fee_other, total_fee_all);
+  CUDT_CHECK2(cur_cache_input_amount >= total_fee_all, CUDTERR_NO_ENOUGH_UDT);
   CUDT_CHECK2(
-      cur_cache->input_amount + total_deposit_other >= cur_cache->input_amount,
-      CUDTERR_AMOUNT_OVERFLOW);
-  CUDT_CHECK2(cur_cache->input_amount + total_deposit_other >=
-                  total_fee + total_fee_other,
-              CUDTERR_NO_ENOUGH_UDT);
-  CUDT_CHECK2(cur_cache->input_amount + total_deposit_other - total_fee -
-                      total_fee_other >=
-                  cur_cache->output_amount,
-              CUDTERR_NO_ENOUGH_UDT);
+      cur_cache_input_amount - total_fee_all >= cur_cache->output_amount,
+      CUDTERR_NO_ENOUGH_UDT);
 
-  CUDT_CHECK2(g_cudt_cache->other_cell_input_amount + total_transfer_other >=
-                  total_transfer_other,
-              CUDTERR_AMOUNT_OVERFLOW);
-  CUDT_CHECK2(g_cudt_cache->other_cell_input_amount + total_transfer_other >=
-                  total_deposit_other,
+  ADD_AND_CHECK_OVERFOLW(g_cudt_cache->other_cell_input_amount,
+                         total_transfer_other, cur_cache_input_amount);
+  CUDT_CHECK2(cur_cache_input_amount >= total_deposit_other,
               CUDTERR_NO_ENOUGH_UDT);
-  CUDT_CHECK2(g_cudt_cache->other_cell_input_amount + total_transfer_other -
-                      total_deposit_other >=
+  CUDT_CHECK2(cur_cache_input_amount - total_deposit_other >=
                   g_cudt_cache->other_cell_output_amount,
               CUDTERR_NO_ENOUGH_UDT);
 
@@ -1027,11 +1023,7 @@ ckb_res_code check_each_deposit() {
 
     CacheKVPair* kv_pair = find_kv_pair(&(cache->target));
     CUDT_CHECK2(kv_pair, CUDTERR_DEPOSIT_NO_KVPAIR);
-    kv_pair->value.amount += cache->amount;
-    if (kv_pair->value.amount < cache->amount) {
-      ASSERT_DBG(false);
-      ckb_exit((int8_t)CUDTERR_AMOUNT_OVERFLOW);
-    }
+    ADD_SELF_AND_CHECK_OVERFOLW(kv_pair->value.amount, cache->amount);
   }
 
 exit_func:
@@ -1106,9 +1098,14 @@ ckb_res_code check_each_transfer() {
     CacheKVPair* src_kv = find_kv_pair(&(cache->source));
     CUDT_CHECK2(src_kv, CUDTERR_TRANSFER_NO_KVPAIR);
 
-    CUDT_CHECK2(src_kv->value.amount >= cache->amount + cache->fee,
+    uint128_t cache_amount = 0;
+    ADD_AND_CHECK_OVERFOLW(cache->amount, cache->fee, cache_amount);
+    CUDT_CHECK2(src_kv->value.amount >= cache_amount,
                 CUDTERR_TRANSFER_ENOUGH_UDT);
-    src_kv->value.amount -= (cache->amount + cache->fee);
+    uint128_t val_amount = src_kv->value.amount - cache_amount;
+    CUDT_CHECK2(src_kv->value.amount > val_amount, CUDTERR_AMOUNT_OVERFLOW);
+    src_kv->value.amount = val_amount;
+
     src_kv->value.nonce += 1;
     CUDT_CHECK2(src_kv->value.nonce != 0, CUDTERR_NONCE_OVERFLOW);
   }
