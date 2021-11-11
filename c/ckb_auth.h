@@ -44,24 +44,28 @@ typedef int (*ckb_auth_validate_t)(uint8_t auth_algorithm_id,
                                    uint32_t pubkey_hash_size);
 
 static uint8_t g_code_buff[300 * 1024] __attribute__((aligned(RISCV_PGSIZE)));
+static ckb_auth_validate_t g_ckb_auth_validate_func = NULL;
 
 int ckb_auth(CkbEntryType *entry, CkbAuthType *id, const uint8_t *signature,
              uint32_t signature_size, const uint8_t *message32) {
   int err = 0;
   if (entry->entry_category == EntryCategoryDynamicLinking) {
-    void *handle = NULL;
+    void* handle = NULL;
     size_t consumed_size = 0;
-    err = ckb_dlopen2(entry->code_hash, entry->hash_type, g_code_buff,
-                      sizeof(g_code_buff), &handle, &consumed_size);
-    if (err != 0) return err;
+    if (!g_ckb_auth_validate_func) {
+      err = ckb_dlopen2(entry->code_hash, entry->hash_type, g_code_buff,
+                        sizeof(g_code_buff), &handle, &consumed_size);
+      if (err != 0)
+        return err;
 
-    ckb_auth_validate_t func =
-        (ckb_auth_validate_t)ckb_dlsym(handle, "ckb_auth_validate");
-    if (func == 0) {
-      return CKB_INVALID_DATA;
+      g_ckb_auth_validate_func =
+          (ckb_auth_validate_t)ckb_dlsym(handle, "ckb_auth_validate");
+      if (g_ckb_auth_validate_func == 0) {
+        return CKB_INVALID_DATA;
+      }
     }
-    return func(id->algorithm_id, signature, signature_size, message32, 32,
-                id->content, 20);
+    return g_ckb_auth_validate_func(id->algorithm_id, signature, signature_size,
+                                    message32, 32, id->content, 20);
   } else if (entry->entry_category == EntryCategoryExec) {
     CkbBinaryArgsType bin = {0};
     ckb_exec_reset(&bin);
