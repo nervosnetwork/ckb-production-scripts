@@ -9,8 +9,10 @@ extern "C" {
 
 #include "compact_udt_virtual_data.h"
 #include "simulator/dump_data.h"
+#include "test_compact_udt_config.h"
 #include "test_compact_udt_data.h"
 #include "util/util.h"
+
 
 using namespace std;
 
@@ -59,8 +61,7 @@ UTEST(rust_failed, dev) {
 */
 
 UTEST(test_data, all) {
-  string test_data_dir = string(COMPACT_UDT_UNITTEST_SRC_PATH) +
-                         string("/../compact_udt_rust/test_data/");
+  string test_data_dir = string(COMPACT_UDT_UNITTEST_SRC_PATH);
   auto dp = opendir(test_data_dir.c_str());
   ASSERT_DBG(dp);
 

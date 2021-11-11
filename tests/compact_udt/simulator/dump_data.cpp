@@ -2,6 +2,7 @@
 
 #include "ckb_consts.h"
 #include "compact_udt_lock.h"
+#include "test_compact_udt_config.h"
 #include "util/util.h"
 
 #include <string.h>
@@ -81,8 +82,7 @@ bool CDumpData::set_data(string name) {
   if (fi_suc == name.npos)
     case_suc_ = false;
 
-  string path = string(COMPACT_UDT_UNITTEST_SRC_PATH) +
-                string("/../compact_udt_rust/test_data/") + name;
+  string path = string(COMPACT_UDT_UNITTEST_SRC_PATH) + name;
 
   std::ifstream ifs(path);
   configor::json j;
