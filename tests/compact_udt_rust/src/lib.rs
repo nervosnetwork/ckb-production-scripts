@@ -823,26 +823,26 @@ impl TXBuilder {
         witness.build().as_bytes()
     }
     fn sign_cells(&self, tx: TransactionView, cell_indexs: Vec<CellID>) -> TransactionView {
-        let tx_hash = tx.hash();
+        //let len = tx.witnesses().len();
         let mut signed_witnesses: Vec<ckb_types::packed::Bytes> = tx
             .inputs()
             .into_iter()
             .enumerate()
-            .map(|(i, _)| {
+            .map(|(i, _cell_input)| {
                 let cell = self.get_cell(cell_indexs[i]);
                 let witness = WitnessArgs::new_unchecked(tx.witnesses().get(i).unwrap().unpack());
                 if cell.identity.is_none() {
-                    witness.as_bytes().pack()
-                } else {
-                    let sign_data = self.sign_cell(tx_hash.clone(), cell, &witness.as_bytes());
-                    let data = self.gen_cell_witness(cell, Option::Some(sign_data));
-                    witness
-                        .as_builder()
-                        .lock(Some(data).pack())
-                        .build()
-                        .as_bytes()
-                        .pack()
+                    return witness.as_bytes().pack();
                 }
+                
+                let sign_data = self.sign_cell(i, 1, &tx, cell, &witness.as_bytes());
+                let data = self.gen_cell_witness(cell, Option::Some(sign_data));
+                witness
+                    .as_builder()
+                    .lock(Some(data).pack())
+                    .build()
+                    .as_bytes()
+                    .pack()
             })
             .collect();
         for i in signed_witnesses.len()..tx.witnesses().len() {
@@ -853,11 +853,18 @@ impl TXBuilder {
             .set_witnesses(signed_witnesses)
             .build()
     }
-    fn sign_cell(&self, tx_hash: Byte32, cell: &TXCell, witness: &Bytes) -> Bytes {
+    fn sign_cell(
+        &self,
+        i: usize,
+        len: usize,
+        tx: &TransactionView,
+        cell: &TXCell,
+        witness: &Bytes,
+    ) -> Bytes {
         let mut b2b = ckb_hash::new_blake2b();
 
         // tx hash
-        b2b.update(tx_hash.as_slice());
+        b2b.update(tx.hash().as_slice());
 
         // witness len
         let witness_len: u64 = witness.len() as u64;
@@ -876,15 +883,12 @@ impl TXBuilder {
 
         b2b.update(&witness_for_digest.as_bytes());
 
-        // TODO
-        /*
         ((i + 1)..(i + len)).for_each(|n| {
             let witness = tx.witnesses().get(n).unwrap();
             let witness_len = witness.raw_data().len() as u64;
-            blake2b.update(&witness_len.to_le_bytes());
-            blake2b.update(&witness.raw_data());
+            b2b.update(&witness_len.to_le_bytes());
+            b2b.update(&witness.raw_data());
         });
-        */
 
         let mut message = [0; 32];
         b2b.finalize(&mut message);

@@ -21,7 +21,6 @@ void* alloc_cache_base(uint32_t len) {
   if (g_tx_buffer_malloced_len + len > sizeof(g_tx_buffer)) {
     ASSERT_DBG(false);
     ckb_exit((int8_t)CKBERR_UNKNOW);
-    return NULL;
   }
   void* p = g_tx_buffer + g_tx_buffer_malloced_len;
   memset(p, 0, len);
@@ -182,23 +181,23 @@ int generate_sighash_all(Hash* msg) {
     CUDT_CHECK2(!err, CUDTERR_WITNESS_INVALID);
   }
 
-  // Digest same group witnesses
-  size_t i = 1;
-  while (1) {
-    err =
-        load_and_hash_witness(&blake2b_ctx, 0, i, CKB_SOURCE_GROUP_INPUT, true);
-    if (err == CKB_INDEX_OUT_OF_BOUND) {
-      break;
-    }
-    if (err != CKB_SUCCESS) {
-      return CKB_INVALID_DATA;
-    }
-    i += 1;
-  }
+  // CKB_SOURCE_GROUP_INPUT <= 1 in this cell
+  // size_t i = 1;
+  // while (1) {
+  //   err =
+  //       load_and_hash_witness(&blake2b_ctx, 0, i, CKB_SOURCE_GROUP_INPUT,
+  //       true);
+  //   if (err == CKB_INDEX_OUT_OF_BOUND) {
+  //     break;
+  //   }
+  //   if (err != CKB_SUCCESS) {
+  //     return CKB_INVALID_DATA;
+  //   }
+  //   i += 1;
+  // }
 
-  /*
   // Digest witnesses that not covered by inputs
-  i = (size_t)ckb_calculate_inputs_len();
+  size_t i = (size_t)ckb_calculate_inputs_len();
   while (1) {
     err = load_and_hash_witness(&blake2b_ctx, 0, i, CKB_SOURCE_INPUT, true);
     if (err == CKB_INDEX_OUT_OF_BOUND) {
@@ -209,7 +208,6 @@ int generate_sighash_all(Hash* msg) {
     }
     i += 1;
   }
-  */
 
   blake2b_final(&blake2b_ctx, msg, BLAKE2B_BLOCK_SIZE);
 
