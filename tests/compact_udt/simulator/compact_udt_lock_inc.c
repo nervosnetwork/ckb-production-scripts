@@ -14,6 +14,9 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-function"
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wtypedef-redefinition"
+
 #else  //  __clang__
 
 #pragma GCC diagnostic push
@@ -30,6 +33,7 @@
 
 #ifdef __GNUC__
 #ifdef __clang__
+#pragma clang diagnostic pop
 #pragma clang diagnostic pop
 #else  // __clang__
 #pragma GCC diagnostic pop
