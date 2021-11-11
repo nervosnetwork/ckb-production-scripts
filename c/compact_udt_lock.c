@@ -20,7 +20,7 @@ void* alloc_cache_base(uint32_t len) {
 
   if (g_tx_buffer_malloced_len + len > sizeof(g_tx_buffer)) {
     ASSERT_DBG(false);
-    ckb_exit(CKBERR_UNKNOW);
+    ckb_exit((int8_t)CKBERR_UNKNOW);
     return NULL;
   }
   void* p = g_tx_buffer + g_tx_buffer_malloced_len;
@@ -405,7 +405,7 @@ ckb_res_code load_transfer_vec(CacheData* data,
         mol2_read_at(&signature_seg, signature_buf, signature_seg.size);
     if (signature_len != signature_seg.size) {
       ASSERT_DBG(false);
-      ckb_exit(CUDTERR_TRANSFER_INVALID);
+      ckb_exit((int8_t)CUDTERR_TRANSFER_INVALID);
     }
 
     err = check_transfer_sign(&cache->source, &transfer_hash, signature_buf,
@@ -483,7 +483,7 @@ ckb_res_code load_kv_proof(CacheData* data,
 
   if (proof_cur.size == 0) {
     ASSERT_DBG(false);
-    ckb_exit(CUDTERR_SMTPROOF_SIZE_INVALID);
+    ckb_exit((int8_t)CUDTERR_SMTPROOF_SIZE_INVALID);
   }
 
   g_cudt_cache->kv_proof = alloc_cache(proof_cur.size);
@@ -491,7 +491,7 @@ ckb_res_code load_kv_proof(CacheData* data,
       mol2_read_at(&proof_cur, g_cudt_cache->kv_proof, proof_cur.size);
   if (len != proof_cur.size) {
     ASSERT_DBG(false);
-    ckb_exit(CUDTERR_SMTPROOF_SIZE_INVALID);
+    ckb_exit((int8_t)CUDTERR_SMTPROOF_SIZE_INVALID);
   }
   g_cudt_cache->kv_proof_len = proof_cur.size;
   return CUDT_SUCCESS;
@@ -519,7 +519,7 @@ ckb_res_code check_identity(CompactUDTEntriesType* cudt_witness) {
       mol2_read_at(&signature.cur, signature_data, signature.cur.size);
   if (sign_ret_len != signature.cur.size) {
     ASSERT_DBG(false);
-    ckb_exit(CUDTERR_WITNESS_INVALID);
+    ckb_exit((int8_t)CUDTERR_WITNESS_INVALID);
   }
 
   Hash message = {0};
@@ -601,7 +601,7 @@ ckb_res_code load_other_cudt_cell_data(size_t index, CacheData* cache) {
     total_deposit += amount;
     if (total_deposit < amount) {
       ASSERT_DBG(false);
-      ckb_exit(CUDTERR_NONCE_OVERFLOW);
+      ckb_exit((int8_t)CUDTERR_NONCE_OVERFLOW);
     }
 
     Hash hash;
@@ -756,7 +756,8 @@ ckb_res_code load_other_cell(size_t index, CacheData** last, bool* goon) {
   }
 
   if (memcmp(&lock_code_hash, &g_cudt_cache->compact_udt_code_hash,
-             sizeof(Hash)) != 0 || lock_hash_type != g_cudt_cache->compact_udt_hash_type) {
+             sizeof(Hash)) != 0 ||
+      lock_hash_type != g_cudt_cache->compact_udt_hash_type) {
     is_compact_udt_lock = false;
   }
 
@@ -982,7 +983,7 @@ CacheKVPair* find_kv_pair(const Identity* identity) {
     }
   }
   ASSERT_DBG(false);
-  ckb_exit(CKBERR_UNKNOW);
+  ckb_exit((int8_t)CKBERR_UNKNOW);
   return NULL;
 }
 
@@ -999,7 +1000,7 @@ ckb_res_code check_each_deposit() {
     kv_pair->value.amount += cache->amount;
     if (kv_pair->value.amount < cache->amount) {
       ASSERT_DBG(false);
-      ckb_exit(CUDTERR_AMOUNT_OVERFLOW);
+      ckb_exit((int8_t)CUDTERR_AMOUNT_OVERFLOW);
     }
   }
 

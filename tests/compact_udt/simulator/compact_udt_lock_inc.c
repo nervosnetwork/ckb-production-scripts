@@ -8,21 +8,34 @@
 #include "compact_udt_cc.h"
 #include "compact_udt_lock_inc.h"
 
-/*#ifdef __GNUC__
+#ifdef __GNUC__
+#ifdef __clang__
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
+
+#else  //  __clang__
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnonnull-compare"
-#endif*/
+
+#endif  // __clang__
+#endif  // __GNUC__
 
 #define CKB_PRODUCTION_SCRIPTS_CKB_AUTH_H_
 #include "auth.c"
 
-/*#ifdef __GNUC__
+#ifdef __GNUC__
+#ifdef __clang__
+#pragma clang diagnostic pop
+#else  // __clang__
 #pragma GCC diagnostic pop
 #pragma GCC diagnostic pop
-#endif*/
+#endif  // __clang__S
+#endif  // __GNUC__
 
 #include "compact_udt_lock.c"
 

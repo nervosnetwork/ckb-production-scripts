@@ -167,7 +167,7 @@ static ckb_res_code _get_witness_base(void* addr,
         mol2_read_at(&tmp, (uint8_t*)target, target_size); \
     if (cudt_mol2_read_len != target_size) {               \
       ASSERT_DBG(false);                                   \
-      ckb_exit(CKBERR_UNKNOW);                             \
+      ckb_exit((int8_t)CKBERR_UNKNOW);                             \
     }                                                      \
   }
 
