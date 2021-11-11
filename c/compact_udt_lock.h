@@ -7,25 +7,32 @@
 #undef CHECK2
 #undef CHECK
 
-#define CUDT_CHECK2(cond, code)                                    \
-  do {                                                             \
-    if (!(cond)) {                                                 \
-      err = code;                                                  \
-      ASSERT_DBG(0);                                               \
-      printf("Check error(%d): %s:%d\n", err, __FILE__, __LINE__); \
-      goto exit_func;                                              \
-    }                                                              \
+#ifdef ENABLE_DEBUG
+#define PRINT_CHECK_ERR() \
+  printf("Check error(%d): %s:%d\n", err, __FILE__, __LINE__)
+#else  // ENABLE_DEBUG
+#define PRINT_CHECK_ERR()
+#endif  // ENABLE_DEBUG
+
+#define CUDT_CHECK2(cond, code) \
+  do {                          \
+    if (!(cond)) {              \
+      err = code;               \
+      ASSERT_DBG(0);            \
+      PRINT_CHECK_ERR();        \
+      goto exit_func;           \
+    }                           \
   } while (0)
 
-#define CUDT_CHECK(_code)                                          \
-  do {                                                             \
-    int code = (_code);                                            \
-    if (code != 0) {                                               \
-      err = code;                                                  \
-      ASSERT_DBG(0);                                               \
-      printf("Check error(%d): %s:%d\n", err, __FILE__, __LINE__); \
-      goto exit_func;                                              \
-    }                                                              \
+#define CUDT_CHECK(_code) \
+  do {                    \
+    int code = (_code);   \
+    if (code != 0) {      \
+      err = code;         \
+      ASSERT_DBG(0);      \
+      PRINT_CHECK_ERR();  \
+      goto exit_func;     \
+    }                     \
   } while (0)
 
 #ifdef CKB_USE_SIM
