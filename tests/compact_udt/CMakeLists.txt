@@ -1,8 +1,11 @@
-set(CMAKE_C_STANDARD 11)
+cmake_minimum_required(VERSION 3.12)
+set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 17)
 
 SET(CMAKE_C_COMPILER "clang")
 SET(CMAKE_CXX_COMPILER "clang++")
+#SET(CMAKE_C_COMPILER "gcc")
+#SET(CMAKE_CXX_COMPILER "g++")
 
 project(cudt_simulator CXX C)
 
@@ -136,7 +139,7 @@ add_executable(cudt_simulator
 	${PROJECT_SOURCE_DIR}/util/util.cpp
 )
 target_link_libraries(cudt_simulator mbedtls)
-target_link_libraries(cudt_simulator PRIVATE -static-libstdc++)
+target_link_libraries(cudt_simulator -static-libstdc++)
 
 if (${EnableSanitize}_ STREQUAL "Enable_")
     target_link_libraries(cudt_simulator PRIVATE -fsanitize=address -fsanitize=undefined)
