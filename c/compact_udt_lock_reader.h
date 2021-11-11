@@ -7,13 +7,12 @@
 #include "simulator/ckb_syscall_cudt_sim.h"
 #define CKBMAIN simulator_cudt_main
 #else  // CKB_USE_SIM
+#include "blake2b.h"
 #include "ckb_auth.h"
 #include "ckb_consts.h"
 #include "ckb_syscalls.h"
-#include "blake2b.h"
 #define CKBMAIN main
 #endif  // CKB_USE_SIM
-
 
 #include "blockchain-api2.h"
 #include "ckb_consts.h"
@@ -83,10 +82,10 @@ void dbg_print_data(size_t index, size_t source) {
 uint8_t g_read_data_source[DEFAULT_DATA_SOURCE_LENGTH];
 
 typedef ckb_res_code (*func_get_data)(void* addr,
-                                    uint64_t* len,
-                                    size_t offset,
-                                    size_t index,
-                                    size_t source);
+                                      uint64_t* len,
+                                      size_t offset,
+                                      size_t index,
+                                      size_t source);
 
 static uint32_t _read_from_cursor(uintptr_t arg[],
                                   uint8_t* ptr,
@@ -107,10 +106,10 @@ static uint32_t _read_from_cursor(uintptr_t arg[],
 }
 
 static ckb_res_code _make_cursor(size_t index,
-                               size_t source,
-                               size_t offset,
-                               func_get_data func,
-                               mol2_cursor_t* cur) {
+                                 size_t source,
+                                 size_t offset,
+                                 func_get_data func,
+                                 mol2_cursor_t* cur) {
   ASSERT_DBG(cur);
 
   ckb_res_code err = 0;
@@ -144,18 +143,18 @@ exit_func:
 }
 
 static ckb_res_code _get_cell_data_base(void* addr,
-                                      uint64_t* len,
-                                      size_t offset,
-                                      size_t index,
-                                      size_t source) {
+                                        uint64_t* len,
+                                        size_t offset,
+                                        size_t index,
+                                        size_t source) {
   return ckb_load_cell_data(addr, len, offset, index, source);
 }
 
 static ckb_res_code _get_witness_base(void* addr,
-                                    uint64_t* len,
-                                    size_t offset,
-                                    size_t index,
-                                    size_t source) {
+                                      uint64_t* len,
+                                      size_t offset,
+                                      size_t index,
+                                      size_t source) {
   ckb_res_code ret_code = ckb_load_witness(addr, len, offset, index, source);
   return ret_code;
 }
@@ -209,10 +208,10 @@ ckb_res_code get_cell_udt(size_t index, size_t source, uint128_t* amount) {
 }
 
 ckb_res_code get_cell_data(size_t index,
-                         size_t source,
-                         CellDataTypeScript* type,
-                         uint128_t* amount,
-                         Hash* hash) {
+                           size_t source,
+                           CellDataTypeScript* type,
+                           uint128_t* amount,
+                           Hash* hash) {
   ckb_res_code err = CKBERR_UNKNOW;
 
   /*
@@ -287,8 +286,8 @@ ckb_res_code find_output_cell(const Hash* hash) {
 }
 
 ckb_res_code _get_cursor_from_witness(WitnessArgsType* witness,
-                                    size_t index,
-                                    size_t source) {
+                                      size_t index,
+                                      size_t source) {
   ckb_res_code err = 0;
   mol2_cursor_t cur;
   err = _make_cursor(index, source, 0, _get_witness_base, &cur);
@@ -301,8 +300,8 @@ exit_func:
 }
 
 ckb_res_code get_cudt_witness(size_t index,
-                            size_t source,
-                            CompactUDTEntriesType* cudt_data) {
+                              size_t source,
+                              CompactUDTEntriesType* cudt_data) {
   int err = 0;
   WitnessArgsType witnesses;
   err = _get_cursor_from_witness(&witnesses, index, source);
@@ -317,9 +316,10 @@ exit_func:
 }
 
 ckb_res_code get_args(TypeID* type_id,
-                    Identity* identity,
-                    bool* has_id,
-                    Hash* lock_script_code_hash) {
+                      Identity* identity,
+                      bool* has_id,
+                      Hash* lock_script_code_hash,
+                      uint8_t* lock_script_hash_type) {
   ckb_res_code err = CUDT_SUCCESS;
 
   unsigned char script[SCRIPT_SIZE];
@@ -338,6 +338,10 @@ ckb_res_code get_args(TypeID* type_id,
   mol_seg_t code_hash = MolReader_Script_get_code_hash(&script_seg);
   CUDT_CHECK2((code_hash.size == sizeof(Hash)), CUDTERR_LOAD_SCRIPT);
   memcpy(lock_script_code_hash, code_hash.ptr, sizeof(Hash));
+
+  mol_seg_t seg_hash_type = MolReader_Script_get_hash_type(&script_seg);
+  CUDT_CHECK2((seg_hash_type.size == 1), CUDTERR_LOAD_SCRIPT);
+  *lock_script_hash_type = seg_hash_type.ptr[0];
 
   if (MolReader_Script_verify(&script_seg, false) != MOL_OK) {
     return CUDTERR_LOAD_SCRIPT_ENCODING;
@@ -373,7 +377,10 @@ exit_func:
   return err;
 }
 
-ckb_res_code get_scritp_code_hash(size_t index, size_t source, Hash* data) {
+ckb_res_code get_scritp_code_hash(size_t index,
+                                  size_t source,
+                                  Hash* data,
+                                  uint8_t* hash_type) {
   uint8_t temp[1024] = {0};
   uint64_t temp_len = 1024;
   int ret = ckb_load_cell_by_field(temp, &temp_len, 0, index, source,
@@ -392,6 +399,11 @@ ckb_res_code get_scritp_code_hash(size_t index, size_t source, Hash* data) {
 
   mol_seg_t code_hash = MolReader_Script_get_code_hash(&script_seg);
   memcpy(data, code_hash.ptr, sizeof(Hash));
+
+  mol_seg_t seg_hash_type = MolReader_Script_get_hash_type(&script_seg);
+  if (seg_hash_type.size == 1)
+    *hash_type = seg_hash_type.ptr[0];
+
   return CUDT_SUCCESS;
 }
 

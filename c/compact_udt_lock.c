@@ -273,6 +273,7 @@ typedef struct _Cache {
 
   CacheData cur_data;
   Hash compact_udt_code_hash;
+  uint8_t compact_udt_hash_type;
 
   Hash input_smt_hash;
   Hash output_smt_hash;
@@ -310,7 +311,7 @@ ckb_res_code check_script_unique() {
 }
 
 ckb_res_code load_deposit_vec(CacheData* data,
-                            CompactUDTEntriesType* cudt_witness) {
+                              CompactUDTEntriesType* cudt_witness) {
   ckb_res_code err = CUDT_SUCCESS;
   CacheDeposit** last_cache = &(data->deposits);
   DepositVecType dvec = cudt_witness->t->deposits(cudt_witness);
@@ -338,9 +339,9 @@ exit_func:
 }
 
 ckb_res_code get_transfer_hash(const TransferType* t,
-                             const RawTransferType* raw,
-                             const CacheTransfer* cache,
-                             Hash* transfer_hash) {
+                               const RawTransferType* raw,
+                               const CacheTransfer* cache,
+                               Hash* transfer_hash) {
   ckb_res_code err = CUDT_SUCCESS;
 
   blake2b_state b2 = {0};
@@ -365,14 +366,14 @@ exit_func:
 }
 
 ckb_res_code check_transfer_sign(const Identity* id,
-                               const Hash* message,
-                               const uint8_t* signature,
-                               uint32_t signature_len) {
+                                 const Hash* message,
+                                 const uint8_t* signature,
+                                 uint32_t signature_len) {
   return auth_validate(signature, signature_len, message, id);
 }
 
 ckb_res_code load_transfer_vec(CacheData* data,
-                             CompactUDTEntriesType* cudt_witness) {
+                               CompactUDTEntriesType* cudt_witness) {
   ckb_res_code err = CUDT_SUCCESS;
 
   CacheTransfer** last_cache = &(data->transfers);
@@ -451,7 +452,8 @@ exit_func:
   return err;
 }
 
-ckb_res_code load_kv_pairs(CacheData* data, CompactUDTEntriesType* cudt_witness) {
+ckb_res_code load_kv_pairs(CacheData* data,
+                           CompactUDTEntriesType* cudt_witness) {
   ckb_res_code err = CUDT_SUCCESS;
   KVPairVecType kvvec = cudt_witness->t->kv_state(cudt_witness);
   g_cudt_cache->kv_pairs_len = kvvec.t->len(&kvvec);
@@ -475,7 +477,8 @@ exit_func:
   return err;
 }
 
-ckb_res_code load_kv_proof(CacheData* data, CompactUDTEntriesType* cudt_witness) {
+ckb_res_code load_kv_proof(CacheData* data,
+                           CompactUDTEntriesType* cudt_witness) {
   mol2_cursor_t proof_cur = cudt_witness->t->kv_proof(cudt_witness);
 
   if (proof_cur.size == 0) {
@@ -738,7 +741,9 @@ ckb_res_code load_other_cell(size_t index, CacheData** last, bool* goon) {
 
   // load lock script code hash
   Hash lock_code_hash = {0};
-  err = get_scritp_code_hash(index, CKB_SOURCE_INPUT, &lock_code_hash);
+  uint8_t lock_hash_type = 0;
+  err = get_scritp_code_hash(index, CKB_SOURCE_INPUT, &lock_code_hash,
+                             &lock_hash_type);
   CUDT_CHECK(err);
   bool is_compact_udt_lock = true;
 
@@ -751,7 +756,7 @@ ckb_res_code load_other_cell(size_t index, CacheData** last, bool* goon) {
   }
 
   if (memcmp(&lock_code_hash, &g_cudt_cache->compact_udt_code_hash,
-             sizeof(Hash)) != 0) {
+             sizeof(Hash)) != 0 || lock_hash_type != g_cudt_cache->compact_udt_hash_type) {
     is_compact_udt_lock = false;
   }
 
@@ -802,7 +807,8 @@ ckb_res_code load_all_data() {
   Identity identity;
   bool has_id = false;
   err = get_args(&(g_cudt_cache->type_id), &identity, &has_id,
-                 &(g_cudt_cache->compact_udt_code_hash));
+                 &(g_cudt_cache->compact_udt_code_hash),
+                 &(g_cudt_cache->compact_udt_hash_type));
   CUDT_CHECK(err);
   if (has_id) {
     g_cudt_cache->identity = (Identity*)alloc_cache(sizeof(Identity));
@@ -1002,8 +1008,8 @@ exit_func:
 }
 
 ckb_res_code check_transfer(CacheTransfer* cache,
-                          Hash* hash,
-                          Identity* identity) {
+                            Hash* hash,
+                            Identity* identity) {
   ckb_res_code err = CUDT_SUCCESS;
   if (hash == NULL)
     return CUDT_SUCCESS;
