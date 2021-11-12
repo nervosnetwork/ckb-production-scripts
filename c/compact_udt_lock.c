@@ -912,8 +912,6 @@ ckb_res_code check_total_udt() {
     }
   }
 
-  CUDT_CHECK2((total_deposit == total_transfer), CUDTERR_NO_ENOUGH_UDT);
-
   uint128_t cur_cache_input_amount = 0, total_fee_all = 0;
   ADD_AND_CHECK_OVERFOLW(cur_cache->input_amount, total_deposit_other,
                          cur_cache_input_amount);
@@ -969,7 +967,8 @@ ckb_res_code check_deposit(CacheDeposit* cache) {
 
   if (memcmp(cache->source, &(g_cudt_cache->cur_data.script_hash),
              sizeof(Hash)) == 0) {
-    source_cache = &(g_cudt_cache->cur_data);
+    ASSERT_DBG(false);
+    CUDT_CHECK(CUDTERR_DEPOSIT_INVALID);
   } else {
     source_cache = find_other_cache(cache->source);
   }
@@ -1106,6 +1105,13 @@ ckb_res_code check_each_transfer() {
 
     src_kv->value.nonce += 1;
     CUDT_CHECK2(src_kv->value.nonce != 0, CUDTERR_NONCE_OVERFLOW);
+
+    if (identity && !hash) {
+      CacheKVPair* tar_kv = find_kv_pair(identity);
+      CUDT_CHECK2(tar_kv, CUDTERR_TRANSFER_NO_KVPAIR);
+
+      ADD_SELF_AND_CHECK_OVERFOLW(tar_kv->value.amount, cache->amount);
+    }
   }
 
 exit_func:

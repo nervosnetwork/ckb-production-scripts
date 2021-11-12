@@ -77,9 +77,9 @@ bool CDumpData::set_data(string name) {
     return false;
   }
 
-  if (fi_suc == name.npos)
+  if (fi_suc != name.npos)
     case_suc_ = true;
-  if (fi_suc == name.npos)
+  if (fi_fai != name.npos)
     case_suc_ = false;
 
   string path = string(COMPACT_UDT_UNITTEST_SRC_PATH) + name;

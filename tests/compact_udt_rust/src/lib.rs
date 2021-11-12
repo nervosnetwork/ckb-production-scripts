@@ -535,6 +535,9 @@ impl TXBuilder {
 
         let mut amount: u128 = user.amount;
         for deposit in &cell.deposit_vec {
+            if deposit.source == cell.id {
+                continue;
+            }
             if deposit.target == user.index {
                 amount += deposit.amount;
             }
@@ -559,6 +562,11 @@ impl TXBuilder {
                 } else {
                     nonce += 1;
                 }
+            }
+            if transfer.target_type == WitnessTransferTargetType::Identity
+                && transfer.target_id == user.index
+            {
+                amount += transfer.amount;
             }
         }
         let kv_pair = WitnessKVPair {
@@ -718,6 +726,9 @@ impl TXBuilder {
     fn gen_cell_witness(&self, cell: &TXCell, sign_data: Option<Bytes>) -> Bytes {
         let mut deposit_vec = compact_udt_mol::DepositVecBuilder::default();
         for d in &cell.deposit_vec {
+            if d.source == cell.id {
+                continue;
+            }
             let c = self.get_cell(d.source);
 
             let depoist = compact_udt_mol::DepositBuilder::default()
@@ -834,7 +845,7 @@ impl TXBuilder {
                 if cell.identity.is_none() {
                     return witness.as_bytes().pack();
                 }
-                
+
                 let sign_data = self.sign_cell(i, 1, &tx, cell, &witness.as_bytes());
                 let data = self.gen_cell_witness(cell, Option::Some(sign_data));
                 witness
@@ -979,7 +990,7 @@ pub struct WitnessDeposit {
     pub fee: u128,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum WitnessTransferTargetType {
     None,
     ScritpHash,
