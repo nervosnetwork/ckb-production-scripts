@@ -1,5 +1,6 @@
+
 use ckb_types::packed::Byte32;
-use compact_udt_rust::{CellID, TXBuilder, UserID};
+use compact_udt_rust::*;
 mod misc;
 use misc::*;
 
@@ -289,9 +290,14 @@ fn faliled_def_user() {
 
 #[test]
 fn failed_same_type_id() {
-    let (mut cells_data, transfer_data) = get_test_data_mulit();
+    let (mut cells_data, mut transfer_data) = get_test_data_mulit();
     cells_data[2].enable_identity = false;
     cells_data[3].enable_identity = false;
+    for mut t in &mut transfer_data {
+        if t.tt == 3{
+            t.tt = 1;
+        }
+    }
 
     let builder = TXBuilder::new();
     let mut builder = gen_tx_builder(builder, cells_data, transfer_data);
@@ -301,8 +307,11 @@ fn failed_same_type_id() {
             cells.type_id = Byte32::new([0; 32]);
         }
     }
+    let sc = builder.script_codes.get_mut(&ScriptCodeID::new(0)).unwrap();
+    sc.script_hash = Option::Some(gen_byte32());
 
     let tx = builder.build();
+
     let res = tx.run();
     tx.output_json("failed_same_type_id");
     assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());

@@ -23,7 +23,7 @@
 #pragma GCC diagnostic pop
 #endif
 
-struct CellData {
+struct CDumpData::CellData {
   CHash lock_hash_;
   CHash lock_code_hash_;
   CBuffer inptu_cell_data_;
@@ -41,7 +41,7 @@ struct DepsInfo {
 struct CDumpData::Data {
   CHash tx_hash_;
   CHash cudt_hash_;
-  map<uint32_t, CellData> cells_;
+  map<uint32_t, CDumpData::CellData> cells_;
   map<uint32_t, DepsInfo> deps_info_;
 
   unique_ptr<CBuffer> tmp_data_;
@@ -139,6 +139,16 @@ bool CDumpData::set_group_index(int index) {
     return false;
   }
 
+  // update same group
+  cur_group_.clear();
+  for (size_t i = 0; i < data_->cells_.size(); i++) {
+    if (data_->cells_[i].lock_hash_ == data_->cells_[index].lock_hash_) {
+      cur_group_.push_back(i);
+      if (i == index)
+        cur_group_index_ = cur_group_.size() - 1;
+    }
+  }
+
   group_index_ = index;
   return true;
 }
@@ -194,29 +204,7 @@ int CDumpData::load_cell_data(void* addr,
 
   CBuffer* buf = nullptr;
 
-  if (source == CKB_SOURCE_INPUT) {
-    auto it = data_->cells_.find(index);
-    if (it == data_->cells_.end()) {
-      return CKB_INDEX_OUT_OF_BOUND;
-    }
-    buf = &it->second.inptu_cell_data_;
-  } else if (source == CKB_SOURCE_OUTPUT) {
-    auto it = data_->cells_.find(index);
-    if (it == data_->cells_.end()) {
-      return CKB_INDEX_OUT_OF_BOUND;
-    }
-    buf = &it->second.outptu_cell_data_;
-  } else if (source == CKB_SOURCE_GROUP_INPUT) {
-    if (index >= 1)
-      return CKB_INDEX_OUT_OF_BOUND;
-    auto it = data_->cells_.find(group_index_);
-    if (it == data_->cells_.end()) {
-      return CKB_INDEX_OUT_OF_BOUND;
-    }
-    buf = &it->second.inptu_cell_data_;
-  } else if (source == CKB_SOURCE_GROUP_OUTPUT) {
-    return CKB_INDEX_OUT_OF_BOUND;
-  } else if (source == CKB_SOURCE_CELL_DEP) {
+  if (source == CKB_SOURCE_CELL_DEP) {
     auto it = data_->deps_info_.find(index);
     if (it == data_->deps_info_.end()) {
       return CKB_INDEX_OUT_OF_BOUND;
@@ -225,9 +213,21 @@ int CDumpData::load_cell_data(void* addr,
     data_->tmp_data_ = move(cell_data);
     buf = data_->tmp_data_.get();
   } else {
-    ASSERT_DBG(false);
+    auto cell = get_cells_data(index, source);
+    if (cell == nullptr) {
+      return CKB_INDEX_OUT_OF_BOUND;
+    }
+    if (source == CKB_SOURCE_INPUT || source == CKB_SOURCE_GROUP_INPUT) {
+      buf = &cell->inptu_cell_data_;
+    } else if (source == CKB_SOURCE_OUTPUT ||
+               source == CKB_SOURCE_GROUP_OUTPUT) {
+      buf = &cell->outptu_cell_data_;
+    } else {
+      ASSERT_DBG(false);
+      return -1;
+    }
   }
-  ASSERT_DBG(buf);
+
   p = buf->data();
   l = buf->size();
 
@@ -254,30 +254,13 @@ int CDumpData::load_witness(void* addr,
                             size_t offset,
                             size_t index,
                             size_t source) {
-  CBuffer* buf = nullptr;
-  if (source == CKB_SOURCE_GROUP_INPUT) {
-    if (index >= 1)
-      return CKB_INDEX_OUT_OF_BOUND;
-    auto it = data_->cells_.find(group_index_);
-    if (it == data_->cells_.end()) {
-      ASSERT_DBG(false);
-      return CKB_INDEX_OUT_OF_BOUND;
-    }
-    buf = &it->second.witness_;
-  } else if (source == CKB_SOURCE_GROUP_OUTPUT) {
+  auto cell = get_cells_data(index, source);
+  if (cell == nullptr) {
     return CKB_INDEX_OUT_OF_BOUND;
-  } else if (source == CKB_SOURCE_INPUT || source == CKB_SOURCE_OUTPUT) {
-    auto it = data_->cells_.find(index);
-    if (it == data_->cells_.end()) {
-      return CKB_INDEX_OUT_OF_BOUND;
-    }
-    buf = &it->second.witness_;
-  } else {
-    ASSERT_DBG(false);
   }
 
-  auto p = buf->data();
-  auto l = buf->size();
+  auto p = cell->witness_.data();
+  auto l = cell->witness_.size();
 
   load_offset(p, l, addr, len, offset);
   return 0;
@@ -298,6 +281,30 @@ int CDumpData::load_cell_by_field(void* addr,
     ASSERT_DBG(false);
   }
   return 0;
+}
+
+CDumpData::CellData* CDumpData::get_cells_data(size_t index, size_t source) {
+  if (source == CKB_SOURCE_GROUP_INPUT) {
+    if (index >= cur_group_.size())
+      return nullptr;
+    return &(data_->cells_[cur_group_[index]]);
+  } else if (source == CKB_SOURCE_GROUP_OUTPUT) {
+    return nullptr;
+  } else if (source == CKB_SOURCE_INPUT) {
+    auto it = data_->cells_.find(index);
+    if (it == data_->cells_.end()) {
+      return nullptr;
+    }
+    return &it->second;
+  } else if (source == CKB_SOURCE_OUTPUT) {
+    auto it = data_->cells_.find(index);
+    if (it == data_->cells_.end()) {
+      return nullptr;
+    }
+    return &it->second;
+  }
+
+  return nullptr;
 }
 
 int CDumpData::load_cell_by_field_lock_hash(void* addr,

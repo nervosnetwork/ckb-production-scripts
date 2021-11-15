@@ -92,9 +92,9 @@ UTEST(test_data, all) {
       }
     }
     if (dump_ptr->case_success()) {
-      ASSERT_DBG(is_success);
+      assert(is_success);
     } else {
-      ASSERT_DBG(!is_success);
+      assert(!is_success);
     }
   }
   closedir(dp);
@@ -121,9 +121,9 @@ UTEST(test_data, all) {
   }
 
   if (dump_ptr->case_success()) {
-    ASSERT_DBG(is_success);
+    assert(is_success);
   } else {
-    ASSERT_DBG(!is_success);
+    assert(!is_success);
   }
 }
 */

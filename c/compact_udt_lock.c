@@ -1,6 +1,4 @@
-﻿//#define ENABLE_DEBUG
-
-#ifdef ENABLE_DEBUG
+﻿#ifdef ENABLE_DEBUG
 #define CKB_C_STDLIB_PRINTF
 #include "debug.h"
 #endif  // ENABLE_DEBUG

@@ -104,7 +104,7 @@ fn gen_data() -> [u8; 32] {
     rng.fill(&mut buf);
     buf
 }
-fn gen_byte32() -> Byte32 {
+pub fn gen_byte32() -> Byte32 {
     Byte32::new(gen_data())
 }
 
@@ -246,17 +246,19 @@ impl TXBuilder {
             code: script.1,
             code_hash: code_hash,
             path: script.0,
+            script_hash: Option::None,
         };
         self.script_codes.insert(ret, script);
         (self, ret)
     }
+    pub fn get_script(&self, index: ScriptCodeID) -> &TXScriptCode {
+        self.script_codes.get(&index).unwrap()
+    }
     pub fn get_scritp_code(&self, index: ScriptCodeID) -> &Bytes {
-        let opt = self.script_codes.get(&index);
-        &opt.unwrap().code
+        &self.get_script(index).code
     }
     pub fn get_scritp_code_hash(&self, index: ScriptCodeID) -> &Byte32 {
-        let opt = self.script_codes.get(&index);
-        &opt.unwrap().code_hash
+        &self.get_script(index).code_hash
     }
     pub fn set_script_cudt_id(mut self, index: ScriptCodeID) -> Self {
         self.cudt_scritp_id = Option::Some(index);
@@ -374,13 +376,13 @@ impl TXBuilder {
         tx_builder = tx_builder_tmp;
         builder = builder_tmp;
 
-        let mut cell_indexs: Vec<CellID> = Vec::new();
         for (_id, cell) in builder.cells.clone() {
             let (builder_tmp, tx_builder_tmp) = builder.build_script(tx_builder, &cell);
             builder = builder_tmp;
             tx_builder = tx_builder_tmp;
         }
 
+        let mut cell_indexs: HashMap<Byte32, CellID> = HashMap::new();
         for (_id, cell) in builder.cells.clone() {
             let (builder_tmp, tx_builder_tmp) =
                 builder.build_cell(tx_builder, &cell, &mut cell_indexs);
@@ -437,7 +439,13 @@ impl TXBuilder {
         tx_builder: TransactionBuilder,
         cell: &TXCell,
     ) -> (Self, TransactionBuilder) {
-        let previous_tx_hash: Byte32 = gen_byte32();
+        let script_code = self.get_script(cell.lock_script_id);
+        let previous_tx_hash: Byte32 = if script_code.script_hash.is_some() {
+            script_code.script_hash.clone().unwrap()
+        } else {
+            gen_byte32()
+        };
+
         let previous_out_point = OutPoint::new(previous_tx_hash, 0);
         let args = self.gen_args(&cell);
         let input_cell_data = self.gen_input_cell_data(&cell);
@@ -474,9 +482,8 @@ impl TXBuilder {
         self,
         tx_builder: TransactionBuilder,
         cell: &TXCell,
-        cell_index: &mut Vec<CellID>,
+        cell_index: &mut HashMap<Byte32, CellID>,
     ) -> (Self, TransactionBuilder) {
-        cell_index.push(cell.id);
         let witness = self.gen_cell_witness(cell, Option::None);
         assert!(!witness.is_empty(), "witness is empty");
 
@@ -490,6 +497,11 @@ impl TXBuilder {
                 output_cell_data.len() as u64,
             ))
             .witness(witness_args.as_bytes().pack());
+
+        let witness_hash = Byte32::new(blake2b_256(witness_args.as_slice()));
+        assert!(cell_index.get(&witness_hash).is_none());
+        cell_index.insert(witness_hash, cell.id);
+
         let tx_builder = tx_builder
             .output(cell.cell_output.clone().unwrap())
             .output_data(output_cell_data.pack());
@@ -833,15 +845,22 @@ impl TXBuilder {
 
         witness.build().as_bytes()
     }
-    fn sign_cells(&self, tx: TransactionView, cell_indexs: Vec<CellID>) -> TransactionView {
+    fn sign_cells(
+        &self,
+        tx: TransactionView,
+        cell_indexs: HashMap<Byte32, CellID>,
+    ) -> TransactionView {
         //let len = tx.witnesses().len();
         let mut signed_witnesses: Vec<ckb_types::packed::Bytes> = tx
             .inputs()
             .into_iter()
             .enumerate()
             .map(|(i, _cell_input)| {
-                let cell = self.get_cell(cell_indexs[i]);
                 let witness = WitnessArgs::new_unchecked(tx.witnesses().get(i).unwrap().unpack());
+
+                let witness_hash = Byte32::new(blake2b_256(witness.as_slice()));
+                let cell = self.get_cell(*cell_indexs.get(&witness_hash).unwrap());
+
                 if cell.identity.is_none() {
                     return witness.as_bytes().pack();
                 }
@@ -921,6 +940,7 @@ pub struct TXScriptCode {
     pub code: Bytes,
     pub code_hash: Byte32,
     pub path: String,
+    pub script_hash: Option<Byte32>,
 }
 
 #[derive(Clone)]
@@ -1019,7 +1039,7 @@ pub struct WitnessKVPair {
 pub struct TX {
     pub resolved_tx: ResolvedTransaction,
     pub data_loader: DummyDataLoader,
-    tx_backup: TransactionView,
+    pub tx_backup: TransactionView,
     data_loader_backup: DummyDataLoader,
     cudt_hash: Byte32,
     deps_info: Vec<TXScriptCode>,

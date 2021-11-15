@@ -14,6 +14,7 @@ extern "C" {
 #ifdef __cplusplus
 #include <memory>
 #include <string>
+#include <vector>
 
 using namespace std;
 
@@ -21,6 +22,7 @@ class CDumpData {
  private:
   CDumpData();
   struct Data;
+  struct CellData;
 
  public:
   ~CDumpData();
@@ -56,6 +58,7 @@ class CDumpData {
                          size_t field);
 
  private:
+  CellData* get_cells_data(size_t index, size_t source);
   int load_cell_by_field_lock_hash(void* addr,
                                    uint64_t* len,
                                    size_t offset,
@@ -77,6 +80,8 @@ class CDumpData {
   bool case_suc_ = false;
   int group_index_ = -1;
   std::unique_ptr<Data> data_;
+  std::vector<int> cur_group_;
+  int cur_group_index_ = -1;
 };
 
 #endif  // __cplusplus

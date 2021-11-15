@@ -1,6 +1,8 @@
 ﻿#ifndef _C_COMPACT_UDE_LOCK_H_
 #define _C_COMPACT_UDE_LOCK_H_
 
+//#define ENABLE_DEBUG
+
 #include <stdint.h>
 
 // check
