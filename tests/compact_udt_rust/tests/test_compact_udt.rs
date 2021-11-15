@@ -64,7 +64,7 @@ fn get_test_data_mulit() -> (Vec<MiscCellData>, Vec<MiscTransferData>) {
         },
         MiscCellData {
             lock_scritp: 0,
-            type_scritp: 1,
+            type_scritp: 3,
             enable_identity: true,
             i_amount: 50000,
             o_amount: 10000,
