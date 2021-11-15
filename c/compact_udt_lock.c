@@ -33,23 +33,7 @@ void* alloc_cache(uint32_t len) {
   return alloc_cache_base(len);
 }
 
-#if defined(CKB_USE_SIM) && defined(__clang__)
-
-void* alloc_temporary_cache(uint32_t len) {
-  ASSERT_DBG(len % 16 == 0);
-  void* r = alloc_cache_base(len);
-  g_now_is_temporary_cache_ += len;
-  return r;
-}
-
-void free_temporary_cache(uint32_t len) {
-  g_tx_buffer_malloced_len -= len;
-  g_now_is_temporary_cache_ -= len;
-}
-
-#else  // CKB_USE_SIM && __clang__
-
-#endif  // CKB_USE_SIM && __clang__
+//#define __STDC_NO_VLA__
 
 // clang-format off
 const uint8_t g_auth_dl_cell_hash[] = {
@@ -354,12 +338,8 @@ ckb_res_code get_transfer_hash(const TransferType* t,
                                Hash* transfer_hash) {
   ckb_res_code err = CUDT_SUCCESS;
   uint32_t tmp_buffer_len = (raw->cur.size / 16 + 1) * 16;
-#if defined(CKB_USE_SIM) && defined(__clang__)
-  uint8_t* tmp_buffer = alloc_temporary_cache(tmp_buffer_len);
-#else   // CKB_USE_SIM && __clang__
   uint8_t tmp_buffer[tmp_buffer_len];
   memset(tmp_buffer, 0, tmp_buffer_len);
-#endif  // CKB_USE_SIM && __clang__
 
   blake2b_state b2 = {0};
   err = blake2b_init(&b2, sizeof(Hash));
@@ -384,10 +364,6 @@ ckb_res_code get_transfer_hash(const TransferType* t,
 
   err = blake2b_final(&b2, transfer_hash, sizeof(Hash));
   CUDT_CHECK2(err == 0, CKBERR_UNKNOW);
-
-#if defined(CKB_USE_SIM) && defined(__clang__)
-  free_temporary_cache(tmp_buffer_len);
-#endif  // CKB_USE_SIM && __clang__
 
 exit_func:
   return err;
@@ -428,12 +404,8 @@ ckb_res_code load_transfer_vec(CacheData* data,
     mol2_cursor_t signature_seg = t.t->signature(&t);
 
     uint32_t signature_buf_len = (signature_seg.size / 16 + 1) * 16;
-#if defined(CKB_USE_SIM) && defined(__clang__)
-    uint8_t* signature_buf = alloc_temporary_cache(signature_buf_len);
-#else   // CKB_USE_SIM && __clang__
     uint8_t signature_buf[signature_buf_len];
     memset(signature_buf, 0, signature_buf_len);
-#endif  // CKB_USE_SIM && __clang__
     uint32_t signature_len =
         mol2_read_at(&signature_seg, signature_buf, signature_seg.size);
     if (signature_len != signature_seg.size) {
@@ -443,9 +415,6 @@ ckb_res_code load_transfer_vec(CacheData* data,
 
     err = check_transfer_sign(&cache->source, &transfer_hash, signature_buf,
                               signature_len);
-#if defined(CKB_USE_SIM) && defined(__clang__)
-    free_temporary_cache(signature_buf_len);
-#endif  // CKB_USE_SIM && __clang__
     CUDT_CHECK(err);
 
     TransferTargetType raw_target = raw.t->target(&raw);
@@ -551,12 +520,8 @@ ckb_res_code check_identity(CompactUDTEntriesType* cudt_witness) {
 
   SignatureType signature = make_Signature(&signature_t);
   uint32_t signature_len = (signature.cur.size / 16 + 1) * 16;
-#if defined(CKB_USE_SIM) && defined(__clang__)
-  uint8_t* signature_data = alloc_temporary_cache(signature_len);
-#else   // CKB_USE_SIM && __clang__
   uint8_t signature_data[signature_len];
   memset(signature_data, 0, signature_len);
-#endif  // CKB_USE_SIM && __clang__
 
   uint32_t sign_ret_len =
       mol2_read_at(&signature.cur, signature_data, signature.cur.size);
@@ -572,10 +537,6 @@ ckb_res_code check_identity(CompactUDTEntriesType* cudt_witness) {
   err = auth_validate(signature_data, signature.cur.size, &message,
                       g_cudt_cache->identity);
   CUDT_CHECK2(!err, CUDTERR_CHECK_IDENTITY_INVALID);
-#if defined(CKB_USE_SIM) && defined(__clang__)
-  free_temporary_cache(signature_len);
-#endif  // CKB_USE_SIM && __clang__
-
 exit_func:
   return err;
 }
