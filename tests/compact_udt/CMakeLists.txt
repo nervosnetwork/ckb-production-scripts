@@ -145,7 +145,7 @@ add_executable(cudt_simulator
 	${PROJECT_SOURCE_DIR}/util/util.cpp
 )
 target_link_libraries(cudt_simulator mbedtls)
-target_link_libraries(cudt_simulator -static-libstdc++)
+#target_link_libraries(cudt_simulator -static-libstdc++)
 
 if (${EnableSanitize}_ STREQUAL "Enable_")
     target_link_libraries(cudt_simulator -fsanitize=address -fsanitize=undefined)
