@@ -1,5 +1,6 @@
-
-use ckb_types::packed::Byte32;
+use ckb_types::{
+    packed::{Byte32},
+};
 use compact_udt_rust::*;
 mod misc;
 use misc::*;
@@ -37,6 +38,7 @@ fn get_test_data_signle() -> (Vec<MiscCellData>, Vec<MiscTransferData>) {
 fn get_test_data_mulit() -> (Vec<MiscCellData>, Vec<MiscTransferData>) {
     #[rustfmt::skip]
     let cells_data = vec![
+        // 0
         MiscCellData {
             lock_scritp: 0,
             type_scritp: 1,
@@ -50,6 +52,8 @@ fn get_test_data_mulit() -> (Vec<MiscCellData>, Vec<MiscTransferData>) {
                 MiscUserData {id: 3, n: 55, a: 10  },
             ],
         },
+
+        // 1
         MiscCellData {
             lock_scritp: 2,
             type_scritp: 3,
@@ -63,6 +67,8 @@ fn get_test_data_mulit() -> (Vec<MiscCellData>, Vec<MiscTransferData>) {
                 MiscUserData {id: 5, n: 3,  a: 300 },
             ],
         },
+
+        // 2
         MiscCellData {
             lock_scritp: 0,
             type_scritp: 3,
@@ -75,6 +81,8 @@ fn get_test_data_mulit() -> (Vec<MiscCellData>, Vec<MiscTransferData>) {
                 MiscUserData {id: 6, n: 45,  a: 5000 },
             ],
         },
+
+        // 3
         MiscCellData {
             lock_scritp: 0,
             type_scritp: 1,
@@ -88,6 +96,66 @@ fn get_test_data_mulit() -> (Vec<MiscCellData>, Vec<MiscTransferData>) {
                 MiscUserData {id: 6, n: 72, a: 1000 },
             ],
         },
+
+        // 4
+        MiscCellData {
+            lock_scritp: 0,
+            type_scritp: 1,
+            enable_identity: false,
+            i_amount: 12221,
+            o_amount: 2000,
+            users: vec![
+                MiscUserData {id: 3, n: 23, a: 300  },
+                MiscUserData {id: 4, n: 89, a: 2000 },
+                MiscUserData {id: 5, n: 76, a: 100  },
+                MiscUserData {id: 6, n: 72, a: 1003 },
+            ],
+        },
+
+        // 5
+        MiscCellData {
+            lock_scritp: 0,
+            type_scritp: 1,
+            enable_identity: false,
+            i_amount: 12223,
+            o_amount: 2000,
+            users: vec![
+                MiscUserData {id: 3, n: 23, a: 300  },
+                MiscUserData {id: 4, n: 89, a: 2000 },
+                MiscUserData {id: 5, n: 76, a: 100  },
+                MiscUserData {id: 6, n: 72, a: 1002 },
+            ],
+        },
+
+        // 6
+        MiscCellData {
+            lock_scritp: 0,
+            type_scritp: 1,
+            enable_identity: false,
+            i_amount: 12222,
+            o_amount: 2000,
+            users: vec![
+                MiscUserData {id: 3, n: 23, a: 300  },
+                MiscUserData {id: 4, n: 89, a: 2000 },
+                MiscUserData {id: 5, n: 76, a: 100  },
+                MiscUserData {id: 6, n: 72, a: 1001 },
+            ],
+        },
+
+        // 7
+        MiscCellData {
+            lock_scritp: 0,
+            type_scritp: 1,
+            enable_identity: false,
+            i_amount: 12222,
+            o_amount: 2000,
+            users: vec![
+                MiscUserData {id: 3, n: 23, a: 300  },
+                MiscUserData {id: 4, n: 89, a: 2000 },
+                MiscUserData {id: 5, n: 76, a: 101  },
+                MiscUserData {id: 6, n: 72, a: 1001 },
+            ],
+        },
     ];
 
     #[rustfmt::skip]
@@ -99,6 +167,9 @@ fn get_test_data_mulit() -> (Vec<MiscCellData>, Vec<MiscTransferData>) {
         MiscTransferData {sc: 2, sd: 4, tc: 0, td: 0, tt: 3, a: 1000,fee: 10 },
         MiscTransferData {sc: 0, sd: 0, tc: 2, td: 6, tt: 3, a: 20,  fee: 30 },
         MiscTransferData {sc: 1, sd: 2, tc: 3, td: 5, tt: 3, a: 99,  fee: 30 },
+        MiscTransferData {sc: 4, sd: 3, tc: 1, td: 5, tt: 3, a: 99,  fee: 30 },
+        MiscTransferData {sc: 5, sd: 3, tc: 1, td: 5, tt: 3, a: 99,  fee: 30 },
+        MiscTransferData {sc: 6, sd: 3, tc: 1, td: 5, tt: 3, a: 99,  fee: 30 },
     ];
     (cells_data, transfer_data)
 }
@@ -291,10 +362,12 @@ fn faliled_def_user() {
 #[test]
 fn failed_same_type_id() {
     let (mut cells_data, mut transfer_data) = get_test_data_mulit();
-    cells_data[2].enable_identity = false;
-    cells_data[3].enable_identity = false;
+    for mut c in &mut cells_data {
+        c.enable_identity = false;
+    }
+
     for mut t in &mut transfer_data {
-        if t.tt == 3{
+        if t.tt == 3 {
             t.tt = 1;
         }
     }
@@ -307,6 +380,7 @@ fn failed_same_type_id() {
             cells.type_id = Byte32::new([0; 32]);
         }
     }
+
     let sc = builder.script_codes.get_mut(&ScriptCodeID::new(0)).unwrap();
     sc.script_hash = Option::Some(gen_byte32());
 
@@ -347,5 +421,54 @@ fn failed_transfer_sign() {
     let tx = builder.build();
     let res = tx.run();
     tx.output_json("failed_transfer_sign");
+    assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
+}
+
+#[test]
+fn failed_transfer_sign_empty() {
+    let (cells_data, transfer_data) = get_test_data_signle();
+
+    let mut builder = TXBuilder::new();
+    builder = gen_tx_builder(builder, cells_data, transfer_data);
+    builder.test_data_err_transfer_empty = true;
+
+    builder = builder.gen_all_transfers_info();
+    let tx = builder.gen_ckb_tx();
+    let res = tx.run();
+    tx.output_json("failed_transfer_sign_empty");
+    assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
+}
+
+#[test]
+fn failed_smt_proof_is_empty() {
+    let (cells_data, transfer_data) = get_test_data_signle();
+
+    let builder = TXBuilder::new();
+    let builder = gen_tx_builder(builder, cells_data, transfer_data);
+
+    let mut builder = builder.gen_all_transfers_info();
+
+    for (_id, cell) in &mut builder.cells {
+        let empty_data: Vec<u8> = Vec::new();
+        cell.smt_proof = ckb_types::bytes::Bytes::from(empty_data);
+    }
+
+    let tx = builder.gen_ckb_tx();
+    let res = tx.run();
+    tx.output_json("failed_smt_proof_is_empty");
+    assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
+}
+
+#[test]
+fn failed_no_signature() {
+    let (cells_data, transfer_data) = get_test_data_signle();
+
+    let mut builder = TXBuilder::new();
+    builder = gen_tx_builder(builder, cells_data, transfer_data);
+    builder.test_data_signature_empty = true;
+
+    let tx = builder.build();
+    let res = tx.run();
+    tx.output_json("failed_no_signature");
     assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
 }

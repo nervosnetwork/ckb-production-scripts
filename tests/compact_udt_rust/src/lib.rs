@@ -211,7 +211,9 @@ pub struct TXBuilder {
 
     // test data
     pub test_data_err_pub_key: bool,
+    pub test_data_signature_empty: bool,
     pub test_data_err_transfer_sign: bool,
+    pub test_data_err_transfer_empty: bool,
 }
 
 impl TXBuilder {
@@ -232,7 +234,9 @@ impl TXBuilder {
             cudt_hash: Option::None,
             test_data_rm_user_output: Vec::new(),
             test_data_err_pub_key: false,
+            test_data_signature_empty: false,
             test_data_err_transfer_sign: false,
+            test_data_err_transfer_empty: false,
         }
     }
 
@@ -364,34 +368,42 @@ impl TXBuilder {
         (self, s)
     }
 
-    pub fn build(&self) -> TX {
-        let mut builder: TXBuilder = self.clone();
-
+    pub fn gen_all_transfers_info(mut self) -> Self {
         // generate transfer and deposit
-        builder = builder.gen_transfers_details();
-        builder = builder.gen_smt_info();
+        self = self.gen_transfers_details();
+        self = self.gen_smt_info();
+        self
+    }
 
+    pub fn gen_ckb_tx(mut self) -> TX {
         let mut tx_builder = TransactionBuilder::default();
-        let (builder_tmp, tx_builder_tmp) = builder.add_cell_deps(tx_builder);
+        let (builder_tmp, tx_builder_tmp) = self.add_cell_deps(tx_builder);
         tx_builder = tx_builder_tmp;
-        builder = builder_tmp;
+        self = builder_tmp;
 
-        for (_id, cell) in builder.cells.clone() {
-            let (builder_tmp, tx_builder_tmp) = builder.build_script(tx_builder, &cell);
-            builder = builder_tmp;
+        for (_id, cell) in self.cells.clone() {
+            let (builder_tmp, tx_builder_tmp) = self.build_script(tx_builder, &cell);
+            self = builder_tmp;
             tx_builder = tx_builder_tmp;
         }
 
         let mut cell_indexs: HashMap<Byte32, CellID> = HashMap::new();
-        for (_id, cell) in builder.cells.clone() {
+        for (_id, cell) in self.cells.clone() {
             let (builder_tmp, tx_builder_tmp) =
-                builder.build_cell(tx_builder, &cell, &mut cell_indexs);
-            builder = builder_tmp;
+                self.build_cell(tx_builder, &cell, &mut cell_indexs);
+            self = builder_tmp;
             tx_builder = tx_builder_tmp;
         }
         let tx_view = tx_builder.build();
-        let tx_view = builder.sign_cells(tx_view, cell_indexs);
-        TX::new(&tx_view, builder)
+        let tx_view = self.sign_cells(tx_view, cell_indexs);
+        TX::new(&tx_view, self)
+    }
+
+    pub fn build(&self) -> TX {
+        let mut builder: TXBuilder = self.clone();
+
+        builder = builder.gen_all_transfers_info();
+        builder.gen_ckb_tx()
     }
 
     // test
@@ -795,13 +807,17 @@ impl TXBuilder {
                 message = gen_data();
             }
             let key = self.get_user_key(t.source);
-            let sign = key
+            let mut sign = key
                 .sign_recoverable(&ckb_types::H256::from(message))
-                .unwrap();
+                .unwrap()
+                .serialize();
+            if self.test_data_err_transfer_empty {
+                sign = Vec::new();
+            }
 
             let transfer = compact_udt_mol::TransferBuilder::default()
                 .raw(transfer_raw)
-                .signature(to_signature(&sign.serialize()))
+                .signature(to_signature(&sign))
                 .build();
             transfer_vec = transfer_vec.push(transfer);
         }
@@ -832,7 +848,8 @@ impl TXBuilder {
         if cell.identity.is_some() {
             let sign: Bytes;
             if sign_data.is_none() {
-                sign = Bytes::from([0; 65].to_vec());
+                let tmp_data: Vec<u8> = Vec::new();
+                sign = Bytes::from(tmp_data);
             } else {
                 sign = sign_data.unwrap();
             }
@@ -861,7 +878,7 @@ impl TXBuilder {
                 let witness_hash = Byte32::new(blake2b_256(witness.as_slice()));
                 let cell = self.get_cell(*cell_indexs.get(&witness_hash).unwrap());
 
-                if cell.identity.is_none() {
+                if cell.identity.is_none() || self.test_data_signature_empty {
                     return witness.as_bytes().pack();
                 }
 

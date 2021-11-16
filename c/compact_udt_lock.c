@@ -18,7 +18,7 @@ void* alloc_cache_base(uint32_t len) {
 
   if (g_tx_buffer_malloced_len + len > sizeof(g_tx_buffer)) {
     ASSERT_DBG(false);
-    ckb_exit((int8_t)CKBERR_UNKNOW);
+    return NULL;
   }
   void* p = g_tx_buffer + g_tx_buffer_malloced_len;
   memset(p, 0, len);
@@ -106,7 +106,7 @@ int load_and_hash_witness(blake2b_state* ctx,
     CUDT_CHECK2(err == 0, CKBERR_UNKNOW);
     offset += current_read;
   }
-
+  
 exit_func:
   return err;
 }
@@ -355,7 +355,7 @@ ckb_res_code get_transfer_hash(const TransferType* t,
       mol2_read_at(&(raw->cur), tmp_buffer, raw->cur.size);
   if (tmp_buffer_read_len != raw->cur.size) {
     ASSERT_DBG(false);
-    ckb_exit((int8_t)CKBERR_UNKNOW);
+    return CKBERR_UNKNOW;
   }
   err = blake2b_update(&b2, tmp_buffer, raw->cur.size);
   CUDT_CHECK2(err == 0, CKBERR_UNKNOW);
@@ -400,6 +400,10 @@ ckb_res_code load_transfer_vec(CacheData* data,
     err = get_transfer_hash(&t, &raw, cache, &transfer_hash);
     CUDT_CHECK(err);
     mol2_cursor_t signature_seg = t.t->signature(&t);
+    if (signature_seg.size == 0) {
+      ASSERT_DBG(false);
+      return CUDTERR_TRANSFER_INVALID;
+    }
 
     uint32_t signature_buf_len = (signature_seg.size / 16 + 1) * 16;
     uint8_t signature_buf[signature_buf_len];
@@ -408,7 +412,7 @@ ckb_res_code load_transfer_vec(CacheData* data,
         mol2_read_at(&signature_seg, signature_buf, signature_seg.size);
     if (signature_len != signature_seg.size) {
       ASSERT_DBG(false);
-      ckb_exit((int8_t)CUDTERR_TRANSFER_INVALID);
+      return CUDTERR_TRANSFER_INVALID;
     }
 
     err = check_transfer_sign(&cache->source, &transfer_hash, signature_buf,
@@ -441,7 +445,7 @@ ckb_res_code load_transfer_vec(CacheData* data,
         if (memcmp(&(tmp_buf->script_hash),
                    &(g_cudt_cache->cur_data.script_hash), sizeof(Hash)) == 0) {
           ASSERT_DBG(false);
-          ckb_exit((int8_t)CUDTERR_WITNESS_INVALID);
+          return CUDTERR_WITNESS_INVALID;
         }
         break;
       default:
@@ -485,7 +489,7 @@ ckb_res_code load_kv_proof(CacheData* data,
 
   if (proof_cur.size == 0) {
     ASSERT_DBG(false);
-    ckb_exit((int8_t)CUDTERR_SMTPROOF_SIZE_INVALID);
+    return CUDTERR_SMTPROOF_SIZE_INVALID;
   }
 
   g_cudt_cache->kv_proof = alloc_cache(proof_cur.size);
@@ -493,7 +497,7 @@ ckb_res_code load_kv_proof(CacheData* data,
       mol2_read_at(&proof_cur, g_cudt_cache->kv_proof, proof_cur.size);
   if (len != proof_cur.size) {
     ASSERT_DBG(false);
-    ckb_exit((int8_t)CUDTERR_SMTPROOF_SIZE_INVALID);
+    return CUDTERR_SMTPROOF_SIZE_INVALID;
   }
   g_cudt_cache->kv_proof_len = proof_cur.size;
   return CUDT_SUCCESS;
@@ -508,7 +512,7 @@ ckb_res_code check_identity(CompactUDTEntriesType* cudt_witness) {
   bool has_sign = signature_opt.t->is_some(&signature_opt);
   if (has_sign != (g_cudt_cache->identity != NULL)) {
     ASSERT_DBG(false);
-    ckb_exit((int8_t)CUDTERR_WITNESS_INVALID);
+    return CUDTERR_WITNESS_INVALID;
   }
   if (!has_sign) {
     return err;
@@ -525,7 +529,7 @@ ckb_res_code check_identity(CompactUDTEntriesType* cudt_witness) {
       mol2_read_at(&signature.cur, signature_data, signature.cur.size);
   if (sign_ret_len != signature.cur.size) {
     ASSERT_DBG(false);
-    ckb_exit((int8_t)CUDTERR_WITNESS_INVALID);
+    return CUDTERR_WITNESS_INVALID;
   }
 
   Hash message = {0};
@@ -835,7 +839,7 @@ ckb_res_code check_total_udt() {
   CacheData* cur_cache = &(g_cudt_cache->cur_data);
 
   // cur total deposit
-  uint128_t total_deposit = 0, total_deposit_other = 0;
+  uint128_t total_deposit_other = 0;
   for (CacheDeposit* cache = cur_cache->deposits; cache != NULL;
        cache = cache->next) {
     if (cache->source &&
@@ -843,7 +847,7 @@ ckb_res_code check_total_udt() {
                sizeof(Hash)) != 0) {
       ADD_SELF_AND_CHECK_OVERFOLW(total_deposit_other, cache->amount);
     } else {
-      ADD_SELF_AND_CHECK_OVERFOLW(total_deposit, cache->amount);
+      CUDT_CHECK(CUDTERR_DEPOSIT_INVALID);
     }
   }
 
@@ -965,7 +969,6 @@ CacheKVPair* find_kv_pair(const Identity* identity) {
     }
   }
   ASSERT_DBG(false);
-  ckb_exit((int8_t)CKBERR_UNKNOW);
   return NULL;
 }
 

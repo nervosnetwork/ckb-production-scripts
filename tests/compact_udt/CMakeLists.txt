@@ -30,6 +30,7 @@ endif()
 if (${EnableSanitize}_ STREQUAL "Enable_" )
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fsanitize=undefined")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize=undefined")
+    message("Enable sanitize")
 endif()
 
 if (${EnableCoverage}_ STREQUAL "Enable_" )
