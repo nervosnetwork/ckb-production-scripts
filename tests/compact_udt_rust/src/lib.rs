@@ -496,7 +496,11 @@ impl TXBuilder {
         cell: &TXCell,
         cell_index: &mut HashMap<Byte32, CellID>,
     ) -> (Self, TransactionBuilder) {
-        let witness = self.gen_cell_witness(cell, Option::None);
+        let mut sign_data = Option::None;
+        if cell.identity.is_some() && !self.test_data_signature_empty {
+            sign_data = Option::Some(Bytes::from([0; 65].to_vec()));
+        }
+        let witness = self.gen_cell_witness(cell, sign_data);
         assert!(!witness.is_empty(), "witness is empty");
 
         let witness_args = WitnessArgsBuilder::default()
