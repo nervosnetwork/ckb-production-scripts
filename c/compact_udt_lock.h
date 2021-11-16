@@ -147,6 +147,8 @@ enum _CompactResult {
   CKBERR_UNKNOW = 255,
 };
 typedef uint8_t ckb_res_code;
+#define CUDT_IS_SUCCESS(err) (err == 0)
+#define CUDT_IS_FAILED(err) (err != 0)
 
 enum _CellDataTypeScript {
   Unknow = 0,
