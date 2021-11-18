@@ -1,6 +1,4 @@
-use ckb_types::{
-    packed::{Byte32},
-};
+use ckb_types::packed::Byte32;
 use compact_udt_rust::*;
 mod misc;
 use misc::*;
@@ -223,6 +221,20 @@ fn success_single_cell() {
 }
 
 #[test]
+fn success_single_no_identity() {
+    let (mut cells_data, transfer_data) = get_test_data_signle();
+    cells_data[0].enable_identity = false;
+
+    let builder = TXBuilder::new();
+    let builder = gen_tx_builder(builder, cells_data, transfer_data);
+
+    let tx = builder.build();
+    let res = tx.run();
+    tx.output_json("success_single_no_identity");
+    assert!(res.is_ok(), "error: {}", res.unwrap_err().to_string());
+}
+
+#[test]
 fn success_mulit_all_cudt() {
     let (cells_data, transfer_data) = get_test_data_mulit();
 
@@ -284,6 +296,34 @@ fn success_from_spec() {
 
     let res = tx.run();
     tx.output_json("success_from_spec");
+    assert!(res.is_ok(), "error: {}", res.unwrap_err().to_string());
+}
+
+#[test]
+fn success_many_transfer() {
+    let (mut cells_data, mut transfer_data) = get_test_data_signle();
+    cells_data[0].i_amount = 100000;
+    cells_data[0].users[0].a = 50000;
+    // 2000 tested, but it takes too long
+    for _i in 0..100 {
+        transfer_data.push(MiscTransferData {
+            sc: 0,
+            sd: 0,
+            tc: 0,
+            td: 2,
+            tt: 2,
+            a: 1,
+            fee: 1,
+        });
+    }
+
+    let mut builder = TXBuilder::new();
+    builder = gen_tx_builder(builder, cells_data, transfer_data);
+    builder = builder.gen_all_transfers_info();
+
+    let tx = builder.gen_ckb_tx();
+    let res = tx.run();
+    //tx.output_json("success_many_transfer");
     assert!(res.is_ok(), "error: {}", res.unwrap_err().to_string());
 }
 
@@ -470,5 +510,174 @@ fn failed_no_signature() {
     let tx = builder.build();
     let res = tx.run();
     tx.output_json("failed_no_signature");
+    assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
+}
+
+#[test]
+fn failed_transfer_no_user() {
+    let (cells_data, transfer_data) = get_test_data_mulit();
+
+    let mut builder = TXBuilder::new();
+    builder = gen_tx_builder(builder, cells_data, transfer_data);
+
+    builder = builder.gen_all_transfers_info();
+
+    let cell = builder.cells.get_mut(&CellID::new(0)).unwrap();
+    let t = WitnessTransfer {
+        source: UserID::new(5),
+        target_cell: CellID::new(1),
+        target_type: WitnessTransferTargetType::ScritpHash,
+        target_id: UserID::new(0),
+        amount: 1,
+        fee: 0,
+    };
+    cell.transfer_vec.push(t);
+
+    let tx = builder.gen_ckb_tx();
+
+    let res = tx.run();
+    tx.output_json("failed_transfer_no_user");
+    assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
+}
+
+#[test]
+fn failed_transfer_type_betweem_itself() {
+    let (cells_data, mut transfer_data) = get_test_data_mulit();
+    transfer_data[1].tt = 3;
+
+    let mut builder = TXBuilder::new();
+    builder = gen_tx_builder(builder, cells_data, transfer_data);
+
+    builder = builder.gen_all_transfers_info();
+    let tx = builder.gen_ckb_tx();
+
+    let res = tx.run();
+    tx.output_json("failed_transfer_type_betweem_itself");
+    assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
+}
+
+#[test]
+fn failed_sudt() {
+    let (cells_data, transfer_data) = get_test_data_signle();
+
+    let mut builder = TXBuilder::new();
+    builder.test_data_err_sudt_flag = true;
+    builder = gen_tx_builder(builder, cells_data, transfer_data);
+
+    let tx = builder.build();
+    let res = tx.run();
+    tx.output_json("failed_sudt");
+    assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
+}
+
+#[test]
+fn failed_transfer_itself() {
+    let (cells_data, transfer_data) = get_test_data_signle();
+
+    let mut builder = TXBuilder::new();
+    builder.test_data_err_deposit = true;
+    builder = gen_tx_builder(builder, cells_data, transfer_data);
+    builder = builder.gen_all_transfers_info();
+
+    let cell = builder.cells.get_mut(&CellID::new(0)).unwrap();
+    cell.deposit_vec.push(WitnessDeposit {
+        source: cell.id,
+        target: UserID::new(0),
+        amount: 1,
+        fee: 1,
+    });
+
+    let tx = builder.gen_ckb_tx();
+    let res = tx.run();
+    tx.output_json("failed_transfer_itself");
+    assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
+}
+
+#[test]
+fn failed_enough_fee() {
+    let (cells_data, mut transfer_data) = get_test_data_signle();
+    transfer_data.push(MiscTransferData {
+        sc: 0,
+        sd: 0,
+        tc: 0,
+        td: 2,
+        tt: 2,
+        a: 5,
+        fee: 0xFFFFFFF,
+    });
+
+    let mut builder = TXBuilder::new();
+    builder = gen_tx_builder(builder, cells_data, transfer_data);
+    builder = builder.gen_all_transfers_info();
+
+    let tx = builder.gen_ckb_tx();
+    let res = tx.run();
+    tx.output_json("failed_enough_fee");
+    assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
+}
+
+#[test]
+fn failed_enough_deposit() {
+    let (mut cells_data, mut transfer_data) = get_test_data_spec();
+    cells_data[1].lock_scritp = 1;
+    transfer_data[1].tt = 1;
+    transfer_data.push(MiscTransferData {
+        sc: 1,
+        sd: 0,
+        tc: 0,
+        td: 0,
+        tt: 1,
+        a: 0xFFFFFFF,
+        fee: 1,
+    });
+
+    let mut builder = TXBuilder::new();
+    builder = gen_tx_builder(builder, cells_data, transfer_data);
+    builder = builder.gen_all_transfers_info();
+
+    let tx = builder.gen_ckb_tx();
+    let res = tx.run();
+    tx.output_json("failed_enough_deposit");
+    assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
+}
+
+#[test]
+fn failed_other_output_invalid() {
+    let (mut cells_data, mut transfer_data) = get_test_data_spec();
+    cells_data[1].lock_scritp = 1;
+    transfer_data[1].tt = 1;
+
+    cells_data[1].o_amount = 0xFFFFFF;
+
+    let mut builder = TXBuilder::new();
+    builder = gen_tx_builder(builder, cells_data, transfer_data);
+    builder = builder.gen_all_transfers_info();
+
+    let tx = builder.gen_ckb_tx();
+    let res = tx.run();
+    tx.output_json("failed_other_output_invalid");
+    assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
+}
+
+#[test]
+fn failed_has_itself_deposit() {
+    let (cells_data, transfer_data) = get_test_data_mulit();
+
+    let mut builder = TXBuilder::new();
+    builder.test_data_err_deposit = true;
+    builder = gen_tx_builder(builder, cells_data, transfer_data);
+    builder = builder.gen_all_transfers_info();
+
+    let cell = builder.cells.get_mut(&CellID::new(0)).unwrap();
+    cell.deposit_vec.push(WitnessDeposit {
+        source: cell.id,
+        target: UserID::new(0),
+        amount: 1,
+        fee: 1,
+    });
+
+    let tx = builder.gen_ckb_tx();
+    let res = tx.run();
+    tx.output_json("failed_has_itself_deposit");
     assert!(res.is_err(), "error: {}", res.unwrap_err().to_string());
 }

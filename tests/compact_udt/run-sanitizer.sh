@@ -2,7 +2,7 @@
 
 CUR_PWD=$(pwd)
 CUR_DIR=$(cd `dirname $0`; pwd)
-FOLDER=build-debug
+FOLDER=build-sanitizer
 
 rm -rf $CUR_DIR/$FOLDER
 mkdir -p $CUR_DIR/$FOLDER

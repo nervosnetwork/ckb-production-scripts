@@ -64,6 +64,18 @@
 #endif  // ENABLE_DEBUG
 #endif  // CKB_USE_SIM
 
+#define CUDT_CHECK_BLAKE(err)      \
+  if (err != 0) {                  \
+    ASSERT_DBG(false);             \
+    return CUDTERR_BLAKE2B_FAILED; \
+  }
+
+#define CUDT_CHECK_MOL2(err, rc_code) \
+  if (!err) {                         \
+    ASSERT_DBG(false);                \
+    return rc_code;                   \
+  }
+
 #define ADD_AND_CHECK_OVERFOLW(a, b, res) \
   if (a + b < a) {                        \
     ASSERT_DBG(false);                    \
@@ -87,9 +99,9 @@
 typedef __uint128_t uint128_t;
 #endif  // uint128_t
 
-#define MAX_WITNESS_SIZE 32768
+#define MAX_WITNESS_SIZE 600 * 1024
 #define BLAKE2B_BLOCK_SIZE 32
-#define ONE_BATCH_SIZE 32768
+#define ONE_BATCH_SIZE 600 * 1024
 
 enum _CompactResult {
   CUDT_SUCCESS = 0,
@@ -135,10 +147,20 @@ enum _CompactResult {
   CUDTERR_AMOUNT_OVERFLOW,
   CUDTERR_NONCE_OVERFLOW,
 
+  CUDTERR_BLAKE2B_FAILED,
+
+  CUDTERR_PARSE_MOL_DEPOSIT,
+  CUDTERR_PARSE_MOL_TRANSFER,
+  CUDTERR_PARSE_MOL_KV_PAIRS,
+  CUDTERR_PARSE_MOL_XUDT_DATA,
+
+  CUDTERR_ALLOC_MEMORY,
+
   // Old, will remove
 
   CKBERR_CELLDATA_TOO_LOW,
   CKBERR_CELLDATA_INDEX_OUT_OF_BOUND,
+  CKBERR_CELLDATA_SUDT_INVALID,
   CKBERR_CELLDATA_UNKNOW,
 
   CKBERR_DATA_EMTPY,

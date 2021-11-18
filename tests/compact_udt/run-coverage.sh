@@ -4,12 +4,12 @@ CUR_PWD=$(pwd)
 CUR_DIR=$(cd `dirname $0`; pwd)
 cd $CUR_DIR
 
-rm -rf build_dbg
+rm -rf build-coverage
 rm -f init.info
 rm -f final.info
 
-mkdir build_dbg
-cd build_dbg
+mkdir build-coverage
+cd build-coverage
 
 cmake -G "Unix Makefiles" ../ -DEnableGCC=Enable -DEnableCoverage=Enable
 

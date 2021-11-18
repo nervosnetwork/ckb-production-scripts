@@ -214,6 +214,8 @@ pub struct TXBuilder {
     pub test_data_signature_empty: bool,
     pub test_data_err_transfer_sign: bool,
     pub test_data_err_transfer_empty: bool,
+    pub test_data_err_sudt_flag: bool,
+    pub test_data_err_deposit: bool,
 }
 
 impl TXBuilder {
@@ -237,6 +239,8 @@ impl TXBuilder {
             test_data_signature_empty: false,
             test_data_err_transfer_sign: false,
             test_data_err_transfer_empty: false,
+            test_data_err_sudt_flag: false,
+            test_data_err_deposit: false,
         }
     }
 
@@ -721,7 +725,11 @@ impl TXBuilder {
         data.put_u128_le(amount.clone());
 
         if self.sudt_scritp_id.unwrap() == cell.type_script_id {
-            data.put_u32_le(0xFFFFFFFF);
+            if self.test_data_err_sudt_flag {
+                data.put_u32_le(0xAAAAAAAA);
+            } else {
+                data.put_u32_le(0xFFFFFFFF);
+            }
             data.put(hash.as_bytes());
             data.freeze()
         } else if self.xudt_scritp_id.unwrap() == cell.type_script_id {
@@ -754,7 +762,7 @@ impl TXBuilder {
     fn gen_cell_witness(&self, cell: &TXCell, sign_data: Option<Bytes>) -> Bytes {
         let mut deposit_vec = compact_udt_mol::DepositVecBuilder::default();
         for d in &cell.deposit_vec {
-            if d.source == cell.id {
+            if d.source == cell.id && !self.test_data_err_deposit {
                 continue;
             }
             let c = self.get_cell(d.source);
@@ -850,18 +858,15 @@ impl TXBuilder {
             .kv_state(kv_pairs.build())
             .kv_proof(kv_proof);
         if cell.identity.is_some() {
-            let sign: Bytes;
-            if sign_data.is_none() {
-                let tmp_data: Vec<u8> = Vec::new();
-                sign = Bytes::from(tmp_data);
-            } else {
-                sign = sign_data.unwrap();
+            if sign_data.is_some() {
+                witness = witness.signature(
+                    compact_udt_mol::SignatureOptBuilder::default()
+                        .set(Option::Some(to_signature(
+                            sign_data.unwrap().to_vec().as_slice(),
+                        )))
+                        .build(),
+                );
             }
-            witness = witness.signature(
-                compact_udt_mol::SignatureOptBuilder::default()
-                    .set(Option::Some(to_signature(sign.to_vec().as_slice())))
-                    .build(),
-            );
         }
 
         witness.build().as_bytes()

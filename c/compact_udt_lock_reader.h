@@ -79,8 +79,6 @@ void dbg_print_data(size_t index, size_t source) {
 ////////////////////////////////////////////////////////////////
 // read mol data
 
-uint8_t g_read_data_source[DEFAULT_DATA_SOURCE_LENGTH];
-
 typedef ckb_res_code (*func_get_data)(void* addr,
                                       uint64_t* len,
                                       size_t offset,
@@ -109,7 +107,9 @@ static ckb_res_code _make_cursor(size_t index,
                                  size_t source,
                                  size_t offset,
                                  func_get_data func,
-                                 mol2_cursor_t* cur) {
+                                 mol2_cursor_t* cur,
+                                 uint8_t* cache_buffer,
+                                 uint32_t cache_buffer_len) {
   ASSERT_DBG(cur);
 
   ckb_res_code err = 0;
@@ -118,12 +118,12 @@ static ckb_res_code _make_cursor(size_t index,
   CUDT_CHECK(err);
 
   CUDT_CHECK2(len != 0, CKBERR_DATA_EMTPY);
-  CUDT_CHECK2(len <= sizeof(g_read_data_source), CKBERR_DATA_TOO_LONG);
+  CUDT_CHECK2(len <= cache_buffer_len, CKBERR_DATA_TOO_LONG);
 
   cur->offset = 0;
   cur->size = len;
 
-  mol2_data_source_t* ptr = (mol2_data_source_t*)g_read_data_source;
+  mol2_data_source_t* ptr = (mol2_data_source_t*)cache_buffer;
 
   ptr->read = _read_from_cursor;
   ptr->total_size = len;
@@ -159,19 +159,19 @@ static ckb_res_code _get_witness_base(void* addr,
   return ret_code;
 }
 
-#define ReadMemFromMol2(m, source, target, target_size)    \
-  {                                                        \
-    mol2_cursor_t tmp = m.t->source(&m);                   \
-    memset((void*)target, 0, target_size);                 \
-    uint32_t cudt_mol2_read_len =                          \
-        mol2_read_at(&tmp, (uint8_t*)target, target_size); \
-    if (cudt_mol2_read_len != target_size) {               \
-      ASSERT_DBG(false);                                   \
-      ckb_exit((int8_t)CKBERR_UNKNOW);                     \
-    }                                                      \
+#define ReadMemFromMol2(m, source, target, target_size, error_code) \
+  {                                                                 \
+    mol2_cursor_t tmp = m.t->source(&m);                            \
+    memset((void*)target, 0, target_size);                          \
+    uint32_t cudt_mol2_read_len =                                   \
+        mol2_read_at(&tmp, (uint8_t*)target, target_size);          \
+    if (cudt_mol2_read_len != target_size) {                        \
+      ASSERT_DBG(false);                                            \
+      return error_code;                                            \
+    }                                                               \
   }
 
-#define ReadUint128FromMol2(m, source, target)                   \
+#define ReadUint128FromMol2(m, source, target, error_code)       \
   {                                                              \
     mol2_cursor_t tmp = m.t->source(&m);                         \
     memset((void*)(&target), 0, sizeof(uint128_t));              \
@@ -179,18 +179,22 @@ static ckb_res_code _get_witness_base(void* addr,
         mol2_read_at(&tmp, (uint8_t*)(&target), sizeof(target)); \
     if (cudt_mol2_read_len != sizeof(target)) {                  \
       ASSERT_DBG(false);                                         \
-      ckb_exit((int8_t)CKBERR_UNKNOW);                           \
+      return error_code;                                         \
     }                                                            \
   }
 
 ////////////////////////////////////////////////////////////////
 // reader
 
-ckb_res_code _get_xudt_data(XudtDataType* data, size_t index, size_t source) {
+ckb_res_code _get_xudt_data(XudtDataType* data,
+                            size_t index,
+                            size_t source,
+                            uint8_t* cache_buffer,
+                            uint32_t cache_buffer_len) {
   ckb_res_code err = CKBERR_UNKNOW;
   mol2_cursor_t cur;
-  err =
-      _make_cursor(index, source, sizeof(uint128_t), _get_cell_data_base, &cur);
+  err = _make_cursor(index, source, sizeof(uint128_t), _get_cell_data_base,
+                     &cur, cache_buffer, cache_buffer_len);
   CUDT_CHECK2(err != CKBERR_DATA_EMTPY, CKBERR_CELLDATA_TOO_LOW);
   CUDT_CHECK2(err != CKBERR_CELLDATA_INDEX_OUT_OF_BOUND,
               CKBERR_CELLDATA_INDEX_OUT_OF_BOUND);
@@ -214,7 +218,6 @@ ckb_res_code get_cell_udt(size_t index, size_t source, uint128_t* amount) {
 
 ckb_res_code get_cell_data(size_t index,
                            size_t source,
-                           CellDataTypeScript* type,
                            uint128_t* amount,
                            Hash* hash) {
   ckb_res_code err = CKBERR_UNKNOW;
@@ -227,6 +230,8 @@ ckb_res_code get_cell_data(size_t index,
   } SUDTData;
   SUDTData data;
   */
+  ASSERT_DBG(amount);
+  ASSERT_DBG(hash);
 
   const uint32_t sudt_data_size =
       sizeof(uint128_t) + sizeof(uint32_t) + sizeof(Hash);
@@ -236,40 +241,32 @@ ckb_res_code get_cell_data(size_t index,
   int ret_err = ckb_load_cell_data(sudt_data, &data_len, 0, index, source);
   CUDT_CHECK(ret_err);
   CUDT_CHECK2(data_len > sizeof(uint128_t), CKBERR_CELLDATA_TOO_LOW);
-  if (amount)
-    *amount = *((uint128_t*)sudt_data);
-
-  if (type == NULL && hash == NULL) {
-    return CUDT_SUCCESS;
-  }
+  *amount = *((uint128_t*)sudt_data);
 
   uint32_t flag = *(uint32_t*)(sudt_data + sizeof(uint128_t));
-  if (data_len == sudt_data_size && flag == 0xFFFFFFFF) {
+  if (data_len == sudt_data_size) {
+    if (flag != 0xFFFFFFFF)
+      return CKBERR_CELLDATA_SUDT_INVALID;
     if (hash) {
       memcpy(hash, sudt_data + (sizeof(uint128_t) + sizeof(uint32_t)),
              sizeof(Hash));
     }
-    if (type)
-      *type = TypeScript_sUDT;
     return CUDT_SUCCESS;
   }
 
   XudtDataType xudt_data;
-  err = _get_xudt_data(&xudt_data, index, source);
+  uint8_t cache_buf[DEFAULT_DATA_SOURCE_LENGTH] = {0};
+
+  err = _get_xudt_data(&xudt_data, index, source, cache_buf, sizeof(cache_buf));
   CUDT_CHECK(err);
   mol2_cursor_t mol_lock_data = xudt_data.t->lock(&xudt_data);
   CUDT_CHECK2((mol_lock_data.size == sizeof(Hash)), CUDTERR_ARGS_UNKNOW);
   if (hash) {
     uint32_t molread_len =
         mol2_read_at(&mol_lock_data, (uint8_t*)hash, sizeof(Hash));
-    if (molread_len != sizeof(Hash)) {
-      ASSERT_DBG(false);
-      ckb_exit((int8_t)CKBERR_UNKNOW);
-    }
+    CUDT_CHECK_MOL2((molread_len == sizeof(Hash)), CUDTERR_PARSE_MOL_XUDT_DATA)
   }
-  if (type)
-    *type = TypeScript_xUDT;
-  return CUDT_SUCCESS;
+  err = CUDT_SUCCESS;
 
 exit_func:
   return err;
@@ -297,10 +294,13 @@ ckb_res_code find_output_cell(const Hash* hash) {
 
 ckb_res_code _get_cursor_from_witness(WitnessArgsType* witness,
                                       size_t index,
-                                      size_t source) {
+                                      size_t source,
+                                      uint8_t* cache_buffer,
+                                      uint32_t cache_buffer_len) {
   ckb_res_code err = 0;
   mol2_cursor_t cur;
-  err = _make_cursor(index, source, 0, _get_witness_base, &cur);
+  err = _make_cursor(index, source, 0, _get_witness_base, &cur, cache_buffer,
+                     cache_buffer_len);
   CUDT_CHECK(err);
 
   *witness = make_WitnessArgs(&cur);
@@ -311,10 +311,13 @@ exit_func:
 
 ckb_res_code get_cudt_witness(size_t index,
                               size_t source,
-                              CompactUDTEntriesType* cudt_data) {
+                              CompactUDTEntriesType* cudt_data,
+                              uint8_t* cache_buffer,
+                              uint32_t cache_buffer_len) {
   int err = 0;
   WitnessArgsType witnesses;
-  err = _get_cursor_from_witness(&witnesses, index, source);
+  err = _get_cursor_from_witness(&witnesses, index, source, cache_buffer,
+                                 cache_buffer_len);
   CUDT_CHECK(err);
 
   BytesOptType ot = witnesses.t->lock(&witnesses);

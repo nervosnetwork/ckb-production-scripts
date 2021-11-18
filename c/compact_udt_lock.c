@@ -1,4 +1,6 @@
-﻿#ifdef ENABLE_DEBUG
+﻿//#define ENABLE_DEBUG
+
+#ifdef ENABLE_DEBUG
 #define CKB_C_STDLIB_PRINTF
 #include "debug.h"
 #endif  // ENABLE_DEBUG
@@ -18,6 +20,7 @@ void* alloc_cache_base(uint32_t len) {
 
   if (g_tx_buffer_malloced_len + len > sizeof(g_tx_buffer)) {
     ASSERT_DBG(false);
+    ckb_exit(CUDTERR_ALLOC_MEMORY);
     return NULL;
   }
   void* p = g_tx_buffer + g_tx_buffer_malloced_len;
@@ -89,13 +92,12 @@ int load_and_hash_witness(blake2b_state* ctx,
 
   if (hash_length) {
     err = blake2b_update(ctx, (char*)&len, sizeof(uint64_t));
-    if (CUDT_IS_FAILED(err))
-      return CKBERR_UNKNOW;
+    CUDT_CHECK_BLAKE(err);
   }
   uint64_t offset = (len > ONE_BATCH_SIZE) ? ONE_BATCH_SIZE : len;
   err = blake2b_update(ctx, temp, offset);
-  if (CUDT_IS_FAILED(err))
-    return CKBERR_UNKNOW;
+  CUDT_CHECK_BLAKE(err);
+
   while (offset < len) {
     uint64_t current_len = ONE_BATCH_SIZE;
     err = ckb_load_witness(temp, &current_len, start + offset, index, source);
@@ -105,11 +107,11 @@ int load_and_hash_witness(blake2b_state* ctx,
     uint64_t current_read =
         (current_len > ONE_BATCH_SIZE) ? ONE_BATCH_SIZE : current_len;
     err = blake2b_update(ctx, temp, current_read);
-    if (CUDT_IS_FAILED(err))
-      return CKBERR_UNKNOW;
+    CUDT_CHECK_BLAKE(err);
+
     offset += current_read;
   }
-  
+
 exit_func:
   return err;
 }
@@ -152,21 +154,20 @@ int generate_sighash_all(Hash* msg) {
   // Prepare sign message
   blake2b_state blake2b_ctx;
   err = blake2b_init(&blake2b_ctx, BLAKE2B_BLOCK_SIZE);
-  if (CUDT_IS_FAILED(err))
-    return CKBERR_UNKNOW;
+  CUDT_CHECK_BLAKE(err);
+
   err = blake2b_update(&blake2b_ctx, tx_hash, BLAKE2B_BLOCK_SIZE);
-  if (CUDT_IS_FAILED(err))
-    return CKBERR_UNKNOW;
+  CUDT_CHECK_BLAKE(err);
 
   // Clear lock field to zero, then digest the first witness
   // lock_bytes_seg.ptr actually points to the memory in temp buffer
   memset((void*)lock_bytes_seg.ptr, 0, lock_bytes_seg.size);
   err = blake2b_update(&blake2b_ctx, (char*)&witness_len, sizeof(uint64_t));
-  if (CUDT_IS_FAILED(err))
-    return CKBERR_UNKNOW;
+  CUDT_CHECK_BLAKE(err);
+
   err = blake2b_update(&blake2b_ctx, temp, read_len);
-  if (CUDT_IS_FAILED(err))
-    return CKBERR_UNKNOW;
+  CUDT_CHECK_BLAKE(err);
+
   // remaining of first witness
   if (read_len < witness_len) {
     err = load_and_hash_witness(&blake2b_ctx, read_len, 0,
@@ -203,7 +204,9 @@ int generate_sighash_all(Hash* msg) {
     i += 1;
   }
 
-  blake2b_final(&blake2b_ctx, msg, BLAKE2B_BLOCK_SIZE);
+  err = blake2b_final(&blake2b_ctx, msg, BLAKE2B_BLOCK_SIZE);
+  CUDT_CHECK_BLAKE(err);
+
   return CUDT_SUCCESS;
 }
 
@@ -322,16 +325,18 @@ ckb_res_code load_deposit_vec(CacheData* data,
   for (uint32_t i = 0; i < len; i++) {
     bool existing = false;
     DepositType d = dvec.t->get(&dvec, i, &existing);
-    if (!existing)
-      return CUDTERR_WITNESS_INVALID;
+    CUDT_CHECK_MOL2(existing, CUDTERR_PARSE_MOL_DEPOSIT);
 
     CacheDeposit* cache = (CacheDeposit*)alloc_cache(sizeof(CacheDeposit));
 
     cache->source = (Hash*)alloc_cache(sizeof(Hash));
-    ReadMemFromMol2(d, source, cache->source, sizeof(Hash));
-    ReadMemFromMol2(d, target, &(cache->target), sizeof(cache->target));
-    ReadUint128FromMol2(d, amount, cache->amount);
-    ReadUint128FromMol2(d, fee, cache->fee);
+    ReadMemFromMol2(d, source, cache->source, sizeof(Hash),
+                    CUDTERR_PARSE_MOL_DEPOSIT);
+    ReadMemFromMol2(d, target, &(cache->target), sizeof(cache->target),
+                    CUDTERR_PARSE_MOL_DEPOSIT);
+
+    ReadUint128FromMol2(d, amount, cache->amount, CUDTERR_PARSE_MOL_DEPOSIT);
+    ReadUint128FromMol2(d, fee, cache->fee, CUDTERR_PARSE_MOL_DEPOSIT);
 
     *last_cache = cache;
     last_cache = &((*last_cache)->next);
@@ -351,32 +356,28 @@ ckb_res_code get_transfer_hash(const TransferType* t,
 
   blake2b_state b2 = {0};
   err = blake2b_init(&b2, sizeof(Hash));
-  ASSERT_DBG(err == 0);
+  CUDT_CHECK_BLAKE(err);
 
   err = blake2b_update(&b2, &(g_cudt_cache->type_id), sizeof(Hash));
-  if (CUDT_IS_FAILED(err))
-    return CKBERR_UNKNOW;
+  CUDT_CHECK_BLAKE(err);
+
   CacheKVPair* kv_pair = find_kv_pair(&(cache->source));
   if (!kv_pair)
     return CUDTERR_TRANSFER_SRC_NO_KV_PAIR;
   err = blake2b_update(&b2, &(kv_pair->value.nonce),
                        sizeof(kv_pair->value.nonce));
-  if (CUDT_IS_FAILED(err))
-    return CKBERR_UNKNOW;
+  CUDT_CHECK_BLAKE(err);
 
   uint32_t tmp_buffer_read_len =
       mol2_read_at(&(raw->cur), tmp_buffer, raw->cur.size);
-  if (tmp_buffer_read_len != raw->cur.size) {
-    ASSERT_DBG(false);
-    return CKBERR_UNKNOW;
-  }
+  CUDT_CHECK_MOL2((tmp_buffer_read_len == raw->cur.size),
+                  CUDTERR_PARSE_MOL_TRANSFER);
+
   err = blake2b_update(&b2, tmp_buffer, raw->cur.size);
-  if (CUDT_IS_FAILED(err))
-    return CKBERR_UNKNOW;
+  CUDT_CHECK_BLAKE(err);
 
   err = blake2b_final(&b2, transfer_hash, sizeof(Hash));
-  if (CUDT_IS_FAILED(err))
-    return CKBERR_UNKNOW;
+  CUDT_CHECK_BLAKE(err);
 
   return err;
 }
@@ -407,13 +408,15 @@ ckb_res_code load_transfer_vec(CacheData* data,
     last_cache = &(cache->next);
 
     RawTransferType raw = t.t->raw(&t);
-    ReadMemFromMol2(raw, source, &(cache->source), sizeof(cache->source));
-    ReadUint128FromMol2(raw, amount, cache->amount);
-    ReadUint128FromMol2(raw, fee, cache->fee);
+    ReadMemFromMol2(raw, source, &(cache->source), sizeof(cache->source),
+                    CUDTERR_PARSE_MOL_TRANSFER);
+    ReadUint128FromMol2(raw, amount, cache->amount, CUDTERR_PARSE_MOL_TRANSFER);
+    ReadUint128FromMol2(raw, fee, cache->fee, CUDTERR_PARSE_MOL_TRANSFER);
 
     Hash transfer_hash;
     err = get_transfer_hash(&t, &raw, cache, &transfer_hash);
     CUDT_CHECK(err);
+
     mol2_cursor_t signature_seg = t.t->signature(&t);
     if (signature_seg.size == 0) {
       ASSERT_DBG(false);
@@ -425,10 +428,8 @@ ckb_res_code load_transfer_vec(CacheData* data,
     memset(signature_buf, 0, signature_buf_len);
     uint32_t signature_len =
         mol2_read_at(&signature_seg, signature_buf, signature_seg.size);
-    if (signature_len != signature_seg.size) {
-      ASSERT_DBG(false);
-      return CUDTERR_TRANSFER_INVALID;
-    }
+    CUDT_CHECK_MOL2((signature_len == signature_seg.size),
+                    CUDTERR_PARSE_MOL_TRANSFER);
 
     err = check_transfer_sign(&cache->source, &transfer_hash, signature_buf,
                               signature_len);
@@ -441,11 +442,13 @@ ckb_res_code load_transfer_vec(CacheData* data,
     switch (cache->target_type) {
       case TargetType_ScriptHash:
         target_buf = alloc_cache(sizeof(Hash));
-        ReadMemFromMol2(raw_target, as_ScriptHash, target_buf, sizeof(Hash));
+        ReadMemFromMol2(raw_target, as_ScriptHash, target_buf, sizeof(Hash),
+                        CUDTERR_PARSE_MOL_TRANSFER);
         break;
       case TargetType_Identity:
         target_buf = alloc_cache(sizeof(Identity));
-        ReadMemFromMol2(raw_target, as_Identity, target_buf, sizeof(Identity));
+        ReadMemFromMol2(raw_target, as_Identity, target_buf, sizeof(Identity),
+                        CUDTERR_PARSE_MOL_TRANSFER);
         break;
       case TargetType_MoveBetweenCompactSMT:
         target_buf = alloc_cache(sizeof(CacheMoveBetweenCompactSMT));
@@ -454,9 +457,10 @@ ckb_res_code load_transfer_vec(CacheData* data,
 
         MoveBetweenCompactSMTType mbc =
             raw_target.t->as_MoveBetweenCompactSMT(&raw_target);
-        ReadMemFromMol2(mbc, identity, &(tmp_buf->identity), sizeof(Identity));
-        ReadMemFromMol2(mbc, script_hash, &(tmp_buf->script_hash),
-                        sizeof(Hash));
+        ReadMemFromMol2(mbc, identity, &(tmp_buf->identity), sizeof(Identity),
+                        CUDTERR_PARSE_MOL_TRANSFER);
+        ReadMemFromMol2(mbc, script_hash, &(tmp_buf->script_hash), sizeof(Hash),
+                        CUDTERR_PARSE_MOL_TRANSFER);
         if (memcmp(&(tmp_buf->script_hash),
                    &(g_cudt_cache->cur_data.script_hash), sizeof(Hash)) == 0) {
           ASSERT_DBG(false);
@@ -486,12 +490,14 @@ ckb_res_code load_kv_pairs(CacheData* data,
     CacheKVPair* cache_kv = &(g_cudt_cache->kv_pairs[i]);
     bool existing = false;
     KVPairType kv = kvvec.t->get(&kvvec, i, &existing);
-    if (!existing)
-      return CUDTERR_WITNESS_INVALID;
-    ReadMemFromMol2(kv, k, &(cache_kv->key), sizeof(cache_kv->key));
+    CUDT_CHECK_MOL2(existing, CUDTERR_WITNESS_INVALID);
+
+    ReadMemFromMol2(kv, k, &(cache_kv->key), sizeof(cache_kv->key),
+                    CUDTERR_PARSE_MOL_KV_PAIRS);
 
     uint8_t tmp_val[32] = {0};
-    ReadMemFromMol2(kv, v, tmp_val, sizeof(tmp_val));
+    ReadMemFromMol2(kv, v, tmp_val, sizeof(tmp_val),
+                    CUDTERR_PARSE_MOL_KV_PAIRS);
     cache_kv->value.amount = ((uint128_t*)tmp_val)[0];
     cache_kv->value.nonce = ((uint32_t*)(tmp_val + sizeof(uint128_t)))[0];
   }
@@ -510,10 +516,7 @@ ckb_res_code load_kv_proof(CacheData* data,
   g_cudt_cache->kv_proof = alloc_cache(proof_cur.size);
   uint32_t len =
       mol2_read_at(&proof_cur, g_cudt_cache->kv_proof, proof_cur.size);
-  if (len != proof_cur.size) {
-    ASSERT_DBG(false);
-    return CUDTERR_SMTPROOF_SIZE_INVALID;
-  }
+  CUDT_CHECK_MOL2((len == proof_cur.size), CUDTERR_SMTPROOF_SIZE_INVALID);
   g_cudt_cache->kv_proof_len = proof_cur.size;
   return CUDT_SUCCESS;
 }
@@ -529,9 +532,6 @@ ckb_res_code check_identity(CompactUDTEntriesType* cudt_witness) {
     ASSERT_DBG(false);
     return CUDTERR_WITNESS_INVALID;
   }
-  if (!has_sign) {
-    return err;
-  }
 
   mol2_cursor_t signature_t = signature_opt.t->unwrap(&signature_opt);
 
@@ -542,10 +542,8 @@ ckb_res_code check_identity(CompactUDTEntriesType* cudt_witness) {
 
   uint32_t sign_ret_len =
       mol2_read_at(&signature.cur, signature_data, signature.cur.size);
-  if (sign_ret_len != signature.cur.size) {
-    ASSERT_DBG(false);
-    return CUDTERR_WITNESS_INVALID;
-  }
+  CUDT_CHECK_MOL2((sign_ret_len == signature.cur.size),
+                  CUDTERR_WITNESS_INVALID);
 
   Hash message = {0};
   err = generate_sighash_all(&message);
@@ -569,22 +567,23 @@ ckb_res_code load_cur_cell_data() {
   err = get_scritp_hash(&(g_cudt_cache->cur_data.script_hash));
   CUDT_CHECK(err);
 
-  err = get_cell_data(0, CKB_SOURCE_GROUP_INPUT, NULL, &data->input_amount,
+  err = get_cell_data(0, CKB_SOURCE_GROUP_INPUT, &data->input_amount,
                       &(g_cudt_cache->input_smt_hash));
   if (CUDT_IS_FAILED(err))
     return CUDTERR_LOAD_INPUT_CELL_DATA;
 
   int output_index = find_output_cell(&(g_cudt_cache->cur_data.script_hash));
-  if (output_index == -1)
-    return CUDTERR_LOAD_OUTPUT_CELL_DATA;
+  CUDT_CHECK2(output_index != -1, CUDTERR_LOAD_OUTPUT_CELL_DATA);
 
-  err = get_cell_data(output_index, CKB_SOURCE_OUTPUT, NULL,
-                      &data->output_amount, &(g_cudt_cache->output_smt_hash));
+  err = get_cell_data(output_index, CKB_SOURCE_OUTPUT, &data->output_amount,
+                      &(g_cudt_cache->output_smt_hash));
   if (CUDT_IS_FAILED(err))
     return CUDTERR_LOAD_OUTPUT_CELL_DATA;
 
   CompactUDTEntriesType cudt_witness;
-  err = get_cudt_witness(0, CKB_SOURCE_GROUP_INPUT, &cudt_witness);
+  uint8_t cache_buf[1024 * 700] = {0};
+  err = get_cudt_witness(0, CKB_SOURCE_GROUP_INPUT, &cudt_witness, cache_buf,
+                         sizeof(cache_buf));
   CUDT_CHECK(err);
 
   err = check_identity(&cudt_witness);
@@ -609,7 +608,9 @@ ckb_res_code load_other_cudt_cell_data(size_t index, CacheData* cache) {
   ckb_res_code err = CUDT_SUCCESS;
 
   CompactUDTEntriesType cudt_witness;
-  err = get_cudt_witness(index, CKB_SOURCE_INPUT, &cudt_witness);
+  uint8_t cache_buf[700 * 1024] = {0};
+  err = get_cudt_witness(index, CKB_SOURCE_INPUT, &cudt_witness, cache_buf,
+                         sizeof(cache_buf));
   CUDT_CHECK(err);
 
   uint128_t total_deposit = 0, total_transfer = 0, total_fee = 0;
@@ -621,15 +622,14 @@ ckb_res_code load_other_cudt_cell_data(size_t index, CacheData* cache) {
   for (uint32_t i = 0; i < len; i++) {
     bool existing = false;
     DepositType d = dvec.t->get(&dvec, i, &existing);
-    if (!existing)
-      return CUDTERR_WITNESS_OTHER_INVALID;
+    CUDT_CHECK_MOL2(existing, CUDTERR_WITNESS_OTHER_INVALID);
 
     uint128_t amount = 0;
-    ReadUint128FromMol2(d, amount, amount);
+    ReadUint128FromMol2(d, amount, amount, CUDTERR_PARSE_MOL_DEPOSIT);
     ADD_SELF_AND_CHECK_OVERFOLW(total_deposit, amount);
 
     Hash hash;
-    ReadMemFromMol2(d, source, &hash, sizeof(hash));
+    ReadMemFromMol2(d, source, &hash, sizeof(hash), CUDTERR_PARSE_MOL_DEPOSIT);
 
     if (memcmp(&hash, &(g_cudt_cache->cur_data.script_hash), sizeof(hash)) !=
         0) {
@@ -643,9 +643,10 @@ ckb_res_code load_other_cudt_cell_data(size_t index, CacheData* cache) {
     *last_deposit = cache_d;
     last_deposit = &((*last_deposit)->next);
 
-    ReadMemFromMol2(d, target, &(cache_d->target), sizeof(cache_d->target));
+    ReadMemFromMol2(d, target, &(cache_d->target), sizeof(cache_d->target),
+                    CUDTERR_PARSE_MOL_DEPOSIT);
     cache_d->amount = amount;
-    ReadUint128FromMol2(d, fee, cache_d->fee);
+    ReadUint128FromMol2(d, fee, cache_d->fee, CUDTERR_PARSE_MOL_DEPOSIT);
   }
 
   // load transfer
@@ -656,15 +657,14 @@ ckb_res_code load_other_cudt_cell_data(size_t index, CacheData* cache) {
   for (uint32_t i = 0; i < len; i++) {
     bool existing = false;
     TransferType t = tvec.t->get(&tvec, i, &existing);
-    if (!existing)
-      return CUDTERR_WITNESS_OTHER_INVALID;
+    CUDT_CHECK_MOL2(existing, CUDTERR_WITNESS_OTHER_INVALID);
 
     RawTransferType raw = t.t->raw(&t);
     TransferTargetType target = raw.t->target(&raw);
 
     uint128_t amount = 0, fee = 0;
-    ReadUint128FromMol2(raw, amount, amount);
-    ReadUint128FromMol2(raw, fee, fee);
+    ReadUint128FromMol2(raw, amount, amount, CUDTERR_PARSE_MOL_TRANSFER);
+    ReadUint128FromMol2(raw, fee, fee, CUDTERR_PARSE_MOL_TRANSFER);
     ADD_SELF_AND_CHECK_OVERFOLW(total_transfer, amount)
     ADD_SELF_AND_CHECK_OVERFOLW(total_fee, fee);
 
@@ -673,14 +673,16 @@ ckb_res_code load_other_cudt_cell_data(size_t index, CacheData* cache) {
 
     switch (target_type) {
       case TargetType_ScriptHash:
-        ReadMemFromMol2(target, as_ScriptHash, &hash, sizeof(Hash));
+        ReadMemFromMol2(target, as_ScriptHash, &hash, sizeof(Hash),
+                        CUDTERR_PARSE_MOL_TRANSFER);
         break;
       case TargetType_Identity:
         break;
       case TargetType_MoveBetweenCompactSMT: {
         MoveBetweenCompactSMTType mbc =
             target.t->as_MoveBetweenCompactSMT(&target);
-        ReadMemFromMol2(mbc, script_hash, &(hash), sizeof(Hash));
+        ReadMemFromMol2(mbc, script_hash, &(hash), sizeof(Hash),
+                        CUDTERR_PARSE_MOL_TRANSFER);
         break;
       }
       default:
@@ -699,7 +701,8 @@ ckb_res_code load_other_cudt_cell_data(size_t index, CacheData* cache) {
     *last_transfer = tx_cache;
     last_transfer = &(tx_cache->next);
 
-    ReadMemFromMol2(raw, source, &(tx_cache->source), sizeof(tx_cache->source));
+    ReadMemFromMol2(raw, source, &(tx_cache->source), sizeof(tx_cache->source),
+                    CUDTERR_PARSE_MOL_TRANSFER);
     tx_cache->amount = amount;
     tx_cache->fee = fee;
 
@@ -713,9 +716,7 @@ ckb_res_code load_other_cudt_cell_data(size_t index, CacheData* cache) {
   ADD_AND_CHECK_OVERFOLW(cache->input_amount, total_deposit, input_res);
   ADD_AND_CHECK_OVERFOLW(total_transfer, total_fee, output_res);
 
-  if (input_res < output_res) {
-    CUDT_CHECK(CUDTERR_OTHER_NO_ENOUGH_UDT);
-  }
+  CUDT_CHECK2(input_res >= output_res, CUDTERR_OTHER_NO_ENOUGH_UDT);
 
 exit_func:
   return err;
@@ -925,8 +926,7 @@ ckb_res_code check_smt_root(Hash* hash) {
   smt_state_t smt_statue = {0};
   smt_pair_t smt_pairs[MAX_SMT_PAIR] = {0};
   smt_state_init(&smt_statue, smt_pairs, MAX_SMT_PAIR);
-  if (g_cudt_cache->kv_pairs_len >= MAX_SMT_PAIR)
-    return CUDTERR_KV_TOO_LONG;
+  CUDT_CHECK2(g_cudt_cache->kv_pairs_len < MAX_SMT_PAIR, CUDTERR_KV_TOO_LONG);
 
   for (uint32_t i = 0; i < g_cudt_cache->kv_pairs_len; i++) {
     CacheKVPair* kv = &(g_cudt_cache->kv_pairs[i]);
@@ -943,6 +943,7 @@ ckb_res_code check_smt_root(Hash* hash) {
     return CUDTERR_KV_VERIFY;
 
   err = CUDT_SUCCESS;
+exit_func:
   return err;
 }
 
@@ -951,13 +952,11 @@ ckb_res_code check_deposit(CacheDeposit* cache) {
 
   CacheData* source_cache = NULL;
 
-  if (memcmp(cache->source, &(g_cudt_cache->cur_data.script_hash),
-             sizeof(Hash)) == 0) {
-    ASSERT_DBG(false);
-    CUDT_CHECK(CUDTERR_DEPOSIT_INVALID);
-  } else {
-    source_cache = find_other_cache(cache->source);
-  }
+  int ret_code = memcmp(cache->source, &(g_cudt_cache->cur_data.script_hash),
+                        sizeof(Hash));
+  CUDT_CHECK2(ret_code != 0, CUDTERR_DEPOSIT_INVALID);
+  source_cache = find_other_cache(cache->source);
+
   if (!source_cache)
     return CUDTERR_DEPOSIT_INVALID;
   if (!source_cache->is_compact_udt) {
