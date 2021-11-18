@@ -564,7 +564,7 @@ ckb_res_code load_cur_cell_data() {
   CacheData* data = &g_cudt_cache->cur_data;
   data->is_compact_udt = true;
 
-  err = get_scritp_hash(&(g_cudt_cache->cur_data.script_hash));
+  err = get_script_hash(&(g_cudt_cache->cur_data.script_hash));
   CUDT_CHECK(err);
 
   err = get_cell_data(0, CKB_SOURCE_GROUP_INPUT, &data->input_amount,
@@ -769,7 +769,7 @@ ckb_res_code load_other_cell(size_t index, CacheData** last, bool* goon) {
   // load lock script code hash
   Hash lock_code_hash = {0};
   uint8_t lock_hash_type = 0;
-  err = get_scritp_code_hash(index, CKB_SOURCE_INPUT, &lock_code_hash,
+  err = get_script_code_hash(index, CKB_SOURCE_INPUT, &lock_code_hash,
                              &lock_hash_type);
   CUDT_CHECK(err);
   bool is_compact_udt_lock = true;
@@ -917,7 +917,7 @@ exit_func:
 
 #define MAX_SMT_PAIR 2000
 ckb_res_code check_smt_root(Hash* hash) {
-  ckb_res_code err = CKBERR_UNKNOW;
+  ckb_res_code err = CKBERR_UNKNOWN;
 
   smt_state_t smt_statue = {0};
   smt_pair_t smt_pairs[MAX_SMT_PAIR] = {0};
@@ -1106,7 +1106,7 @@ exit_func:
 }
 
 int CKBMAIN(int argc, char* argv[]) {
-  ckb_res_code err = CKBERR_UNKNOW;
+  ckb_res_code err = CKBERR_UNKNOWN;
 #ifdef ENABLE_DEBUG
   printf("\n\n------------------------Begin------------------------\n");
 #endif  // ENABLE_DEBUG

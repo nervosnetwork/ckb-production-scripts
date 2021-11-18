@@ -179,7 +179,7 @@ ckb_res_code _get_xudt_data(XudtDataType* data,
                             size_t source,
                             uint8_t* cache_buffer,
                             uint32_t cache_buffer_len) {
-  ckb_res_code err = CKBERR_UNKNOW;
+  ckb_res_code err = CKBERR_UNKNOWN;
   mol2_cursor_t cur;
   uint64_t len = 0;
   ckb_load_cell_data(NULL, &len, 0, index, source);
@@ -211,7 +211,7 @@ ckb_res_code get_cell_data(size_t index,
                            size_t source,
                            uint128_t* amount,
                            Hash* hash) {
-  ckb_res_code err = CKBERR_UNKNOW;
+  ckb_res_code err = CKBERR_UNKNOWN;
 
   /*
   typedef struct _SUDTData {
@@ -251,7 +251,7 @@ ckb_res_code get_cell_data(size_t index,
   err = _get_xudt_data(&xudt_data, index, source, cache_buf, sizeof(cache_buf));
   CUDT_CHECK(err);
   mol2_cursor_t mol_lock_data = xudt_data.t->lock(&xudt_data);
-  CUDT_CHECK2((mol_lock_data.size == sizeof(Hash)), CUDTERR_ARGS_UNKNOW);
+  CUDT_CHECK2((mol_lock_data.size == sizeof(Hash)), CUDTERR_ARGS_UNKNOWN);
   if (hash) {
     uint32_t molread_len =
         mol2_read_at(&mol_lock_data, (uint8_t*)hash, sizeof(Hash));
@@ -370,7 +370,7 @@ exit_func:
   return err;
 }
 
-ckb_res_code get_scritp_hash(Hash* data) {
+ckb_res_code get_script_hash(Hash* data) {
   ckb_res_code err = CUDT_SUCCESS;
   uint64_t len = sizeof(Hash);
   err = ckb_load_script_hash(data, &len, 0);
@@ -379,7 +379,7 @@ exit_func:
   return err;
 }
 
-ckb_res_code get_scritp_code_hash(size_t index,
+ckb_res_code get_script_code_hash(size_t index,
                                   size_t source,
                                   Hash* data,
                                   uint8_t* hash_type) {
