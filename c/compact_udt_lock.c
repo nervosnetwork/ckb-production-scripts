@@ -581,9 +581,7 @@ ckb_res_code load_cur_cell_data() {
     return CUDTERR_LOAD_OUTPUT_CELL_DATA;
 
   CompactUDTEntriesType cudt_witness;
-  uint8_t cache_buf[1024 * 700] = {0};
-  err = get_cudt_witness(0, CKB_SOURCE_GROUP_INPUT, &cudt_witness, cache_buf,
-                         sizeof(cache_buf));
+  err = get_cudt_witness(0, CKB_SOURCE_GROUP_INPUT, &cudt_witness);
   CUDT_CHECK(err);
 
   err = check_identity(&cudt_witness);
@@ -608,9 +606,7 @@ ckb_res_code load_other_cudt_cell_data(size_t index, CacheData* cache) {
   ckb_res_code err = CUDT_SUCCESS;
 
   CompactUDTEntriesType cudt_witness;
-  uint8_t cache_buf[700 * 1024] = {0};
-  err = get_cudt_witness(index, CKB_SOURCE_INPUT, &cudt_witness, cache_buf,
-                         sizeof(cache_buf));
+  err = get_cudt_witness(index, CKB_SOURCE_INPUT, &cudt_witness);
   CUDT_CHECK(err);
 
   uint128_t total_deposit = 0, total_transfer = 0, total_fee = 0;

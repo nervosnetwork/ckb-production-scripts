@@ -25,6 +25,8 @@
 #define SCRIPT_SIZE 32768    // 32k
 #define CELL_DATA_SIZE 4086  // 4k
 
+uint8_t g_mol_data_source[DEFAULT_DATA_SOURCE_LENGTH];
+
 ////////////////////////////////////////////////////////////////
 // dbg
 
@@ -79,20 +81,31 @@ void dbg_print_data(size_t index, size_t source) {
 ////////////////////////////////////////////////////////////////
 // read mol data
 
-typedef ckb_res_code (*func_get_data)(void* addr,
-                                      uint64_t* len,
-                                      size_t offset,
-                                      size_t index,
-                                      size_t source);
-
-static uint32_t _read_from_cursor(uintptr_t arg[],
-                                  uint8_t* ptr,
-                                  uint32_t len,
-                                  uint32_t offset) {
+static uint32_t _read_xudt_data_from_cell_data(uintptr_t arg[],
+                                               uint8_t* ptr,
+                                               uint32_t len,
+                                               uint32_t offset) {
   ckb_res_code err;
   uint64_t output_len = len;
-  func_get_data func = (func_get_data)arg[0];
-  err = func(ptr, &output_len, offset + arg[3], arg[1], arg[2]);
+  err = ckb_load_cell_data(ptr, &output_len, offset + sizeof(uint128_t), arg[0],
+                           arg[1]);
+  if (err != 0) {
+    return 0;
+  }
+  if (output_len > len) {
+    return len;
+  } else {
+    return (uint32_t)output_len;
+  }
+}
+
+static uint32_t _read_data_from_witness(uintptr_t arg[],
+                                        uint8_t* ptr,
+                                        uint32_t len,
+                                        uint32_t offset) {
+  ckb_res_code err;
+  uint64_t output_len = len;
+  err = ckb_load_witness(ptr, &output_len, offset, arg[0], arg[1]);
   if (err != 0) {
     return 0;
   }
@@ -105,58 +118,33 @@ static uint32_t _read_from_cursor(uintptr_t arg[],
 
 static ckb_res_code _make_cursor(size_t index,
                                  size_t source,
-                                 size_t offset,
-                                 func_get_data func,
-                                 mol2_cursor_t* cur,
-                                 uint8_t* cache_buffer,
-                                 uint32_t cache_buffer_len) {
+                                 size_t len,
+                                 mol2_source_t read,
+                                 mol2_cursor_t* cur) {
   ASSERT_DBG(cur);
+  ASSERT_DBG(len);
+  ASSERT_DBG(read);
 
   ckb_res_code err = 0;
-  uint64_t len = 0;
-  err = func(NULL, &len, offset, index, source);
-  CUDT_CHECK(err);
-
-  CUDT_CHECK2(len != 0, CKBERR_DATA_EMTPY);
-  CUDT_CHECK2(len <= cache_buffer_len, CKBERR_DATA_TOO_LONG);
 
   cur->offset = 0;
   cur->size = len;
 
-  mol2_data_source_t* ptr = (mol2_data_source_t*)cache_buffer;
+  memset(g_mol_data_source, 0, sizeof(g_mol_data_source));
+  mol2_data_source_t* ptr = (mol2_data_source_t*)g_mol_data_source;
 
-  ptr->read = _read_from_cursor;
+  ptr->read = read;
   ptr->total_size = len;
 
-  ptr->args[0] = (uintptr_t)func;
-  ptr->args[1] = index;
-  ptr->args[2] = source;
-  ptr->args[3] = offset;
+  ptr->args[0] = index;
+  ptr->args[1] = source;
 
   ptr->cache_size = 0;
   ptr->start_point = 0;
   ptr->max_cache_size = MAX_CACHE_SIZE;
   cur->data_source = ptr;
 
-exit_func:
   return err;
-}
-
-static ckb_res_code _get_cell_data_base(void* addr,
-                                        uint64_t* len,
-                                        size_t offset,
-                                        size_t index,
-                                        size_t source) {
-  return ckb_load_cell_data(addr, len, offset, index, source);
-}
-
-static ckb_res_code _get_witness_base(void* addr,
-                                      uint64_t* len,
-                                      size_t offset,
-                                      size_t index,
-                                      size_t source) {
-  ckb_res_code ret_code = ckb_load_witness(addr, len, offset, index, source);
-  return ret_code;
 }
 
 #define ReadMemFromMol2(m, source, target, target_size, error_code) \
@@ -193,8 +181,11 @@ ckb_res_code _get_xudt_data(XudtDataType* data,
                             uint32_t cache_buffer_len) {
   ckb_res_code err = CKBERR_UNKNOW;
   mol2_cursor_t cur;
-  err = _make_cursor(index, source, sizeof(uint128_t), _get_cell_data_base,
-                     &cur, cache_buffer, cache_buffer_len);
+  uint64_t len = 0;
+  ckb_load_cell_data(NULL, &len, 0, index, source);
+  CUDT_CHECK2(len != 0, CUDTERR_XUDT_DATA_EMPTY);
+
+  err = _make_cursor(index, source, len, _read_xudt_data_from_cell_data, &cur);
   CUDT_CHECK2(err != CKBERR_DATA_EMTPY, CKBERR_CELLDATA_TOO_LOW);
   CUDT_CHECK2(err != CKBERR_CELLDATA_INDEX_OUT_OF_BOUND,
               CKBERR_CELLDATA_INDEX_OUT_OF_BOUND);
@@ -294,13 +285,14 @@ ckb_res_code find_output_cell(const Hash* hash) {
 
 ckb_res_code _get_cursor_from_witness(WitnessArgsType* witness,
                                       size_t index,
-                                      size_t source,
-                                      uint8_t* cache_buffer,
-                                      uint32_t cache_buffer_len) {
+                                      size_t source) {
   ckb_res_code err = 0;
   mol2_cursor_t cur;
-  err = _make_cursor(index, source, 0, _get_witness_base, &cur, cache_buffer,
-                     cache_buffer_len);
+  uint64_t len = 0;
+  ckb_load_witness(NULL, &len, 0, index, source);
+  CUDT_CHECK2(len != 0, CUDTERR_WITNESS_EMPTY);
+
+  err = _make_cursor(index, source, len, _read_data_from_witness, &cur);
   CUDT_CHECK(err);
 
   *witness = make_WitnessArgs(&cur);
@@ -311,13 +303,10 @@ exit_func:
 
 ckb_res_code get_cudt_witness(size_t index,
                               size_t source,
-                              CompactUDTEntriesType* cudt_data,
-                              uint8_t* cache_buffer,
-                              uint32_t cache_buffer_len) {
+                              CompactUDTEntriesType* cudt_data) {
   int err = 0;
   WitnessArgsType witnesses;
-  err = _get_cursor_from_witness(&witnesses, index, source, cache_buffer,
-                                 cache_buffer_len);
+  err = _get_cursor_from_witness(&witnesses, index, source);
   CUDT_CHECK(err);
 
   BytesOptType ot = witnesses.t->lock(&witnesses);
