@@ -26,3 +26,6 @@
 	path = deps/secp256k1-20210801
 	url = https://github.com/nervosnetwork/secp256k1.git
 	branch = schnorr
+[submodule "deps/ckb-debugger-dumper"]
+	path = deps/ckb-debugger-dumper
+	url = https://github.com/joii2020/ckb-debugger-dumper.git

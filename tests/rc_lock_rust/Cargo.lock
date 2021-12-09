@@ -162,6 +162,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ckb-debugger-dumper"
+version = "0.100.0-rc2"
+dependencies = [
+ "ckb-script",
+ "ckb-traits",
+ "ckb-types",
+ "json",
+ "molecule",
+]
+
+[[package]]
 name = "ckb-error"
 version = "0.100.0-rc2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -587,6 +598,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd25036021b0de88a0aff6b850051563c6516d0bf53f8638938edbb9de732736"
 
 [[package]]
+name = "json"
+version = "0.12.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "078e285eafdfb6c4b434e0d31e8cfcb5115b651496faca5749b88fafd4f23bfd"
+
+[[package]]
 name = "keccak"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -985,6 +1002,7 @@ dependencies = [
  "blake2b-rs",
  "ckb-chain-spec",
  "ckb-crypto",
+ "ckb-debugger-dumper",
  "ckb-error",
  "ckb-hash",
  "ckb-script",

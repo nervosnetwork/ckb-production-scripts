@@ -5,6 +5,7 @@ mod misc;
 
 use ckb_chain_spec::consensus::ConsensusBuilder;
 use ckb_crypto::secp::Generator;
+use ckb_debugger_dumper;
 use ckb_error::assert_error_eq;
 use ckb_script::{ScriptError, TransactionScriptsVerifier, TxVerifyEnv};
 use ckb_types::{
@@ -241,6 +242,21 @@ fn test_pubkey_hash_on_wl() {
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
     verify_result.expect("pass verification");
+
+    let group_index = 0;
+    let dbg_cmd_line = ckb_debugger_dumper::gen_json(
+        &verifier,
+        &resolved_tx,
+        Option::None,
+        group_index,
+        "../../build/rc_lock",
+        "test_pubkey_hash_on_wl.json",
+        Option::Some("127.0.0.1:12300"),
+    );
+    println!(
+        "test_pubkey_hash_on_wl debug command line:\n{}",
+        dbg_cmd_line.as_str()
+    );
 }
 
 #[test]
