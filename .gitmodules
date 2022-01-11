@@ -18,3 +18,7 @@
 [submodule "deps/ckb-c-stdlib-20210413"]
 	path = deps/ckb-c-stdlib-20210413
 	url = https://github.com/nervosnetwork/ckb-c-stdlib.git
+[submodule "deps/ed25519"]
+	path = deps/ed25519
+	url = https://github.com/nervosnetwork/ed25519.git
+	branch = risc-v

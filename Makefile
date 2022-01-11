@@ -18,10 +18,15 @@ CFLAGS_MBEDTLS := $(subst ckb-c-std-lib,ckb-c-stdlib-20210413,$(CFLAGS)) -I deps
 LDFLAGS_MBEDTLS := $(LDFLAGS)
 PASSED_MBEDTLS_CFLAGS := -O3 -fPIC -nostdinc -nostdlib -DCKB_DECLARATION_ONLY -I ../../ckb-c-stdlib-20210413/libc -fdata-sections -ffunction-sections
 
+# Cardano lock
+CARDANO_CFLAGS=$(subst ckb-c-std-lib,ckb-c-stdlib-20210713,$(CFLAGS))
+CARDANO_LDFLAGS=$(LDFLAGS)
+
+
 # docker pull nervos/ckb-riscv-gnu-toolchain:gnu-bionic-20191012
 BUILDER_DOCKER := nervos/ckb-riscv-gnu-toolchain@sha256:aae8a3f79705f67d505d1f1d5ddc694a4fd537ed1c7e9622420a470d59ba2ec3
 
-all: build/simple_udt build/anyone_can_pay build/always_success build/validate_signature_rsa build/xudt_rce build/rce_validator
+all: build/simple_udt build/anyone_can_pay build/always_success build/validate_signature_rsa build/xudt_rce build/rce_validator build/cardano_lock
 
 all-via-docker: ${PROTOCOL_HEADER}
 	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make"
@@ -123,6 +128,51 @@ build/rce_validator: c/rce_validator.c c/rce.h
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
+## Cardano lock
+cardano-lock-via-docker:
+	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make build/cardano_lock"
+
+build/cardano_lock.o: c/cardano_lock.c
+	$(CC) -c -I c/nanocbor -I deps/ed25519/src $(CARDANO_CFLAGS) $(CARDANO_LDFLAGS) -o $@ $<
+
+build/cardano_lock: build/cardano_lock.o build/libed25519.a build/libnanocbor.a
+	$(CC) $(CARDANO_CFLAGS) $(CARDANO_LDFLAGS) -o $@ $^
+	cp $@ $@.debug
+	$(OBJCOPY) --strip-debug --strip-all $@
+
+clean-cardano-lock: clean-libed25519 clean-libnanocbor
+	rm -f build/cardano_lock.o
+	rm -f build/cardano_lock
+
+libed25519-via-docker:
+	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make build/libed25519.a"
+
+libnanocbor-via-docker:
+	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make build/libnanocbor.a"
+
+build/ed25519/%.o: deps/ed25519/src/%.c
+	mkdir -p build/ed25519
+	$(CC) -c -DCKB_DECLARATION_ONLY $(CARDANO_CFLAGS) $(CARDANO_LDFLAGS) -o $@ $^
+
+build/libed25519.a: build/ed25519/sign.o build/ed25519/verify.o build/ed25519/sha512.o build/ed25519/sc.o build/ed25519/keypair.o \
+					build/ed25519/key_exchange.o build/ed25519/ge.o build/ed25519/fe.o build/ed25519/add_scalar.o
+	$(AR) cr $@ $^
+
+build/nanocbor/%.o: c/nanocbor/%.c
+	mkdir -p build/nanocbor
+	$(CC) -c -DCKB_DECLARATION_ONLY -I c/nanocbor $(CARDANO_CFLAGS) $(CARDANO_LDFLAGS) -o $@ $^
+
+build/libnanocbor.a: build/nanocbor/encoder.o build/nanocbor/decoder.o
+	$(AR) cr $@ $^
+
+clean-libed25519:
+	rm -f build/ed25519/*.o
+	rm -f build/libed25519.a
+
+clean-libnanocbor:
+	rm -f build/libnanocbor.a
+	rm -f build/nanocbor/*.o
+
 publish:
 	git diff --exit-code Cargo.toml
 	sed -i.bak 's/.*git =/# &/' Cargo.toml
@@ -141,7 +191,7 @@ package-clean:
 	git checkout Cargo.toml Cargo.lock
 	rm -rf Cargo.toml.bak target/package/
 
-clean:
+clean: clean-cardano-lock
 	rm -rf build/simple_udt
 	rm -rf build/anyone_can_pay
 	rm -rf build/secp256k1_data_info.h build/dump_secp256k1_data
