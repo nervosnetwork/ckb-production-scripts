@@ -58,4 +58,72 @@ UTEST(test1, sign_and_verify) {
   ASSERT_EQ(success, 1);
 }
 
+UTEST(test2, sign_and_verify) {
+  // This case is used to test conformance
+  // https://github.com/Emurgo/message-signing/blob/master/examples/rust/src/main.rs
+  const char payload[] = "message to sign";
+  const char external_aad[] = "externally supplied data not in sign object";
+
+  uint32_t sign_msg_len = generate_new_msg(
+      NULL, 0, (uint8_t*)payload, (uint32_t)(sizeof(payload) - 1),
+      (uint8_t*)external_aad, (uint32_t)(sizeof(external_aad) - 1));
+
+  uint8_t sign_msg[sign_msg_len];
+  memset(sign_msg, 0, sign_msg_len);
+  ASSERT_EQ(
+      generate_new_msg(sign_msg, sign_msg_len, (uint8_t*)payload,
+                       (uint32_t)(sizeof(payload) - 1), (uint8_t*)external_aad,
+                       (uint32_t)(sizeof(external_aad) - 1)),
+      sign_msg_len);
+
+  const uint8_t check_sign_msg[] = {
+      0x84, 0x6A, 0x53, 0x69, 0x67, 0x6E, 0x61, 0x74, 0x75, 0x72, 0x65,
+      0x31, 0x40, 0x58, 0x2B, 0x65, 0x78, 0x74, 0x65, 0x72, 0x6E, 0x61,
+      0x6C, 0x6C, 0x79, 0x20, 0x73, 0x75, 0x70, 0x70, 0x6C, 0x69, 0x65,
+      0x64, 0x20, 0x64, 0x61, 0x74, 0x61, 0x20, 0x6E, 0x6F, 0x74, 0x20,
+      0x69, 0x6E, 0x20, 0x73, 0x69, 0x67, 0x6E, 0x20, 0x6F, 0x62, 0x6A,
+      0x65, 0x63, 0x74, 0x4F, 0x6D, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65,
+      0x20, 0x74, 0x6F, 0x20, 0x73, 0x69, 0x67, 0x6E};
+  ASSERT_EQ(sign_msg_len, sizeof(check_sign_msg));
+  ASSERT_EQ(memcmp(check_sign_msg, sign_msg, sign_msg_len), 0);
+
+  unsigned char public_key[32] = {0}, private_key[64] = {0};
+  unsigned char seed[32] = {
+      34, 125, 55,  10,  222, 244, 31,  91,  181, 231, 62,
+      80, 90,  53,  246, 160, 226, 111, 123, 228, 188, 90,
+      15, 130, 210, 206, 78,  199, 209, 18,  202, 234,
+  };
+  unsigned char signature[64] = {0};
+
+  ed25519_create_keypair(public_key, private_key, seed);
+  ed25519_sign(signature, sign_msg, sign_msg_len, public_key, private_key);
+
+  uint8_t check_signed[] = {
+      0x0E, 0xBF, 0x10, 0x47, 0x44, 0xD3, 0x15, 0x34, 0x45, 0x99, 0xCE,
+      0x39, 0x47, 0x06, 0x0C, 0xA1, 0xD0, 0xFC, 0x19, 0x44, 0xCA, 0xB4,
+      0xF1, 0xE3, 0xB3, 0xF7, 0xB5, 0x57, 0xB5, 0xCA, 0x0F, 0x12, 0xFC,
+      0xA4, 0x9E, 0x4E, 0x3E, 0xB8, 0x95, 0xED, 0xFD, 0x1A, 0x89, 0x7C,
+      0xA2, 0x24, 0x9C, 0x09, 0x1F, 0xCC, 0xDD, 0xE4, 0x63, 0xB0, 0xE6,
+      0x7B, 0x2C, 0xC9, 0x28, 0x0A, 0xC0, 0x38, 0x60, 0x0D};
+
+  ASSERT_EQ(memcmp(check_signed, signature, sizeof(signature)), 0);
+
+  ASSERT_EQ(ed25519_verify(signature, sign_msg, sign_msg_len, public_key), 1);
+}
+
+UTEST(test, dev) {
+  uint8_t payload[] = {1, 1, 1, 1, 1, 1, 1, 1};
+  uint8_t msg[32] = {1, 2, 3, 4, 5, 6, 7, 8};
+
+  uint32_t sig_msg_len =
+      generate_new_msg(NULL, 0, payload, sizeof(payload), NULL, 0);
+  uint8_t sig_msg[sig_msg_len];
+  memset(sig_msg, 0, sig_msg_len);
+  ASSERT_EQ(
+      generate_new_msg(sig_msg, sig_msg_len, payload, sizeof(payload), NULL, 0),
+      sig_msg_len);
+
+  simulator_main();
+}
+
 UTEST_MAIN();
