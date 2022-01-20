@@ -8,18 +8,23 @@
 #include <blake2b.h>
 
 #include "ckb_consts.h"
+#ifdef CKB_USE_SIM
+#include "sim_ckb_syscalls.h"
+#else  // CKB_USE_SIM
+#include "ckb_syscalls.h"
+#endif  // CKB_USE_SIM
+
+#ifndef MOL2_EXIT
+#define MOL2_EXIT ckb_exit
+#endif
+
+
 #include "molecule/molecule_reader.h"
 #include "blockchain.h"
 #include "blockchain-api2.h"
 
 #include "ed25519.h"
 #include "nanocbor.h"
-
-#ifdef CKB_USE_SIM
-#include "sim_ckb_syscalls.h"
-#else  // CKB_USE_SIM
-#include "ckb_syscalls.h"
-#endif  // CKB_USE_SIM
 
 #define MAX_WITNESS_SIZE 32768
 #define BLAKE2B_BLOCK_SIZE 32
@@ -253,8 +258,6 @@ int _get_cursor_from_witness(WitnessArgsType *witness, size_t index,
   }
 
   *witness = make_WitnessArgs(&cur);
-
-exit_func:
   return err;
 }
 
@@ -300,8 +303,8 @@ int main(int argc, const char *argv[]) {
   }
   memcpy(identity, args_raw_bytes.ptr, sizeof(identity));
 
-  uint8_t witness_data[96] = {0};
-  uint64_t witness_data_len = sizeof(witness_data);
+  // uint8_t witness_data[96] = {0};
+  // uint64_t witness_data_len = sizeof(witness_data);
   for (size_t index = 0;; index++) {
     WitnessArgsType witnesses;
     error = _get_cursor_from_witness(&witnesses, index, CKB_SOURCE_GROUP_INPUT);
