@@ -4,8 +4,6 @@
 #define ASSERT(s) (void)0
 #endif
 
-int ckb_exit(signed char code);
-
 #include "cardano_lock.c"
 #include "utest.h"
 
@@ -64,17 +62,21 @@ UTEST(test2, sign_and_verify) {
   const char payload[] = "message to sign";
   const char external_aad[] = "externally supplied data not in sign object";
 
-  uint32_t sign_msg_len = generate_new_msg(
-      NULL, 0, (uint8_t*)payload, (uint32_t)(sizeof(payload) - 1),
+  size_t sign_msg_len = 0;
+  int err = cardano_convert_copy(
+      NULL, &sign_msg_len, (uint8_t*)payload, (uint32_t)(sizeof(payload) - 1),
       (uint8_t*)external_aad, (uint32_t)(sizeof(external_aad) - 1));
+  // ASSERT_EQ(err, 0);
+  ASSERT(sign_msg_len > 0);
 
   uint8_t sign_msg[sign_msg_len];
   memset(sign_msg, 0, sign_msg_len);
-  ASSERT_EQ(
-      generate_new_msg(sign_msg, sign_msg_len, (uint8_t*)payload,
-                       (uint32_t)(sizeof(payload) - 1), (uint8_t*)external_aad,
-                       (uint32_t)(sizeof(external_aad) - 1)),
-      sign_msg_len);
+  err = cardano_convert_copy(sign_msg, &sign_msg_len, (uint8_t*)payload,
+                             (uint32_t)(sizeof(payload) - 1),
+                             (uint8_t*)external_aad,
+                             (uint32_t)(sizeof(external_aad) - 1));
+  ASSERT_EQ(err, 0);
+  ASSERT_EQ(sizeof(sign_msg), sign_msg_len);
 
   const uint8_t check_sign_msg[] = {
       0x84, 0x6A, 0x53, 0x69, 0x67, 0x6E, 0x61, 0x74, 0x75, 0x72, 0x65,
@@ -112,18 +114,36 @@ UTEST(test2, sign_and_verify) {
 }
 
 UTEST(test, dev) {
-  uint8_t payload[] = {1, 1, 1, 1, 1, 1, 1, 1};
-  uint8_t msg[32] = {1, 2, 3, 4, 5, 6, 7, 8};
+  uint8_t payload[] = {
+      0x77, 0x41, 0x72, 0xd0, 0xe1, 0xa7, 0x29, 0xe7, 0x87, 0x1a, 0x23,
+      0xd9, 0x0a, 0xaa, 0x5f, 0x86, 0xc4, 0xbe, 0x0e, 0x00, 0x88, 0xe0,
+      0x18, 0xb1, 0x99, 0x31, 0x7a, 0x60, 0xdd, 0x44, 0x71, 0x69,
+  };
 
-  uint32_t sig_msg_len =
-      generate_new_msg(NULL, 0, payload, sizeof(payload), NULL, 0);
-  uint8_t sig_msg[sig_msg_len];
-  memset(sig_msg, 0, sig_msg_len);
-  ASSERT_EQ(
-      generate_new_msg(sig_msg, sig_msg_len, payload, sizeof(payload), NULL, 0),
-      sig_msg_len);
+  uint8_t new_msg[128] = {0};
+  size_t new_msg_len = sizeof(new_msg);
+  int err = cardano_convert_copy(new_msg, &new_msg_len, payload,
+                                 sizeof(payload), NULL, 0);
+  ASSERT_EQ(err, CKB_SUCCESS);
 
-  simulator_main();
+  uint8_t seed[32] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+  unsigned char public_key[32] = {0}, private_key[64] = {0};
+  ed25519_create_keypair(public_key, private_key, seed);
+
+  unsigned char signature[64] = {0};
+  ed25519_sign(signature, new_msg, new_msg_len, public_key, private_key);
+
+  blake2b_state b2b = {0};
+  blake2b_init(&b2b, BLAKE2B_BLOCK_SIZE);
+  blake2b_update(&b2b, public_key, sizeof(public_key));
+  uint8_t pubkey_hash[BLAKE2B_BLOCK_SIZE] = {0};
+  blake2b_final(&b2b, pubkey_hash, BLAKE2B_BLOCK_SIZE);
+
+  set_witness(public_key, signature);
+  set_scritp(pubkey_hash);
+
+  int rc_code = simulator_main();
+  ASSERT_EQ(rc_code, 0);
 }
 
 UTEST_MAIN();
