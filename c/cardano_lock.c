@@ -183,6 +183,15 @@ int generate_sighash_all(uint8_t *msg, size_t msg_len) {
   return 0;
 }
 
+#define CHECK(f, rc_code)                                       \
+  {                                                             \
+    bool flag = f;                                              \
+    if (!flag) {                                                \
+      ASSERT(false);                                            \
+      ckb_exit(rc_code);                                        \
+    }                                                           \
+  }
+
 int cardano_convert_copy(uint8_t *output, size_t *output_len,
                          const uint8_t *payload, size_t payload_len,
                          const uint8_t *external_aad, size_t external_aad_len) {
@@ -205,21 +214,16 @@ int get_identity(uint8_t *identity) {
   unsigned char script[SCRIPT_SIZE];
   uint64_t scritp_len = SCRIPT_SIZE;
   err = ckb_load_script(script, &scritp_len, 0);
-  if (err != CKB_SUCCESS) {
-    return err;
-  }
-  if (scritp_len > SCRIPT_SIZE) {
-    return ERROR_LOAD_SCRIPT;
-  }
+  CHECK(err == CKB_SUCCESS, err);
+  CHECK(scritp_len <= SCRIPT_SIZE, ERROR_LOAD_SCRIPT);
+
   mol_seg_t script_seg;
   script_seg.ptr = (uint8_t *)script;
   script_seg.size = scritp_len;
 
   mol_seg_t args = MolReader_Script_get_args(&script_seg);
   mol_seg_t args_raw_bytes = MolReader_Bytes_raw_bytes(&args);
-  if (args_raw_bytes.size < IDENTITY_SIZE) {
-    return ERROR_LOAD_SCRIPT;
-  }
+  CHECK(args_raw_bytes.size >= IDENTITY_SIZE, ERROR_LOAD_SCRIPT);
   memcpy(identity, args_raw_bytes.ptr, IDENTITY_SIZE);
   return CKB_SUCCESS;
 }
@@ -229,22 +233,15 @@ int get_pubkey_and_signature(uint8_t *pubkey, uint8_t *signature) {
   uint8_t temp[MAX_WITNESS_SIZE] = {0};
   uint64_t temp_len = sizeof(temp);
   err = ckb_load_witness(temp, &temp_len, 0, 0, CKB_SOURCE_GROUP_INPUT);
-  if (err != CKB_SUCCESS) {
-    return err;
-  }
-  if (temp_len > sizeof(temp) || temp_len < 20) {
-    return ERROR_LOAD_WITNESS;
-  }
+  CHECK(err == CKB_SUCCESS, err);
+  CHECK(temp_len <= sizeof(temp) && temp_len >= 20, ERROR_LOAD_WITNESS);
+
   mol_seg_t witness = {0};
   err = extract_witness_lock(temp, temp_len, &witness);
-  if (err != CKB_SUCCESS) {
-    return err;
-  }
+  CHECK(err == CKB_SUCCESS, err);
 
   // <ED25519 pubkey, 32 bytes><ED25519 signature, 64 bytes>
-  if (witness.size != PUBLIC_KEY_SIZE + SIGNATURE_SIZE) {
-    return ERROR_LOAD_WITNESS;
-  }
+  CHECK(witness.size == PUBLIC_KEY_SIZE + SIGNATURE_SIZE, ERROR_LOAD_WITNESS);
   memcpy(pubkey, witness.ptr, PUBLIC_KEY_SIZE);
   memcpy(signature, &witness.ptr[PUBLIC_KEY_SIZE], SIGNATURE_SIZE);
 
@@ -254,16 +251,12 @@ int get_pubkey_and_signature(uint8_t *pubkey, uint8_t *signature) {
 int get_message(uint8_t *msg, size_t *msg_len) {
   uint8_t sighash_msg[BLAKE2B_BLOCK_SIZE] = {0};
   int err = generate_sighash_all(sighash_msg, sizeof(sighash_msg));
-  if (err != CKB_SUCCESS) {
-    return err;
-  }
+  CHECK(err == CKB_SUCCESS, err);
 
   size_t len = *msg_len;
   err = cardano_convert_copy(msg, &len, sighash_msg, sizeof(sighash_msg), NULL,
                              0);
-  if (len > *msg_len) {
-    return ERROR_GENERATE_NEW_MSG;
-  }
+  CHECK(*msg_len > len, ERROR_GENERATE_NEW_MSG)
   *msg_len = len;
   return CKB_SUCCESS;
 }
@@ -276,27 +269,20 @@ int main(int argc, const char *argv[]) {
   int err = CKB_SUCCESS;
   uint8_t identity[IDENTITY_SIZE] = {0};
   err = get_identity(identity);
-  if (err != CKB_SUCCESS) {
-    return err;
-  }
-  if (identity[0] != 0x7) {
-    return ERROR_LOAD_SCRIPT;
-  }
+  CHECK(err == CKB_SUCCESS, err);
+
+  CHECK(identity[0] == 0x7, ERROR_LOAD_SCRIPT);
 
   // For the time being, only 48bytes will be generated
   uint8_t message[64] = {0};
   size_t message_len = sizeof(message);
   err = get_message(message, &message_len);
-  if (err != CKB_SUCCESS) {
-    return err;
-  }
+  CHECK(err == CKB_SUCCESS, err);
 
   uint8_t pubkey[PUBLIC_KEY_SIZE] = {0};
   uint8_t signature[SIGNATURE_SIZE] = {0};
   err = get_pubkey_and_signature(pubkey, signature);
-  if (err != CKB_SUCCESS) {
-    return err;
-  }
+  CHECK(err == CKB_SUCCESS, err);
 
   // check public key
   blake2b_state blake2b_ctx;
@@ -304,14 +290,11 @@ int main(int argc, const char *argv[]) {
   blake2b_update(&blake2b_ctx, pubkey, BLAKE2B_BLOCK_SIZE);
   uint8_t pubkey_hash[BLAKE2B_BLOCK_SIZE] = {0};
   blake2b_final(&blake2b_ctx, pubkey_hash, sizeof(pubkey_hash));
-  if (memcmp(pubkey_hash, &identity[1], IDENTITY_HASH_SIZE) != 0) {
-    return ERROR_CHECK_PUBKEY;
-  }
+  CHECK(memcmp(pubkey_hash, &identity[1], IDENTITY_HASH_SIZE) == 0,
+        ERROR_CHECK_PUBKEY);
 
   int suc = ed25519_verify(signature, message, message_len, pubkey);
-  if (suc != 1) {
-    return ERROR_VERIFY;
-  }
+  CHECK(suc == 1, ERROR_VERIFY);
 
   return 0;
 }
