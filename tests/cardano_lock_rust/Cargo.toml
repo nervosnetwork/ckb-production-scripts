@@ -1,0 +1,20 @@
+[package]
+name = "cardano_lock_rust"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+blake2b-rs = "0.2.0"
+ckb-crypto = "0.101.4"
+ckb-chain-spec = "0.101.4"
+ckb-error = "0.101.4"
+ckb-hash = "0.101.4"
+ckb-script = "0.101.4"
+ckb-traits = "0.101.4"
+ckb-types = "0.101.4"
+lazy_static = "1.4.0"
+rand = "0.8.4"
+cardano-serialization-lib = "9.1.4"
+cardano-message-signing = { path = "../../deps/cardano-message-signing/rust" }
