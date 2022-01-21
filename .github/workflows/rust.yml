@@ -23,3 +23,7 @@ jobs:
       run: cd tests/xudt_rce_rust && cargo test
     - name: Run xudt simulator tests
       run: cd tests/xudt_rce && bash run.sh
+    - name: Run cardano lock simulator tests
+      run: cd tests/cardano_lock && bash run.sh
+    - name: Run cardano lock tests
+      run: cd tests/cardano_lock_rust && cargo test
