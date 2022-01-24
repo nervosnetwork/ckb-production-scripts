@@ -1,8 +1,7 @@
 #if defined(CKB_COVERAGE)
 #define ASSERT(s) (void)0
 #else
-#include <assert.h>
-#define ASSERT(s) assert(s)
+#define ASSERT(s) (void)0
 #endif
 
 #include "cardano_lock.c"
