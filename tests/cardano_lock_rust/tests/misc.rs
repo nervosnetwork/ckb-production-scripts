@@ -100,18 +100,26 @@ pub fn blake160(message: &[u8]) -> Bytes {
 }
 
 pub struct Config {
-    pub rnd: ThreadRng,
+    pub random: ThreadRng,
     pub random_sign_data: bool,
     pub random_sign_pubkey: bool,
+    pub random_message: bool,
 }
 
 impl Config {
     pub fn new() -> Self {
         Self {
-            rnd: thread_rng(),
+            random: thread_rng(),
             random_sign_data: false,
             random_sign_pubkey: false,
+            random_message: false,
         }
+    }
+
+    pub fn rnd_array_32(&mut self) -> [u8; 32] {
+        let mut data: [u8; 32] = [0; 32];
+        self.random.fill_bytes(&mut data);
+        data
     }
 }
 
@@ -159,6 +167,11 @@ pub fn sign_tx_by_input_group(
                     blake2b.update(&witness.raw_data());
                 });
                 blake2b.finalize(&mut message);
+
+                if config.random_message == true {
+                    message = config.rnd_array_32();
+                }
+
                 let message = H256::from(message);
 
                 let protected_serialized = ProtectedHeaderMap::new(&HeaderMap::new());
@@ -170,7 +183,7 @@ pub fn sign_tx_by_input_group(
                 if config.random_sign_data == true {
                     sig = {
                         let mut d: Vec<u8> = Vec::with_capacity(64);
-                        config.rnd.fill_bytes(&mut d.as_mut());
+                        config.random.fill_bytes(&mut d.as_mut());
                         d
                     }
                 }
@@ -178,10 +191,10 @@ pub fn sign_tx_by_input_group(
 
                 let mut pubkey = key.to_public().as_bytes();
                 if config.random_sign_pubkey {
-                    pubkey[0] = config.rnd.gen();
+                    pubkey[0] = config.random.gen();
                     pubkey = {
                         let mut d: Vec<u8> = Vec::with_capacity(32);
-                        config.rnd.fill_bytes(&mut d.as_mut());
+                        config.random.fill_bytes(&mut d.as_mut());
                         d
                     }
                 }
@@ -210,22 +223,25 @@ pub fn sign_tx_by_input_group(
         .build()
 }
 
-pub fn gen_tx(dummy: &mut DummyDataLoader, lock_args: Bytes) -> TransactionView {
-    let mut rng = thread_rng();
-    gen_tx_with_grouped_args(dummy, vec![(lock_args, 1)], &mut rng)
+pub fn gen_tx(
+    dummy: &mut DummyDataLoader,
+    lock_args: Bytes,
+    config: &mut Config,
+) -> TransactionView {
+    gen_tx_with_grouped_args(dummy, vec![(lock_args, 1)], config)
 }
 
-fn gen_tx_with_grouped_args<R: Rng>(
+fn gen_tx_with_grouped_args(
     dummy: &mut DummyDataLoader,
     grouped_args: Vec<(Bytes, usize)>,
-    rng: &mut R,
+    config: &mut Config,
 ) -> TransactionView {
     let cardano_cell_data_hash = CellOutput::calc_data_hash(&CARDANO_LOCK_BIN);
     // setup cardano dep
     let cardano_data_out_point = {
         let tx_hash = {
-            let buf = [0u8; 32];
-            //rng.fill(&mut buf);
+            let mut buf = [0u8; 32];
+            config.random.fill(&mut buf);
             buf.pack()
         };
         OutPoint::new(tx_hash, 0)
@@ -261,8 +277,8 @@ fn gen_tx_with_grouped_args<R: Rng>(
         // setup dummy input unlock script
         for _ in 0..inputs_size {
             let previous_tx_hash = {
-                let buf = [1u8; 32];
-                //rng.fill(&mut buf);
+                let mut buf = [1u8; 32];
+                config.random.fill(&mut buf);
                 buf.pack()
             };
             let previous_out_point = OutPoint::new(previous_tx_hash, 0);
@@ -280,7 +296,7 @@ fn gen_tx_with_grouped_args<R: Rng>(
                 (previous_output_cell.clone(), Bytes::new()),
             );
             let mut random_extra_witness = [0u8; 32];
-            rng.fill(&mut random_extra_witness);
+            config.random.fill(&mut random_extra_witness);
             let witness_args = WitnessArgsBuilder::default()
                 .lock(Some(Bytes::from(random_extra_witness.to_vec())).pack())
                 .build();
