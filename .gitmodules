@@ -22,6 +22,3 @@
 	path = deps/ed25519
 	url = https://github.com/nervosnetwork/ed25519.git
 	branch = risc-v
-[submodule "deps/cardano-message-signing"]
-	path = deps/cardano-message-signing
-	url = https://github.com/Emurgo/message-signing.git

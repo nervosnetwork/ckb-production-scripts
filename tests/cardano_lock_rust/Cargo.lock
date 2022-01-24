@@ -102,6 +102,7 @@ dependencies = [
 [[package]]
 name = "cardano-message-signing"
 version = "1.0.0"
+source = "git+https://github.com/Emurgo/message-signing.git#d6736d3e97e58648b8585c7dabdaac5870adae30"
 dependencies = [
  "base64-url",
  "byteorder",
