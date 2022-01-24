@@ -66,7 +66,7 @@ static int extract_witness_lock(uint8_t *witness, uint64_t len,
 
 int load_and_hash_witness(blake2b_state *ctx, size_t start, size_t index,
                           size_t source, bool hash_length) {
-  uint8_t temp[ONE_BATCH_SIZE];
+  uint8_t temp[ONE_BATCH_SIZE] = {0};
   uint64_t len = ONE_BATCH_SIZE;
   int ret = ckb_load_witness(temp, &len, start, index, source);
   if (ret != CKB_SUCCESS) {
@@ -94,7 +94,7 @@ int load_and_hash_witness(blake2b_state *ctx, size_t start, size_t index,
 int generate_sighash_all(uint8_t *msg, size_t msg_len) {
   int ret;
   uint64_t len = 0;
-  unsigned char temp[MAX_WITNESS_SIZE];
+  unsigned char temp[MAX_WITNESS_SIZE] = {0};
   uint64_t read_len = MAX_WITNESS_SIZE;
   uint64_t witness_len = MAX_WITNESS_SIZE;
 
@@ -120,7 +120,7 @@ int generate_sighash_all(uint8_t *msg, size_t msg_len) {
   }
 
   /* Load tx hash */
-  unsigned char tx_hash[BLAKE2B_BLOCK_SIZE];
+  unsigned char tx_hash[BLAKE2B_BLOCK_SIZE] = {0};
   len = BLAKE2B_BLOCK_SIZE;
   ret = ckb_load_tx_hash(tx_hash, &len, 0);
   if (ret != CKB_SUCCESS) {
@@ -227,7 +227,7 @@ int cardano_convert_copy(uint8_t *output, size_t *output_len,
 
 int get_auth(uint8_t *auth) {
   int err = CKB_SUCCESS;
-  unsigned char script[SCRIPT_SIZE];
+  unsigned char script[SCRIPT_SIZE] = {0};
   uint64_t script_len = SCRIPT_SIZE;
   err = ckb_load_script(script, &script_len, 0);
   CHECK(err == CKB_SUCCESS, err);
@@ -304,8 +304,7 @@ int main(int argc, const char *argv[]) {
   blake2b_update(&blake2b_ctx, pubkey, BLAKE2B_BLOCK_SIZE);
   uint8_t pubkey_hash[BLAKE2B_BLOCK_SIZE] = {0};
   blake2b_final(&blake2b_ctx, pubkey_hash, sizeof(pubkey_hash));
-  CHECK(memcmp(pubkey_hash, &auth[1], AUTH_HASH_SIZE) == 0,
-        ERROR_CHECK_PUBKEY);
+  CHECK(memcmp(pubkey_hash, &auth[1], AUTH_HASH_SIZE) == 0, ERROR_CHECK_PUBKEY);
 
   int suc = ed25519_verify(signature, message, message_len, pubkey);
   CHECK(suc == 1, ERROR_VERIFY);
