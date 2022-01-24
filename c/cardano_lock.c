@@ -31,15 +31,15 @@
 #define ONE_BATCH_SIZE 32768
 #define SCRIPT_SIZE 32768  // 32k
 
-#define IDENTITY_SIZE 21
-#define IDENTITY_HASH_SIZE 20
+#define AUTH_SIZE 21
+#define AUTH_HASH_SIZE 20
 #define PUBLIC_KEY_SIZE 32
 #define SIGNATURE_SIZE 64
 
 typedef enum _RET_ERROR {
-  ERROR_IDENTITY_ARGUMENTS_LEN = 1,
-  ERROR_IDENTITY_SYSCALL,
-  ERROR_IDENTITY_ENCODING,
+  ERROR_AUTH_ARGUMENTS_LEN = 1,
+  ERROR_AUTH_SYSCALL,
+  ERROR_AUTH_ENCODING,
   ERROR_ENCODING,
   ERROR_GENERATE_NEW_MSG,
   ERROR_LOAD_SCRIPT,
@@ -52,11 +52,11 @@ typedef enum _RET_ERROR {
 static int extract_witness_lock(uint8_t *witness, uint64_t len,
                                 mol_seg_t *lock_bytes_seg) {
   if (len < 20) {
-    return ERROR_IDENTITY_ENCODING;
+    return ERROR_AUTH_ENCODING;
   }
   uint32_t lock_length = *((uint32_t *)(&witness[16]));
   if (len < 20 + lock_length) {
-    return ERROR_IDENTITY_ENCODING;
+    return ERROR_AUTH_ENCODING;
   } else {
     lock_bytes_seg->ptr = &witness[20];
     lock_bytes_seg->size = lock_length;
@@ -99,13 +99,13 @@ int generate_sighash_all(uint8_t *msg, size_t msg_len) {
   uint64_t witness_len = MAX_WITNESS_SIZE;
 
   if (msg_len < BLAKE2B_BLOCK_SIZE) {
-    return ERROR_IDENTITY_ARGUMENTS_LEN;
+    return ERROR_AUTH_ARGUMENTS_LEN;
   }
 
   /* Load witness of first input */
   ret = ckb_load_witness(temp, &read_len, 0, 0, CKB_SOURCE_GROUP_INPUT);
   if (ret != CKB_SUCCESS) {
-    return ERROR_IDENTITY_SYSCALL;
+    return ERROR_AUTH_SYSCALL;
   }
   witness_len = read_len;
   if (read_len > MAX_WITNESS_SIZE) {
@@ -116,7 +116,7 @@ int generate_sighash_all(uint8_t *msg, size_t msg_len) {
   mol_seg_t lock_bytes_seg;
   ret = extract_witness_lock(temp, read_len, &lock_bytes_seg);
   if (ret != 0) {
-    return ERROR_IDENTITY_ENCODING;
+    return ERROR_AUTH_ENCODING;
   }
 
   /* Load tx hash */
@@ -127,7 +127,7 @@ int generate_sighash_all(uint8_t *msg, size_t msg_len) {
     return ret;
   }
   if (len != BLAKE2B_BLOCK_SIZE) {
-    return ERROR_IDENTITY_SYSCALL;
+    return ERROR_AUTH_SYSCALL;
   }
 
   /* Prepare sign message */
@@ -147,7 +147,7 @@ int generate_sighash_all(uint8_t *msg, size_t msg_len) {
     ret = load_and_hash_witness(&blake2b_ctx, read_len, 0,
                                 CKB_SOURCE_GROUP_INPUT, false);
     if (ret != CKB_SUCCESS) {
-      return ERROR_IDENTITY_SYSCALL;
+      return ERROR_AUTH_SYSCALL;
     }
   }
 
@@ -160,7 +160,7 @@ int generate_sighash_all(uint8_t *msg, size_t msg_len) {
       break;
     }
     if (ret != CKB_SUCCESS) {
-      return ERROR_IDENTITY_SYSCALL;
+      return ERROR_AUTH_SYSCALL;
     }
     i += 1;
   }
@@ -173,7 +173,7 @@ int generate_sighash_all(uint8_t *msg, size_t msg_len) {
       break;
     }
     if (ret != CKB_SUCCESS) {
-      return ERROR_IDENTITY_SYSCALL;
+      return ERROR_AUTH_SYSCALL;
     }
     i += 1;
   }
@@ -225,7 +225,7 @@ int cardano_convert_copy(uint8_t *output, size_t *output_len,
   return CKB_SUCCESS;
 }
 
-int get_identity(uint8_t *identity) {
+int get_auth(uint8_t *auth) {
   int err = CKB_SUCCESS;
   unsigned char script[SCRIPT_SIZE];
   uint64_t script_len = SCRIPT_SIZE;
@@ -237,8 +237,8 @@ int get_identity(uint8_t *identity) {
 
   mol_seg_t args = MolReader_Script_get_args(&script_seg);
   mol_seg_t args_raw_bytes = MolReader_Bytes_raw_bytes(&args);
-  CHECK(args_raw_bytes.size >= IDENTITY_SIZE, ERROR_LOAD_SCRIPT);
-  memcpy(identity, args_raw_bytes.ptr, IDENTITY_SIZE);
+  CHECK(args_raw_bytes.size >= AUTH_SIZE, ERROR_LOAD_SCRIPT);
+  memcpy(auth, args_raw_bytes.ptr, AUTH_SIZE);
   return CKB_SUCCESS;
 }
 
@@ -281,11 +281,11 @@ int simulator_main() {
 int main(int argc, const char *argv[]) {
 #endif
   int err = CKB_SUCCESS;
-  uint8_t identity[IDENTITY_SIZE] = {0};
-  err = get_identity(identity);
+  uint8_t auth[AUTH_SIZE] = {0};
+  err = get_auth(auth);
   CHECK(err == CKB_SUCCESS, err);
 
-  CHECK(identity[0] == 0x7, ERROR_LOAD_SCRIPT);
+  CHECK(auth[0] == 0x7, ERROR_LOAD_SCRIPT);
 
   // For the time being, only 48bytes will be generated
   uint8_t message[64] = {0};
@@ -304,7 +304,7 @@ int main(int argc, const char *argv[]) {
   blake2b_update(&blake2b_ctx, pubkey, BLAKE2B_BLOCK_SIZE);
   uint8_t pubkey_hash[BLAKE2B_BLOCK_SIZE] = {0};
   blake2b_final(&blake2b_ctx, pubkey_hash, sizeof(pubkey_hash));
-  CHECK(memcmp(pubkey_hash, &identity[1], IDENTITY_HASH_SIZE) == 0,
+  CHECK(memcmp(pubkey_hash, &auth[1], AUTH_HASH_SIZE) == 0,
         ERROR_CHECK_PUBKEY);
 
   int suc = ed25519_verify(signature, message, message_len, pubkey);
