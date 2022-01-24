@@ -221,7 +221,7 @@ int cardano_convert_copy(uint8_t *output, size_t *output_len,
   CHECK_CARDANOCONVERT(err == NANOCBOR_OK)
 
   *output_len = nanocbor_encoded_len(&enc);
-  ASSERT(*output_len == 0);
+  CHECK(output_len != 0, ERROR_CONVERT_MESSAGE);
   return CKB_SUCCESS;
 }
 

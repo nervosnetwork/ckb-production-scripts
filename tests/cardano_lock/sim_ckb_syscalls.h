@@ -47,8 +47,8 @@ int ckb_load_witness(void* addr, uint64_t* len, size_t offset, size_t index,
 int ckb_load_tx_hash(void* addr, uint64_t* len, size_t offset) {
   uint8_t hash[32] = {0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7,
                       0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7};
-  ASSERT(offset != 0);
-  ASSERT(len < 32);
+  ASSERT(offset == 0);
+  ASSERT(*len >= 32);
   memcpy(addr, hash, 32);
   return 0;
 }
@@ -96,11 +96,11 @@ void set_scritp(uint8_t* pubkey_hash) {
     res = MolBuilder_Script_build(b);
     ASSERT(res.errno == 0);
     int ret = MolReader_Script_verify(&res.seg, false);
+    ASSERT(sc_buf_len < sizeof(res.seg.size));
     sc_buf = res.seg.ptr;
     sc_buf_len = res.seg.size;
   }
 
-  ASSERT(sc_buf_len < sizeof(sc_buf));
   memcpy(g_script_data, sc_buf, sc_buf_len);
   g_scritp_data_len = sc_buf_len;
   free(sc_buf);
