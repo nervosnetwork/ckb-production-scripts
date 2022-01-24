@@ -20,7 +20,8 @@ use ckb_types::{
     H256,
 };
 use lazy_static::lazy_static;
-use rand::{thread_rng, Rng};
+use rand::rngs::ThreadRng;
+use rand::{thread_rng, Rng, RngCore};
 use std::collections::HashMap;
 
 lazy_static! {
@@ -33,7 +34,7 @@ lazy_static! {
 pub const SIGNATURE_SIZE: usize = 96;
 pub const MAX_CYCLES: u64 = std::u64::MAX;
 
-fn print_mem(d: &[u8]) {
+fn _print_mem(d: &[u8]) {
     let mut c = 0;
     for i in 0..d.len() {
         c = i;
@@ -47,9 +48,9 @@ fn print_mem(d: &[u8]) {
     }
 }
 
-pub fn dbg_print_mem(d: &[u8], n: &str) {
+pub fn _dbg_print_mem(d: &[u8], n: &str) {
     println!("{}, size:{}", n, d.len());
-    print_mem(d);
+    _print_mem(d);
 }
 
 #[derive(Default)]
@@ -98,9 +99,25 @@ pub fn blake160(message: &[u8]) -> Bytes {
     Bytes::from(hash)
 }
 
-pub fn sign_tx(tx: TransactionView, key: &PrivateKey) -> TransactionView {
+pub struct Config {
+    pub rnd: ThreadRng,
+    pub random_sign_data: bool,
+    pub random_sign_pubkey: bool,
+}
+
+impl Config {
+    pub fn new() -> Self {
+        Self {
+            rnd: thread_rng(),
+            random_sign_data: false,
+            random_sign_pubkey: false,
+        }
+    }
+}
+
+pub fn sign_tx(tx: TransactionView, key: &PrivateKey, config: &mut Config) -> TransactionView {
     let witnesses_len = tx.witnesses().len();
-    sign_tx_by_input_group(tx, key, 0, witnesses_len)
+    sign_tx_by_input_group(tx, key, 0, witnesses_len, config)
 }
 
 pub fn sign_tx_by_input_group(
@@ -108,6 +125,7 @@ pub fn sign_tx_by_input_group(
     key: &PrivateKey,
     begin_index: usize,
     len: usize,
+    config: &mut Config,
 ) -> TransactionView {
     let tx_hash = tx.hash();
     let mut signed_witnesses: Vec<packed::Bytes> = tx
@@ -148,15 +166,29 @@ pub fn sign_tx_by_input_group(
                 let builder = COSESign1Builder::new(&headers, message.as_bytes().to_vec(), false);
                 let to_sign = builder.make_data_to_sign().to_bytes();
 
-                let sig = key.sign(&to_sign).to_bytes();
+                let mut sig = key.sign(&to_sign).to_bytes();
+                if config.random_sign_data == true {
+                    sig = {
+                        let mut d: Vec<u8> = Vec::with_capacity(64);
+                        config.rnd.fill_bytes(&mut d.as_mut());
+                        d
+                    }
+                }
                 let mut witness_data: BytesMut = BytesMut::with_capacity(SIGNATURE_SIZE);
 
-                let pubkey = key.to_public();
-                witness_data.put(Bytes::from(pubkey.as_bytes()));
+                let mut pubkey = key.to_public().as_bytes();
+                if config.random_sign_pubkey {
+                    pubkey[0] = config.rnd.gen();
+                    pubkey = {
+                        let mut d: Vec<u8> = Vec::with_capacity(32);
+                        config.rnd.fill_bytes(&mut d.as_mut());
+                        d
+                    }
+                }
+                witness_data.put(Bytes::from(pubkey));
                 witness_data.put(Bytes::from(sig));
 
                 let witness_data = witness_data.freeze();
-                dbg_print_mem(&witness_data.to_vec(), "witness data");
 
                 witness
                     .as_builder()
