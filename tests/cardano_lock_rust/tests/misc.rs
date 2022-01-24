@@ -231,7 +231,7 @@ pub fn gen_tx(
     gen_tx_with_grouped_args(dummy, vec![(lock_args, 1)], config)
 }
 
-fn gen_tx_with_grouped_args(
+pub fn gen_tx_with_grouped_args(
     dummy: &mut DummyDataLoader,
     grouped_args: Vec<(Bytes, usize)>,
     config: &mut Config,
