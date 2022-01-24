@@ -183,13 +183,20 @@ int generate_sighash_all(uint8_t *msg, size_t msg_len) {
   return 0;
 }
 
-#define CHECK(f, rc_code)                                       \
-  {                                                             \
-    bool flag = f;                                              \
-    if (!flag) {                                                \
-      ASSERT(false);                                            \
-      ckb_exit(rc_code);                                        \
-    }                                                           \
+#define CHECK(f, rc_code) \
+  {                       \
+    bool flag = f;        \
+    if (!flag) {          \
+      ASSERT(false);      \
+      ckb_exit(rc_code);  \
+    }                     \
+  }
+
+#define CHECK_CARDANOCONVERT(f)     \
+  {                                 \
+    if (output && !(f)) {           \
+      return ERROR_CONVERT_MESSAGE; \
+    }                               \
   }
 
 int cardano_convert_copy(uint8_t *output, size_t *output_len,
@@ -197,29 +204,36 @@ int cardano_convert_copy(uint8_t *output, size_t *output_len,
                          const uint8_t *external_aad, size_t external_aad_len) {
   nanocbor_encoder_t enc;
   nanocbor_encoder_init(&enc, output, *output_len);
-  nanocbor_fmt_array(&enc, 4);
+  int err = nanocbor_fmt_array(&enc, 4);
+  CHECK_CARDANOCONVERT(err > 0);
 
   const char *msg_sign_context = "Signature1";
-  nanocbor_put_tstr(&enc, msg_sign_context);
-  nanocbor_put_bstr(&enc, NULL, 0);
-  nanocbor_put_bstr(&enc, external_aad, external_aad_len);
-  nanocbor_put_bstr(&enc, payload, payload_len);
+  err = nanocbor_put_tstr(&enc, msg_sign_context);
+  CHECK_CARDANOCONVERT(err == NANOCBOR_OK)
+
+  err = nanocbor_put_bstr(&enc, NULL, 0);
+  CHECK_CARDANOCONVERT(err == NANOCBOR_OK)
+
+  err = nanocbor_put_bstr(&enc, external_aad, external_aad_len);
+  CHECK_CARDANOCONVERT(err == NANOCBOR_OK)
+
+  err = nanocbor_put_bstr(&enc, payload, payload_len);
+  CHECK_CARDANOCONVERT(err == NANOCBOR_OK)
 
   *output_len = nanocbor_encoded_len(&enc);
+  ASSERT(*output_len == 0);
   return CKB_SUCCESS;
 }
 
 int get_identity(uint8_t *identity) {
   int err = CKB_SUCCESS;
   unsigned char script[SCRIPT_SIZE];
-  uint64_t scritp_len = SCRIPT_SIZE;
-  err = ckb_load_script(script, &scritp_len, 0);
+  uint64_t script_len = SCRIPT_SIZE;
+  err = ckb_load_script(script, &script_len, 0);
   CHECK(err == CKB_SUCCESS, err);
-  CHECK(scritp_len <= SCRIPT_SIZE, ERROR_LOAD_SCRIPT);
+  CHECK(script_len <= SCRIPT_SIZE, ERROR_LOAD_SCRIPT);
 
-  mol_seg_t script_seg;
-  script_seg.ptr = (uint8_t *)script;
-  script_seg.size = scritp_len;
+  mol_seg_t script_seg = {(uint8_t *)script, script_len};
 
   mol_seg_t args = MolReader_Script_get_args(&script_seg);
   mol_seg_t args_raw_bytes = MolReader_Bytes_raw_bytes(&args);
