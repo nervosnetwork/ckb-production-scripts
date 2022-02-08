@@ -218,7 +218,13 @@ fn gen_witness_data(config: &mut Config, payload: &Byte32) -> Bytes {
 
     let mut sig = config.privkey.sign(&to_sign.to_bytes()).to_bytes();
     if config.random_sign_data == true {
-        config.random.fill_bytes(&mut sig.as_mut());
+        for _i in 0..4 {
+            let source_sig = sig.clone();
+            config.random.fill_bytes(&mut sig.as_mut());
+            if source_sig != sig {
+                break;
+            }
+        }
     }
     witness_builder = witness_builder.signature(to_byte64(&sig));
 

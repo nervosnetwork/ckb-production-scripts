@@ -306,7 +306,8 @@ int _get_cursor_from_witness(WitnessArgsType* witness,
   int err = 0;
   mol2_cursor_t cur;
   uint64_t len = 0;
-  ckb_load_witness(NULL, &len, 0, index, source);
+  err = ckb_load_witness(NULL, &len, 0, index, source);
+  CHECK(err == CKB_SUCCESS, err);
   CHECK(len != 0, ERROR_LOAD_WITNESS);
 
   err = _make_cursor(index, source, len, _read_data_from_witness, &cur);
@@ -409,6 +410,7 @@ int main(int argc, const char* argv[]) {
   mol2_cursor_t new_message_cursor;
   err = get_witness_data(pub_key, signature, &new_message_cursor);
   CHECK(err == CKB_SUCCESS, err);
+  CHECK(new_message_cursor.size <= 65536, ERROR_LOAD_WITNESS);
   uint8_t new_message[new_message_cursor.size];
   CHECK(mol2_read_at(&new_message_cursor, new_message, sizeof(new_message)) ==
             sizeof(new_message),

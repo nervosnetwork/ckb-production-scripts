@@ -149,3 +149,10 @@ fn test_success_multi() {
     let verify_result = verifier.verify(MAX_CYCLES);
     verify_result.expect("pass verification");
 }
+
+#[test]
+fn test_random_away_faile() {
+    for _i in 0..100 {
+        failed_sign_data()
+    }
+}
