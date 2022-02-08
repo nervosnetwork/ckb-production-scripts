@@ -18,3 +18,4 @@ lazy_static = "1.4.0"
 rand = "0.8.4"
 cardano-serialization-lib = "9.1.4"
 cardano-message-signing = { git = "https://github.com/Emurgo/message-signing.git" }
+molecule = "0.7.2"

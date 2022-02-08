@@ -15,12 +15,21 @@ void debug_print_hex(const char* prefix, const uint8_t* buf, size_t length) {
   printf("\n");
 }
 
+void get_hash(const uint8_t* buf, size_t len, uint8_t* hash) {
+  blake2b_state b2b = {0};
+  blake2b_init(&b2b, BLAKE2B_BLOCK_SIZE);
+  blake2b_update(&b2b, buf, len);
+  blake2b_final(&b2b, hash, BLAKE2B_BLOCK_SIZE);
+}
+
 /* hex2bin modified from
  * https://chromium.googlesource.com/chromium/deps/xz/+/77022065014d48cf51d83322264ab4836fd175ec/debug/hex2bin.c
  */
 int getbin(int x) {
-  if (x >= '0' && x <= '9') return x - '0';
-  if (x >= 'A' && x <= 'F') return x - 'A' + 10;
+  if (x >= '0' && x <= '9')
+    return x - '0';
+  if (x >= 'A' && x <= 'F')
+    return x - 'A' + 10;
   return x - 'a' + 10;
 }
 
@@ -113,7 +122,7 @@ UTEST(test2, sign_and_verify) {
   ASSERT_EQ(ed25519_verify(signature, sign_msg, sign_msg_len, public_key), 1);
 }
 
-UTEST(test, dev) {
+UTEST(test, nanocbor_decode) {
   uint8_t payload[] = {
       0x77, 0x41, 0x72, 0xd0, 0xe1, 0xa7, 0x29, 0xe7, 0x87, 0x1a, 0x23,
       0xd9, 0x0a, 0xaa, 0x5f, 0x86, 0xc4, 0xbe, 0x0e, 0x00, 0x88, 0xe0,
@@ -126,6 +135,26 @@ UTEST(test, dev) {
                                  sizeof(payload), NULL, 0);
   ASSERT_EQ(err, CKB_SUCCESS);
 
+  uint8_t out_payload[32] = {0};
+  err = get_payload(new_msg, new_msg_len, out_payload);
+  ASSERT_EQ(err, CKB_SUCCESS);
+
+  ASSERT_EQ(memcmp(out_payload, payload, 32), 0);
+}
+
+UTEST(test, dev) {
+  uint8_t payload[] = {
+      206, 154, 62, 29,  173, 52,  104, 140, 123, 74,  30,
+      45,  171, 24, 217, 164, 139, 145, 47,  117, 197, 152,
+      251, 35,  30, 243, 235, 145, 182, 237, 233, 80,
+  };
+
+  uint8_t new_msg[2048] = {0};
+  size_t new_msg_len = sizeof(new_msg);
+  int err = cardano_convert_copy(new_msg, &new_msg_len, payload,
+                                 sizeof(payload), NULL, 0);
+  ASSERT_EQ(err, CKB_SUCCESS);
+
   uint8_t seed[32] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
   unsigned char public_key[32] = {0}, private_key[64] = {0};
   ed25519_create_keypair(public_key, private_key, seed);
@@ -133,14 +162,11 @@ UTEST(test, dev) {
   unsigned char signature[64] = {0};
   ed25519_sign(signature, new_msg, new_msg_len, public_key, private_key);
 
-  blake2b_state b2b = {0};
-  blake2b_init(&b2b, BLAKE2B_BLOCK_SIZE);
-  blake2b_update(&b2b, public_key, sizeof(public_key));
-  uint8_t pubkey_hash[BLAKE2B_BLOCK_SIZE] = {0};
-  blake2b_final(&b2b, pubkey_hash, BLAKE2B_BLOCK_SIZE);
+  uint8_t pub_key_hash[32] = {0}, stake_pub_key_hash[32] = {0};
+  get_hash(public_key, sizeof(public_key), pub_key_hash);
 
-  set_witness(public_key, signature);
-  set_scritp(pubkey_hash);
+  set_scritp(pub_key_hash, stake_pub_key_hash);
+  set_witness(public_key, signature, new_msg, new_msg_len);
 
   int rc_code = simulator_main();
   ASSERT_EQ(rc_code, 0);

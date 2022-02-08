@@ -103,9 +103,17 @@ mol:
 	rm -f c/xudt_rce_mol.h
 	rm -f c/xudt_rce_mol2.h
 	rm -f xudt/src/xudt_rce_mol.rs
+	rm -f c/cardano_lock_mol.h
+	rm -f c/cardano_lock_mol2.h
+	rm -f tests/cardano_lock_rust/tests/blockchain.rs
+	rm -f tests/cardano_lock_rust/tests/cardano_lock_mol.rs
 	make c/xudt_rce_mol.h
 	make c/xudt_rce_mol2.h
 	make xudt/src/xudt_rce_mol.rs
+	make c/cardano_lock_mol.h
+	make c/cardano_lock_mol2.h
+	make tests/cardano_lock_rust/tests/blockchain.rs
+	make tests/cardano_lock_rust/tests/cardano_lock_mol.rs
 
 
 xudt/src/xudt_rce_mol.rs: c/xudt_rce.mol
@@ -117,6 +125,19 @@ c/xudt_rce_mol.h: c/xudt_rce.mol
 c/xudt_rce_mol2.h: c/xudt_rce.mol
 	moleculec --language - --schema-file c/xudt_rce.mol --format json > build/blockchain_mol2.json
 	moleculec-c2 --input build/blockchain_mol2.json | clang-format -style=Google > c/xudt_rce_mol2.h
+
+c/cardano_lock_mol.h: c/cardano_lock.mol
+	${MOLC} --language c --schema-file $< > $@
+
+c/cardano_lock_mol2.h: c/cardano_lock.mol
+	moleculec --language - --schema-file c/cardano_lock.mol --format json > build/blockchain_mol2.json
+	moleculec-c2 --input build/blockchain_mol2.json | clang-format -style=Google > c/cardano_lock_mol2.h
+
+tests/cardano_lock_rust/tests/blockchain.rs: c/blockchain.mol
+	${MOLC} --language rust --schema-file $< | rustfmt > $@
+
+tests/cardano_lock_rust/tests/cardano_lock_mol.rs: c/cardano_lock.mol
+	${MOLC} --language rust --schema-file $< | rustfmt > $@
 
 build/xudt_rce: c/xudt_rce.c c/rce.h
 	$(CC) $(XUDT_RCE_CFLAGS) $(LDFLAGS) -o $@ $<
