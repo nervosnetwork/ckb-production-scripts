@@ -1,26 +1,83 @@
 ﻿
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
-#include "ckb_consts.h"
 #include "blockchain.h"
+#include "ckb_consts.h"
+
+#include "cardano_lock_mol.h"
+#include "cardano_lock_mol2.h"
 
 uint8_t g_witness_data[1024] = {0};
 size_t g_witness_data_len = 0;
 
-void set_witness(uint8_t* pubkey, uint8_t* signature) {
-  memset(g_witness_data, 0, sizeof(g_witness_data));
+typedef struct _FmtBuf {
+  uint8_t* buf;
+  size_t len;
+} FmtBuf;
 
-  uint32_t* len = (uint32_t*)&g_witness_data[16];
-  *len = 96;
-
-  memcpy(&g_witness_data[20], pubkey, 32);
-  memcpy(&g_witness_data[52], signature, 64);
-  g_witness_data_len = 20 + 32 + 64;
+FmtBuf _mol_get_buf(mol_seg_res_t* r) {
+  FmtBuf fmtbuf = {0};
+  fmtbuf.buf = r->seg.ptr;
+  fmtbuf.len = r->seg.size;
+  return fmtbuf;
 }
 
-int ckb_load_witness(void* addr, uint64_t* len, size_t offset, size_t index,
+void _mol_free_buf(FmtBuf* buf) {
+  if (buf && buf->buf)
+    free(buf->buf);
+  memset(buf, 0, sizeof(FmtBuf));
+}
+
+FmtBuf _mol_fmt_bytes(uint8_t* buf, uint32_t len) {
+  mol_builder_t b;
+  MolBuilder_Bytes_init(&b);
+
+  for (uint32_t i = 0; i < len; i++) {
+    MolBuilder_Bytes_push(&b, buf[i]);
+  }
+  mol_seg_res_t r = MolBuilder_Bytes_build(b);
+  return _mol_get_buf(&r);
+}
+
+void set_witness(uint8_t* pubkey,
+                 uint8_t* signature,
+                 uint8_t* new_msg,
+                 size_t new_msg_len) {
+  memset(g_witness_data, 0, sizeof(g_witness_data));
+  mol_builder_t builder_witness;
+  MolBuilder_WitnessArgs_init(&builder_witness);
+
+  mol_builder_t builder_lock;
+  MolBuilder_CardanoWitnessLock_init(&builder_lock);
+  MolBuilder_CardanoWitnessLock_set_pubkey(&builder_lock, pubkey, 32);
+  MolBuilder_CardanoWitnessLock_set_signature(&builder_lock, signature, 64);
+  FmtBuf newmsg_buf = _mol_fmt_bytes(new_msg, new_msg_len);
+  MolBuilder_CardanoWitnessLock_set_new_message(&builder_lock, newmsg_buf.buf,
+                                                newmsg_buf.len);
+  mol_seg_res_t lock_res = MolBuilder_CardanoWitnessLock_build(builder_lock);
+
+  FmtBuf lock_buf = _mol_get_buf(&lock_res);
+  FmtBuf lock_res_buf = _mol_fmt_bytes(lock_buf.buf, lock_buf.len);
+  MolBuilder_WitnessArgs_set_lock(&builder_witness, lock_res_buf.buf,
+                                  lock_res_buf.len);
+  mol_seg_res_t r = MolBuilder_WitnessArgs_build(builder_witness);
+  FmtBuf ret = _mol_get_buf(&r);
+  ASSERT(ret.len <= sizeof(g_witness_data));
+
+  memcpy(g_witness_data, ret.buf, ret.len);
+  g_witness_data_len = ret.len;
+  _mol_free_buf(&ret);
+  _mol_free_buf(&lock_buf);
+  _mol_free_buf(&lock_res_buf);
+  _mol_free_buf(&newmsg_buf);
+}
+
+int ckb_load_witness(void* addr,
+                     uint64_t* len,
+                     size_t offset,
+                     size_t index,
                      size_t source) {
   if (offset != 0) {
     ASSERT(false);
@@ -35,7 +92,7 @@ int ckb_load_witness(void* addr, uint64_t* len, size_t offset, size_t index,
   }
 
   if (*len < g_witness_data_len) {
-    ASSERT(false);
+    *len = g_witness_data_len;
     return CKB_INVALID_DATA;
   }
 
@@ -56,10 +113,7 @@ int ckb_load_tx_hash(void* addr, uint64_t* len, size_t offset) {
 uint8_t g_script_data[1024] = {0};
 size_t g_scritp_data_len = 0;
 
-void cudtmol_Bytes(uint8_t* buf, uint32_t len, uint8_t** output,
-                   size_t* output_len) {}
-
-void set_scritp(uint8_t* pubkey_hash) {
+void set_scritp(uint8_t* pubkey_hash, uint8_t* stake_pubkey_hash) {
   memset(g_script_data, 0, sizeof(g_script_data));
 
   uint8_t script_hash[32] = {0};
@@ -67,8 +121,9 @@ void set_scritp(uint8_t* pubkey_hash) {
   uint8_t* args_buf = NULL;
   size_t args_buf_len = 0;
   {
-    uint8_t args_data[21] = {0x7, 0};
-    memcpy(&args_data[1], pubkey_hash, 20);
+    uint8_t args_data[64] = {0};
+    memcpy(args_data, pubkey_hash, 32);
+    memcpy(&args_data[32], stake_pubkey_hash, 32);
 
     mol_builder_t b;
     MolBuilder_Bytes_init(&b);
@@ -123,6 +178,10 @@ int ckb_load_script(void* addr, uint64_t* len, size_t offset) {
   return 0;
 }
 
-int ckb_calculate_inputs_len() { return 1; }
+int ckb_calculate_inputs_len() {
+  return 1;
+}
 
-int ckb_exit(int8_t code) { return 1; }
+int ckb_exit(int8_t code) {
+  return 1;
+}

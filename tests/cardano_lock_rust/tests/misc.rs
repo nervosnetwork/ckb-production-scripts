@@ -1,11 +1,16 @@
-﻿use cardano_message_signing::utils::ToBytes;
-use cardano_message_signing::{builders::COSESign1Builder, HeaderMap, Headers, ProtectedHeaderMap};
+﻿use cardano_lock_rust::{blockchain, cardano_lock_mol};
+use cardano_message_signing::{
+    builders::{AlgorithmId, COSESign1Builder},
+    cbor::CBORValue,
+    utils::ToBytes,
+    HeaderMap, Headers, Label, ProtectedHeaderMap,
+};
 use cardano_serialization_lib::crypto::PrivateKey;
 use ckb_chain_spec::consensus::{Consensus, ConsensusBuilder};
 use ckb_script::TxVerifyEnv;
 use ckb_traits::{CellDataProvider, HeaderProvider};
 use ckb_types::{
-    bytes::{BufMut, Bytes, BytesMut},
+    bytes::Bytes,
     core::{
         cell::{CellMeta, CellMetaBuilder, ResolvedTransaction},
         hardfork::HardForkSwitch,
@@ -31,7 +36,6 @@ lazy_static! {
         ckb_types::bytes::Bytes::from(include_bytes!("../../../build/always_success").as_ref());
 }
 
-pub const SIGNATURE_SIZE: usize = 96;
 pub const MAX_CYCLES: u64 = std::u64::MAX;
 
 fn _print_mem(d: &[u8]) {
@@ -95,8 +99,45 @@ impl HeaderProvider for DummyDataLoader {
 }
 
 pub fn blake160(message: &[u8]) -> Bytes {
-    let hash = Vec::from(&ckb_hash::blake2b_256(message)[..20]);
+    let hash = Vec::from(&ckb_hash::blake2b_256(message)[..]);
     Bytes::from(hash)
+}
+
+fn to_array<T, const N: usize>(d: Vec<T>) -> [T; N] {
+    d.try_into()
+        .unwrap_or_else(|v: Vec<T>| panic!("Expected a Vec of length {} but it was {}", N, v.len()))
+}
+fn to_byte32(d: &Byte32) -> blockchain::Byte32 {
+    let d = d
+        .as_slice()
+        .to_vec()
+        .into_iter()
+        .map(|f| molecule::prelude::Byte::new(f))
+        .collect();
+    blockchain::Byte32Builder::default()
+        .set(to_array(d))
+        .build()
+}
+fn to_byte64(d: &Vec<u8>) -> cardano_lock_mol::Byte64 {
+    let d = d
+        .as_slice()
+        .to_vec()
+        .into_iter()
+        .map(|f| molecule::prelude::Byte::new(f))
+        .collect();
+    cardano_lock_mol::Byte64Builder::default()
+        .set(to_array(d))
+        .build()
+}
+fn to_bytes(d: &Vec<u8>) -> blockchain::Bytes {
+    let d: Vec<molecule::prelude::Byte> = d
+        .to_vec()
+        .into_iter()
+        .map(|f| molecule::prelude::Byte::new(f))
+        .collect();
+    let r = blockchain::BytesBuilder::default();
+    let r = r.set(d);
+    r.build()
 }
 
 pub struct Config {
@@ -104,15 +145,31 @@ pub struct Config {
     pub random_sign_data: bool,
     pub random_sign_pubkey: bool,
     pub random_message: bool,
+
+    pub privkey: PrivateKey,
+    pub stake_privkey: PrivateKey,
 }
 
 impl Config {
     pub fn new() -> Self {
+        let mut rad = thread_rng();
+        let sk_bytes1: [u8; 32] = {
+            let mut data: [u8; 32] = [0; 32];
+            rad.fill_bytes(&mut data);
+            data
+        };
+        let sk_bytes2: [u8; 32] = {
+            let mut data: [u8; 32] = [0; 32];
+            rad.fill_bytes(&mut data);
+            data
+        };
         Self {
-            random: thread_rng(),
+            random: rad,
             random_sign_data: false,
             random_sign_pubkey: false,
             random_message: false,
+            privkey: PrivateKey::from_normal_bytes(&sk_bytes1).unwrap(),
+            stake_privkey: PrivateKey::from_normal_bytes(&sk_bytes2).unwrap(),
         }
     }
 
@@ -123,14 +180,65 @@ impl Config {
     }
 }
 
-pub fn sign_tx(tx: TransactionView, key: &PrivateKey, config: &mut Config) -> TransactionView {
+fn gen_witness_data(config: &mut Config, payload: &Byte32) -> Bytes {
+    let mut witness_builder = cardano_lock_mol::CardanoWitnessLockBuilder::default();
+    let mut pubkey = config.privkey.to_public().as_bytes();
+    if config.random_sign_pubkey == true {
+        config.random.fill_bytes(&mut pubkey.as_mut());
+    };
+    witness_builder = witness_builder.pubkey(to_byte32(&Byte32::new(to_array(pubkey))));
+
+    let mut protected_headers = HeaderMap::new();
+    protected_headers.set_algorithm_id(&Label::from_algorithm_id(AlgorithmId::EdDSA.into()));
+
+    let base_addr = cardano_serialization_lib::address::BaseAddress::new(
+        0,
+        &cardano_serialization_lib::address::StakeCredential::from_keyhash(
+            &config.privkey.to_public().hash(),
+        ),
+        &cardano_serialization_lib::address::StakeCredential::from_keyhash(
+            &config.stake_privkey.to_public().hash(),
+        ),
+    );
+    protected_headers
+        .set_header(
+            &Label::new_text(String::from("address")),
+            &CBORValue::new_bytes(base_addr.to_address().to_bytes()),
+        )
+        .expect("set header failed");
+
+    let protected_serialized = ProtectedHeaderMap::new(&protected_headers);
+
+    //let protected_serialized = ProtectedHeaderMap::new(&HeaderMap::new());
+
+    let headers = Headers::new(&protected_serialized, &HeaderMap::new());
+    let builder = COSESign1Builder::new(&headers, payload.as_slice().to_vec(), false);
+    let to_sign = builder.make_data_to_sign();
+    witness_builder = witness_builder.new_message(to_bytes(&to_sign.to_bytes()));
+
+    let mut sig = config.privkey.sign(&to_sign.to_bytes()).to_bytes();
+    if config.random_sign_data == true {
+        for _i in 0..4 {
+            let source_sig = sig.clone();
+            config.random.fill_bytes(&mut sig.as_mut());
+            if source_sig != sig {
+                break;
+            }
+        }
+    }
+    witness_builder = witness_builder.signature(to_byte64(&sig));
+
+    let witness_data = witness_builder.build();
+    witness_data.as_bytes()
+}
+
+pub fn sign_tx(tx: TransactionView, config: &mut Config) -> TransactionView {
     let witnesses_len = tx.witnesses().len();
-    sign_tx_by_input_group(tx, key, 0, witnesses_len, config)
+    sign_tx_by_input_group(tx, 0, witnesses_len, config)
 }
 
 pub fn sign_tx_by_input_group(
     tx: TransactionView,
-    key: &PrivateKey,
     begin_index: usize,
     len: usize,
     config: &mut Config,
@@ -149,7 +257,7 @@ pub fn sign_tx_by_input_group(
                 let witness = WitnessArgs::new_unchecked(tx.witnesses().get(i).unwrap().unpack());
                 let zero_lock: Bytes = {
                     let mut buf = Vec::new();
-                    buf.resize(SIGNATURE_SIZE, 0);
+                    buf.resize(witness.as_bytes().len() - 20, 0);
                     buf.into()
                 };
                 let witness_for_digest = witness
@@ -171,38 +279,10 @@ pub fn sign_tx_by_input_group(
                 if config.random_message == true {
                     message = config.rnd_array_32();
                 }
-
                 let message = H256::from(message);
 
-                let protected_serialized = ProtectedHeaderMap::new(&HeaderMap::new());
-                let headers = Headers::new(&protected_serialized, &HeaderMap::new());
-                let builder = COSESign1Builder::new(&headers, message.as_bytes().to_vec(), false);
-                let to_sign = builder.make_data_to_sign().to_bytes();
-
-                let mut sig = key.sign(&to_sign).to_bytes();
-                if config.random_sign_data == true {
-                    sig = {
-                        let mut d: Vec<u8> = Vec::with_capacity(64);
-                        config.random.fill_bytes(&mut d.as_mut());
-                        d
-                    }
-                }
-                let mut witness_data: BytesMut = BytesMut::with_capacity(SIGNATURE_SIZE);
-
-                let mut pubkey = key.to_public().as_bytes();
-                if config.random_sign_pubkey {
-                    pubkey[0] = config.random.gen();
-                    pubkey = {
-                        let mut d: Vec<u8> = Vec::with_capacity(32);
-                        config.random.fill_bytes(&mut d.as_mut());
-                        d
-                    }
-                }
-                witness_data.put(Bytes::from(pubkey));
-                witness_data.put(Bytes::from(sig));
-
-                let witness_data = witness_data.freeze();
-
+                let witness_data =
+                    gen_witness_data(config, &Byte32::new(to_array(message.as_bytes().to_vec())));
                 witness
                     .as_builder()
                     .lock(Some(witness_data).pack())
@@ -295,10 +375,11 @@ pub fn gen_tx_with_grouped_args(
                 previous_out_point.clone(),
                 (previous_output_cell.clone(), Bytes::new()),
             );
-            let mut random_extra_witness = [0u8; 32];
-            config.random.fill(&mut random_extra_witness);
+
+            let witness_data = gen_witness_data(config, &Byte32::new([0; 32]));
+
             let witness_args = WitnessArgsBuilder::default()
-                .lock(Some(Bytes::from(random_extra_witness.to_vec())).pack())
+                .lock(Some(witness_data).pack())
                 .build();
             tx_builder = tx_builder
                 .input(CellInput::new(previous_out_point, 0))
