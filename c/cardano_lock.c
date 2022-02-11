@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <ed25519.h>
 
 #ifndef MOL2_EXIT
 #define MOL2_EXIT ckb_exit
@@ -23,37 +24,11 @@
 #include "cardano_lock_mol2.h"
 #include "molecule/molecule_reader.h"
 
-#include "ed25519.h"
-#include "nanocbor.h"
-
 #include "ckb_consts.h"
 
-#define MAX_WITNESS_SIZE 32768
-#define BLAKE2B_BLOCK_SIZE 32
-#define BLAKE2B_224_BLOCK_SIZE 28
-#define ONE_BATCH_SIZE 32768
-#define SCRIPT_SIZE 32768  // 32k
-
-#define PUBLIC_KEY_SIZE 32
-#define SIGNATURE_SIZE 64
+#include "cardano_lock_inc.h"
 
 uint8_t g_mol_data_source[DEFAULT_DATA_SOURCE_LENGTH];
-
-typedef enum _RET_ERROR {
-  ERROR_AUTH_ARGUMENTS_LEN = 1,
-  ERROR_AUTH_SYSCALL,
-  ERROR_AUTH_ENCODING,
-  ERROR_ENCODING,
-  ERROR_GENERATE_NEW_MSG,
-  ERROR_LOAD_SCRIPT,
-  ERROR_LOAD_WITNESS,
-  ERROR_UNSUPPORTED_ARGS,
-  ERROR_ARGS_LENGTH,
-  ERROR_CONVERT_MESSAGE,
-  ERROR_PAYLOAD,
-  ERROR_VERIFY,
-  ERROR_PUBKEY,
-} RET_ERROR;
 
 static int extract_witness_lock(uint8_t* witness,
                                 uint64_t len,
@@ -192,23 +167,6 @@ int generate_sighash_all(uint8_t* msg, size_t msg_len) {
 
   return 0;
 }
-
-#define CHECK(f, rc_code) \
-  {                       \
-    bool flag = f;        \
-    if (!flag) {          \
-      ASSERT(false);      \
-      ckb_exit(rc_code);  \
-    }                     \
-  }
-// printf("check code is failed, %s:%d\n", __FILE__, __LINE__);
-
-#define CHECK_CARDANOCONVERT(f)     \
-  {                                 \
-    if (output && !(f)) {           \
-      return ERROR_CONVERT_MESSAGE; \
-    }                               \
-  }
 
 int cardano_convert_copy(uint8_t* output,
                          size_t* output_len,
@@ -371,51 +329,6 @@ void get_pubkey_hash(uint8_t* pubkey, uint8_t* hash) {
   _blake2b_init_cardano(&blake2b_ctx, BLAKE2B_224_BLOCK_SIZE);
   blake2b_update(&blake2b_ctx, pubkey, PUBLIC_KEY_SIZE);
   blake2b_final(&blake2b_ctx, hash, BLAKE2B_224_BLOCK_SIZE);
-}
-
-int get_payload(const uint8_t* new_msg, size_t len, uint8_t* payload) {
-  nanocbor_value_t n_val = {0};
-  nanocbor_decoder_init(&n_val, new_msg, len);
-
-  int val_type = nanocbor_get_type(&n_val);
-  CHECK(val_type == NANOCBOR_TYPE_ARR, ERROR_PAYLOAD);
-
-  nanocbor_value_t n_array;
-  int err = nanocbor_enter_array(&n_val, &n_array);
-  CHECK(err == NANOCBOR_OK, ERROR_PAYLOAD);
-
-  uint8_t* tmp_buf = NULL;
-  size_t tmp_len = 0;
-  err = nanocbor_get_tstr(&n_array, (const uint8_t**)&tmp_buf, &tmp_len);
-  CHECK(err == NANOCBOR_OK, ERROR_PAYLOAD);
-  const char* msg_sign_context = "Signature1";
-  // msg_sign_context string size is 10
-  CHECK(tmp_len == 10, ERROR_PAYLOAD);
-  CHECK(memcmp(msg_sign_context, tmp_buf, tmp_len) == 0, ERROR_PAYLOAD);
-
-  // null
-  tmp_buf = NULL;
-  tmp_len = 0;
-  err = nanocbor_get_bstr(&n_array, (const uint8_t**)&tmp_buf, &tmp_len);
-  CHECK(err == NANOCBOR_OK, ERROR_PAYLOAD);
-
-  // ext
-  tmp_buf = NULL;
-  tmp_len = 0;
-  err = nanocbor_get_bstr(&n_array, (const uint8_t**)&tmp_buf, &tmp_len);
-  CHECK(err == NANOCBOR_OK, ERROR_PAYLOAD);
-
-  // payload
-  tmp_buf = NULL;
-  tmp_len = 0;
-  err = nanocbor_get_bstr(&n_array, (const uint8_t**)&tmp_buf, &tmp_len);
-  CHECK(err == NANOCBOR_OK, ERROR_PAYLOAD);
-  CHECK(tmp_len == BLAKE2B_BLOCK_SIZE, ERROR_PAYLOAD);
-  memcpy(payload, tmp_buf, tmp_len);
-
-  nanocbor_leave_container(&n_val, &n_array);
-
-  return CKB_SUCCESS;
 }
 
 #ifdef CKB_USE_SIM
