@@ -197,7 +197,6 @@ int generate_sighash_all(uint8_t* msg, size_t msg_len) {
   {                       \
     bool flag = f;        \
     if (!flag) {          \
-      printf("check code is failed, %s:%d\n", __FILE__, __LINE__); \
       ASSERT(false);      \
       ckb_exit(rc_code);  \
     }                     \
@@ -207,7 +206,6 @@ int generate_sighash_all(uint8_t* msg, size_t msg_len) {
 #define CHECK_CARDANOCONVERT(f)     \
   {                                 \
     if (output && !(f)) {           \
-      printf("check code is failed, %s:%d\n", __FILE__, __LINE__); \
       return ERROR_CONVERT_MESSAGE; \
     }                               \
   }
@@ -405,17 +403,12 @@ int simulator_main() {
 int main(int argc, const char* argv[]) {
 #endif
 
-#ifdef CKB_C_STDLIB_PRINTF
-  printf("print is enable!\n");
-#endif  // CKB_C_STDLIB_PRINTF
   int err = CKB_SUCCESS;
   uint8_t header_type = 0;
   uint8_t payment_pubkey[BLAKE2B_224_BLOCK_SIZE] = {0};
   size_t args_len = 0;
   err = get_args(&header_type, payment_pubkey, &args_len);
   CHECK(err == CKB_SUCCESS, err);
-
-  printf("args len is :%d", args_len);
 
   header_type = header_type >> 4;
   CHECK((header_type == 0b0000 || header_type == 0b0010 ||
