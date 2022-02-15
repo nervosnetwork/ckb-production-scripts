@@ -440,7 +440,7 @@ int main(int argc, const char* argv[]) {
     CHECK(args_len >= 57, ERROR_ARGS_LENGTH);
   }
 
-  if (header_type == 0b0110) {
+  if (header_type == 0b0100 || header_type == 0b0110) {
     CHECK(args_len >= 29, ERROR_ARGS_LENGTH);
   }
 
