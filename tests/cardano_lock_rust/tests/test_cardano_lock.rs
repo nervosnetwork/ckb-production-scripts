@@ -9,9 +9,10 @@ fn test_success() {
     let mut data_loader = DummyDataLoader::new();
     let mut config = Config::new();
 
-    let mut args: BytesMut = BytesMut::with_capacity(64);
-    args.put(blake160(&config.privkey.to_public().as_bytes()));
-    args.put(Bytes::from(vec![0; 32]));
+    let mut args: BytesMut = BytesMut::with_capacity(65);
+    args.put_u8(0b0000 << 4 + 0000);
+    args.put(blake_224(&config.privkey.to_public().as_bytes()));
+    args.put(Bytes::from(vec![0; 28]));
 
     let tx = gen_tx(&mut data_loader, args.freeze(), &mut config);
     let tx = sign_tx(tx, &mut config);
@@ -34,8 +35,8 @@ fn failed_public_key_hash() {
     let mut config = Config::new();
 
     let mut args: BytesMut = BytesMut::with_capacity(64);
-    args.put(Bytes::from(config.rnd_array_32().to_vec()));
-    args.put(Bytes::from(vec![0; 32]));
+    args.put(Bytes::from(config.rnd_array_28().to_vec()));
+    args.put(Bytes::from(vec![0; 28]));
 
     let tx = gen_tx(&mut data_loader, args.freeze(), &mut config);
     let tx = sign_tx(tx, &mut config);
@@ -59,7 +60,7 @@ fn failed_sign_data() {
     config.random_sign_data = true;
 
     let mut args: BytesMut = BytesMut::with_capacity(64);
-    args.put(blake160(&config.privkey.to_public().as_bytes()));
+    args.put(blake_224(&config.privkey.to_public().as_bytes()));
     args.put(Bytes::from(vec![0; 32]));
 
     let tx = gen_tx(&mut data_loader, args.freeze(), &mut config);
@@ -84,7 +85,7 @@ fn failed_sign_pubkey() {
     config.random_sign_pubkey = true;
 
     let mut args: BytesMut = BytesMut::with_capacity(64);
-    args.put(blake160(&config.privkey.to_public().as_bytes()));
+    args.put(blake_224(&config.privkey.to_public().as_bytes()));
     args.put(Bytes::from(vec![0; 32]));
 
     let tx = gen_tx(&mut data_loader, args.freeze(), &mut config);
@@ -109,7 +110,7 @@ fn failed_message() {
     config.random_message = true;
 
     let mut args: BytesMut = BytesMut::with_capacity(64);
-    args.put(blake160(&config.privkey.to_public().as_bytes()));
+    args.put(blake_224(&config.privkey.to_public().as_bytes()));
     args.put(Bytes::from(vec![0; 32]));
 
     let tx = gen_tx(&mut data_loader, args.freeze(), &mut config);
@@ -133,8 +134,9 @@ fn test_success_multi() {
     let mut config = Config::new();
 
     let mut args: BytesMut = BytesMut::with_capacity(64);
-    args.put(blake160(&config.privkey.to_public().as_bytes()));
-    args.put(Bytes::from(vec![0; 32]));
+    args.put_u8(0b0000 << 4 + 0000);
+    args.put(blake_224(&config.privkey.to_public().as_bytes()));
+    args.put(Bytes::from(vec![0; 24]));
 
     let tx = gen_tx_with_grouped_args(&mut data_loader, vec![(args.freeze(), 3)], &mut config);
     let tx = sign_tx(tx, &mut config);
@@ -155,4 +157,28 @@ fn test_random_away_faile() {
     for _i in 0..100 {
         failed_sign_data()
     }
+}
+
+#[test]
+fn test_failed_header_type() {
+    let mut data_loader = DummyDataLoader::new();
+    let mut config = Config::new();
+
+    let mut args: BytesMut = BytesMut::with_capacity(65);
+    args.put_u8(0b1000 << 4 + 0000);
+    args.put(blake_224(&config.privkey.to_public().as_bytes()));
+    args.put(Bytes::from(vec![0; 28]));
+
+    let tx = gen_tx(&mut data_loader, args.freeze(), &mut config);
+    let tx = sign_tx(tx, &mut config);
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+
+    let consensus = gen_consensus();
+    let tx_env = gen_tx_env();
+    let mut verifier =
+        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+    verifier.set_debug_printer(debug_printer);
+
+    let verify_result = verifier.verify(MAX_CYCLES);
+    assert!(verify_result.is_err(), "pass verification");
 }
