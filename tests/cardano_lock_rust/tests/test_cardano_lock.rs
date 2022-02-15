@@ -253,3 +253,13 @@ fn fiailed_only_pubkey2() {
     let verify_result = verifier.verify(MAX_CYCLES);
     assert!(verify_result.is_err(), "pass verification");
 }
+
+#[test]
+fn test_blake2b_224() {
+    let config = Config::new();
+    let pubkey = config.privkey.to_public();
+
+    let hash1 = blake_224(&pubkey.as_bytes()).to_vec();
+    let hash2 = pubkey.hash().to_bytes();
+    assert_eq!(hash1, hash2);
+}
