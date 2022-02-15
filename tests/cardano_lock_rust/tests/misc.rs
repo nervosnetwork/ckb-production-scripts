@@ -1,4 +1,4 @@
-﻿use cardano_lock_rust::{blockchain, cardano_lock_mol};
+use cardano_lock_rust::{blockchain, cardano_lock_mol};
 use cardano_message_signing::{
     builders::{AlgorithmId, COSESign1Builder},
     cbor::CBORValue,
@@ -99,9 +99,7 @@ impl HeaderProvider for DummyDataLoader {
 }
 
 pub fn blake_224(message: &[u8]) -> Bytes {
-    let mut b2b = ckb_hash::Blake2bBuilder::new(28)
-        .personal(ckb_hash::CKB_HASH_PERSONALIZATION)
-        .build();
+    let mut b2b = ckb_hash::Blake2bBuilder::new(28).build();
     b2b.update(message);
 
     let mut hash: [u8; 28] = [0; 28];
