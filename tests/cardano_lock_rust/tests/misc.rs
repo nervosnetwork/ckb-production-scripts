@@ -1,4 +1,4 @@
-﻿use cardano_lock_rust::{blockchain, cardano_lock_mol};
+use cardano_lock_rust::{blockchain, cardano_lock_mol};
 use cardano_message_signing::{
     builders::{AlgorithmId, COSESign1Builder},
     cbor::CBORValue,
@@ -98,9 +98,13 @@ impl HeaderProvider for DummyDataLoader {
     }
 }
 
-pub fn blake160(message: &[u8]) -> Bytes {
-    let hash = Vec::from(&ckb_hash::blake2b_256(message)[..]);
-    Bytes::from(hash)
+pub fn blake_224(message: &[u8]) -> Bytes {
+    let mut b2b = ckb_hash::Blake2bBuilder::new(28).build();
+    b2b.update(message);
+
+    let mut hash: [u8; 28] = [0; 28];
+    b2b.finalize(&mut hash);
+    Bytes::from(hash.to_vec())
 }
 
 fn to_array<T, const N: usize>(d: Vec<T>) -> [T; N] {
@@ -175,6 +179,12 @@ impl Config {
 
     pub fn rnd_array_32(&mut self) -> [u8; 32] {
         let mut data: [u8; 32] = [0; 32];
+        self.random.fill_bytes(&mut data);
+        data
+    }
+
+    pub fn rnd_array_28(&mut self) -> [u8; 28] {
+        let mut data: [u8; 28] = [0; 28];
         self.random.fill_bytes(&mut data);
         data
     }

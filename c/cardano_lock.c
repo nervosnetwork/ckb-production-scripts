@@ -1,5 +1,5 @@
 // uncomment to enable printf in CKB-VM
-// #define CKB_C_STDLIB_PRINTF
+//#define CKB_C_STDLIB_PRINTF
 
 #ifdef CKB_USE_SIM
 #include "sim_ckb_syscalls.h"
@@ -30,6 +30,7 @@
 
 #define MAX_WITNESS_SIZE 32768
 #define BLAKE2B_BLOCK_SIZE 32
+#define BLAKE2B_224_BLOCK_SIZE 28
 #define ONE_BATCH_SIZE 32768
 #define SCRIPT_SIZE 32768  // 32k
 
@@ -46,6 +47,8 @@ typedef enum _RET_ERROR {
   ERROR_GENERATE_NEW_MSG,
   ERROR_LOAD_SCRIPT,
   ERROR_LOAD_WITNESS,
+  ERROR_UNSUPPORTED_ARGS,
+  ERROR_ARGS_LENGTH,
   ERROR_CONVERT_MESSAGE,
   ERROR_PAYLOAD,
   ERROR_VERIFY,
@@ -236,7 +239,7 @@ int cardano_convert_copy(uint8_t* output,
   return CKB_SUCCESS;
 }
 
-int get_args(uint8_t* payment_pubkey, uint8_t* stake_pubkey) {
+int get_args(uint8_t* header, uint8_t* payment_pubkey, size_t* args_len) {
   int err = CKB_SUCCESS;
   unsigned char script[SCRIPT_SIZE] = {0};
   uint64_t script_len = SCRIPT_SIZE;
@@ -248,11 +251,11 @@ int get_args(uint8_t* payment_pubkey, uint8_t* stake_pubkey) {
 
   mol_seg_t args = MolReader_Script_get_args(&script_seg);
   mol_seg_t args_raw_bytes = MolReader_Bytes_raw_bytes(&args);
-  CHECK(args_raw_bytes.size == BLAKE2B_BLOCK_SIZE * 2, ERROR_LOAD_SCRIPT);
+  CHECK(args_raw_bytes.size >= 1 + BLAKE2B_224_BLOCK_SIZE, ERROR_LOAD_SCRIPT);
 
-  memcpy(payment_pubkey, args_raw_bytes.ptr, BLAKE2B_BLOCK_SIZE);
-  memcpy(stake_pubkey, &args_raw_bytes.ptr[BLAKE2B_BLOCK_SIZE],
-         BLAKE2B_BLOCK_SIZE);
+  *header = args_raw_bytes.ptr[0];
+  memcpy(payment_pubkey, &args_raw_bytes.ptr[1], BLAKE2B_BLOCK_SIZE);
+  *args_len = args_raw_bytes.size;
   return CKB_SUCCESS;
 }
 
@@ -342,11 +345,32 @@ int get_witness_data(uint8_t* pubkey,
   return CKB_SUCCESS;
 }
 
+// Here use blake2b without personal
+int _blake2b_init_cardano(blake2b_state *S, size_t outlen) {
+  blake2b_param P[1];
+
+  if ((!outlen) || (outlen > BLAKE2B_OUTBYTES)) return -1;
+
+  P->digest_length = (uint8_t)outlen;
+  P->key_length = 0;
+  P->fanout = 1;
+  P->depth = 1;
+  store32(&P->leaf_length, 0);
+  store32(&P->node_offset, 0);
+  store32(&P->xof_length, 0);
+  P->node_depth = 0;
+  P->inner_length = 0;
+  memset(P->reserved, 0, sizeof(P->reserved));
+  memset(P->salt, 0, sizeof(P->salt));
+  memset(P->personal, 0, sizeof(P->personal));
+  return blake2b_init_param(S, P);
+}
+
 void get_pubkey_hash(uint8_t* pubkey, uint8_t* hash) {
   blake2b_state blake2b_ctx;
-  blake2b_init(&blake2b_ctx, BLAKE2B_BLOCK_SIZE);
+  _blake2b_init_cardano(&blake2b_ctx, BLAKE2B_224_BLOCK_SIZE);
   blake2b_update(&blake2b_ctx, pubkey, PUBLIC_KEY_SIZE);
-  blake2b_final(&blake2b_ctx, hash, BLAKE2B_BLOCK_SIZE);
+  blake2b_final(&blake2b_ctx, hash, BLAKE2B_224_BLOCK_SIZE);
 }
 
 int get_payload(const uint8_t* new_msg, size_t len, uint8_t* payload) {
@@ -399,11 +423,26 @@ int simulator_main() {
 #else
 int main(int argc, const char* argv[]) {
 #endif
+
   int err = CKB_SUCCESS;
-  uint8_t payment_pubkey[BLAKE2B_BLOCK_SIZE] = {0};
-  uint8_t stake_pubkey[BLAKE2B_BLOCK_SIZE] = {0};
-  err = get_args(payment_pubkey, stake_pubkey);
+  uint8_t header_type = 0;
+  uint8_t payment_pubkey[BLAKE2B_224_BLOCK_SIZE] = {0};
+  size_t args_len = 0;
+  err = get_args(&header_type, payment_pubkey, &args_len);
   CHECK(err == CKB_SUCCESS, err);
+
+  header_type = header_type >> 4;
+  CHECK((header_type == 0b0000 || header_type == 0b0010 ||
+         header_type == 0b0100 || header_type == 0b0110),
+        ERROR_UNSUPPORTED_ARGS);
+
+  if ((header_type == 0b0000 || header_type == 0b0010)) {
+    CHECK(args_len >= 57, ERROR_ARGS_LENGTH);
+  }
+
+  if (header_type == 0b0100 || header_type == 0b0110) {
+    CHECK(args_len >= 29, ERROR_ARGS_LENGTH);
+  }
 
   uint8_t pub_key[PUBLIC_KEY_SIZE] = {0};
   uint8_t signature[SIGNATURE_SIZE] = {0};
@@ -416,9 +455,9 @@ int main(int argc, const char* argv[]) {
             sizeof(new_message),
         ERROR_LOAD_SCRIPT);
 
-  uint8_t pubkey_hash[BLAKE2B_BLOCK_SIZE] = {0};
+  uint8_t pubkey_hash[BLAKE2B_224_BLOCK_SIZE] = {0};
   get_pubkey_hash(pub_key, pubkey_hash);
-  CHECK(memcmp(pubkey_hash, payment_pubkey, BLAKE2B_BLOCK_SIZE) == 0,
+  CHECK(memcmp(pubkey_hash, payment_pubkey, BLAKE2B_224_BLOCK_SIZE) == 0,
         ERROR_PUBKEY);
 
   // Get payload
