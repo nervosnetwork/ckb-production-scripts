@@ -48,6 +48,7 @@ typedef enum _RET_ERROR {
   ERROR_LOAD_SCRIPT,
   ERROR_LOAD_WITNESS,
   ERROR_UNSUPPORTED_ARGS,
+  ERROR_ARGS_LENGTH,
   ERROR_CONVERT_MESSAGE,
   ERROR_PAYLOAD,
   ERROR_VERIFY,
@@ -240,7 +241,7 @@ int cardano_convert_copy(uint8_t* output,
   return CKB_SUCCESS;
 }
 
-int get_args(uint8_t* header, uint8_t* payment_pubkey) {
+int get_args(uint8_t* header, uint8_t* payment_pubkey, size_t* args_len) {
   int err = CKB_SUCCESS;
   unsigned char script[SCRIPT_SIZE] = {0};
   uint64_t script_len = SCRIPT_SIZE;
@@ -252,10 +253,11 @@ int get_args(uint8_t* header, uint8_t* payment_pubkey) {
 
   mol_seg_t args = MolReader_Script_get_args(&script_seg);
   mol_seg_t args_raw_bytes = MolReader_Bytes_raw_bytes(&args);
-  CHECK(args_raw_bytes.size > 1 + BLAKE2B_224_BLOCK_SIZE, ERROR_LOAD_SCRIPT);
+  CHECK(args_raw_bytes.size >= 1 + BLAKE2B_224_BLOCK_SIZE, ERROR_LOAD_SCRIPT);
 
   *header = args_raw_bytes.ptr[0];
   memcpy(payment_pubkey, &args_raw_bytes.ptr[1], BLAKE2B_BLOCK_SIZE);
+  *args_len = args_raw_bytes.size;
   return CKB_SUCCESS;
 }
 
@@ -409,13 +411,24 @@ int main(int argc, const char* argv[]) {
   int err = CKB_SUCCESS;
   uint8_t header_type = 0;
   uint8_t payment_pubkey[BLAKE2B_224_BLOCK_SIZE] = {0};
-  err = get_args(&header_type, payment_pubkey);
+  size_t args_len = 0;
+  err = get_args(&header_type, payment_pubkey, &args_len);
   CHECK(err == CKB_SUCCESS, err);
+
+  printf("args len is :%d", args_len);
 
   header_type = header_type >> 4;
   CHECK((header_type == 0b0000 || header_type == 0b0010 ||
          header_type == 0b0100 || header_type == 0b0110),
         ERROR_UNSUPPORTED_ARGS);
+
+  if ((header_type == 0b0000 || header_type == 0b0010)) {
+    CHECK(args_len >= 57, ERROR_ARGS_LENGTH);
+  }
+
+  if (header_type == 0b0110) {
+    CHECK(args_len >= 29, ERROR_ARGS_LENGTH);
+  }
 
   uint8_t pub_key[PUBLIC_KEY_SIZE] = {0};
   uint8_t signature[SIGNATURE_SIZE] = {0};
