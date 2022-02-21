@@ -17,7 +17,7 @@ LLVM_COV=llvm-cov
 
 CORPUS_DIR=corpus
 
-FUZZER_FLAGS=-g -O3 -fsanitize=fuzzer,address,undefined -I.. -I../../../c -I../../../c/nanocbor -I../../../deps/ed25519/src -DCKB_SIMULATOR -DCKB_DECLARATION_ONLY -DCKB_USE_SIM
+FUZZER_FLAGS=-g -O1 -fsanitize=fuzzer,address,undefined -I.. -I../../../c -I../../../c/nanocbor -I../../../deps/ed25519/src -DCKB_SIMULATOR -DCKB_DECLARATION_ONLY -DCKB_USE_SIM
 
 COVERAGE_DIR=coverage
 COVERAGE_FLAGS=-fprofile-instr-generate -fcoverage-mapping -I.. -I../../../c -I../../../c/nanocbor -I../../../deps/ed25519/src -DCKB_SIMULATOR -DCKB_DECLARATION_ONLY -DCKB_USE_SIM
