@@ -281,7 +281,7 @@ int _get_cursor_from_witness(WitnessArgsType* witness,
 
 int get_witness_data(uint8_t* pubkey,
                      uint8_t* signature,
-                     mol2_cursor_t* new_message) {
+                     mol2_cursor_t* sig_structure) {
   int err = CKB_SUCCESS;
   WitnessArgsType witnesses;
   err = _get_cursor_from_witness(&witnesses, 0, CKB_SOURCE_GROUP_INPUT);
@@ -299,7 +299,7 @@ int get_witness_data(uint8_t* pubkey,
   len = mol2_read_at(&signature_cursor, signature, SIGNATURE_SIZE);
   CHECK(len == SIGNATURE_SIZE, ERROR_LOAD_SCRIPT);
 
-  *new_message = witness.t->new_message(&witness);
+  *sig_structure = witness.t->sig_structure(&witness);
   return CKB_SUCCESS;
 }
 
@@ -359,13 +359,13 @@ int main(int argc, const char* argv[]) {
 
   uint8_t pub_key[PUBLIC_KEY_SIZE] = {0};
   uint8_t signature[SIGNATURE_SIZE] = {0};
-  mol2_cursor_t new_message_cursor;
-  err = get_witness_data(pub_key, signature, &new_message_cursor);
+  mol2_cursor_t sig_structure_cursor;
+  err = get_witness_data(pub_key, signature, &sig_structure_cursor);
   CHECK(err == CKB_SUCCESS, err);
-  CHECK(new_message_cursor.size <= 65536, ERROR_LOAD_WITNESS);
-  uint8_t new_message[new_message_cursor.size];
-  CHECK(mol2_read_at(&new_message_cursor, new_message, sizeof(new_message)) ==
-            sizeof(new_message),
+  CHECK(sig_structure_cursor.size <= 65536, ERROR_LOAD_WITNESS);
+  uint8_t sig_structure[sig_structure_cursor.size];
+  CHECK(mol2_read_at(&sig_structure_cursor, sig_structure,
+                     sizeof(sig_structure)) == sizeof(sig_structure),
         ERROR_LOAD_SCRIPT);
 
   uint8_t pubkey_hash[BLAKE2B_224_BLOCK_SIZE] = {0};
@@ -375,7 +375,7 @@ int main(int argc, const char* argv[]) {
 
   // Get payload
   uint8_t payload[BLAKE2B_BLOCK_SIZE] = {0};
-  err = get_payload(new_message, new_message_cursor.size, payload);
+  err = get_payload(sig_structure, sig_structure_cursor.size, payload);
   CHECK(err == CKB_SUCCESS, err);
 
   uint8_t message[BLAKE2B_BLOCK_SIZE] = {0};
@@ -384,7 +384,7 @@ int main(int argc, const char* argv[]) {
   CHECK(memcmp(payload, message, BLAKE2B_BLOCK_SIZE) == 0, ERROR_PAYLOAD);
 
   int suc =
-      ed25519_verify(signature, new_message, new_message_cursor.size, pub_key);
+      ed25519_verify(signature, sig_structure, sig_structure_cursor.size, pub_key);
   CHECK(suc == 1, ERROR_VERIFY);
 
   return 0;

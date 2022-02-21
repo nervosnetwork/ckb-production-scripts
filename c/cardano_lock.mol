@@ -5,5 +5,5 @@ array Byte64 [byte; 64];
 table CardanoWitnessLock {
     pubkey: Byte32,
     signature: Byte64,
-    new_message: Bytes,
+    sig_structure: Bytes,
 }

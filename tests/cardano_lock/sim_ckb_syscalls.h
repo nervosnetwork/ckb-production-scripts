@@ -54,8 +54,8 @@ void set_witness(uint8_t* pubkey,
   MolBuilder_CardanoWitnessLock_set_pubkey(&builder_lock, pubkey, 32);
   MolBuilder_CardanoWitnessLock_set_signature(&builder_lock, signature, 64);
   FmtBuf newmsg_buf = _mol_fmt_bytes(new_msg, new_msg_len);
-  MolBuilder_CardanoWitnessLock_set_new_message(&builder_lock, newmsg_buf.buf,
-                                                newmsg_buf.len);
+  MolBuilder_CardanoWitnessLock_set_sig_structure(&builder_lock, newmsg_buf.buf,
+                                                  newmsg_buf.len);
   mol_seg_res_t lock_res = MolBuilder_CardanoWitnessLock_build(builder_lock);
 
   FmtBuf lock_buf = _mol_get_buf(&lock_res);

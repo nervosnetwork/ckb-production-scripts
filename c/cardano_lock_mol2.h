@@ -26,7 +26,7 @@ mol2_cursor_t CardanoWitnessLock_get_pubkey_impl(
     struct CardanoWitnessLockType *);
 mol2_cursor_t CardanoWitnessLock_get_signature_impl(
     struct CardanoWitnessLockType *);
-mol2_cursor_t CardanoWitnessLock_get_new_message_impl(
+mol2_cursor_t CardanoWitnessLock_get_sig_structure_impl(
     struct CardanoWitnessLockType *);
 
 // ----definition-----------------
@@ -42,7 +42,7 @@ typedef struct Byte64Type {
 typedef struct CardanoWitnessLockVTable {
   mol2_cursor_t (*pubkey)(struct CardanoWitnessLockType *);
   mol2_cursor_t (*signature)(struct CardanoWitnessLockType *);
-  mol2_cursor_t (*new_message)(struct CardanoWitnessLockType *);
+  mol2_cursor_t (*sig_structure)(struct CardanoWitnessLockType *);
 } CardanoWitnessLockVTable;
 typedef struct CardanoWitnessLockType {
   mol2_cursor_t cur;
@@ -91,7 +91,7 @@ struct CardanoWitnessLockVTable *GetCardanoWitnessLockVTable(void) {
   if (inited) return &s_vtable;
   s_vtable.pubkey = CardanoWitnessLock_get_pubkey_impl;
   s_vtable.signature = CardanoWitnessLock_get_signature_impl;
-  s_vtable.new_message = CardanoWitnessLock_get_new_message_impl;
+  s_vtable.sig_structure = CardanoWitnessLock_get_sig_structure_impl;
   return &s_vtable;
 }
 mol2_cursor_t CardanoWitnessLock_get_pubkey_impl(CardanoWitnessLockType *this) {
@@ -107,7 +107,7 @@ mol2_cursor_t CardanoWitnessLock_get_signature_impl(
   ret = convert_to_array(&ret2);
   return ret;
 }
-mol2_cursor_t CardanoWitnessLock_get_new_message_impl(
+mol2_cursor_t CardanoWitnessLock_get_sig_structure_impl(
     CardanoWitnessLockType *this) {
   mol2_cursor_t ret;
   mol2_cursor_t re2 = mol2_table_slice_by_index(&this->cur, 2);
