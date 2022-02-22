@@ -94,7 +94,7 @@ MOLECULE_API_DECORATOR  mol_errno       MolReader_CardanoWitnessLock_verify     
 #define                                 MolReader_CardanoWitnessLock_has_extra_fields(s) mol_table_has_extra_fields(s, 3)
 #define                                 MolReader_CardanoWitnessLock_get_pubkey(s)      mol_table_slice_by_index(s, 0)
 #define                                 MolReader_CardanoWitnessLock_get_signature(s)   mol_table_slice_by_index(s, 1)
-#define                                 MolReader_CardanoWitnessLock_get_new_message(s) mol_table_slice_by_index(s, 2)
+#define                                 MolReader_CardanoWitnessLock_get_sig_structure(s) mol_table_slice_by_index(s, 2)
 
 /*
  * Builder APIs
@@ -170,7 +170,7 @@ MOLECULE_API_DECORATOR  mol_errno       MolReader_CardanoWitnessLock_verify     
 #define                                 MolBuilder_CardanoWitnessLock_init(b)           mol_table_builder_initialize(b, 512, 3)
 #define                                 MolBuilder_CardanoWitnessLock_set_pubkey(b, p, l) mol_table_builder_add(b, 0, p, l)
 #define                                 MolBuilder_CardanoWitnessLock_set_signature(b, p, l) mol_table_builder_add(b, 1, p, l)
-#define                                 MolBuilder_CardanoWitnessLock_set_new_message(b, p, l) mol_table_builder_add(b, 2, p, l)
+#define                                 MolBuilder_CardanoWitnessLock_set_sig_structure(b, p, l) mol_table_builder_add(b, 2, p, l)
 MOLECULE_API_DECORATOR  mol_seg_res_t   MolBuilder_CardanoWitnessLock_build             (mol_builder_t);
 #define                                 MolBuilder_CardanoWitnessLock_clear(b)          mol_builder_discard(b)
 

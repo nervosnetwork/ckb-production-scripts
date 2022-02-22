@@ -224,7 +224,7 @@ fn gen_witness_data(config: &mut Config, payload: &Byte32) -> Bytes {
     let headers = Headers::new(&protected_serialized, &HeaderMap::new());
     let builder = COSESign1Builder::new(&headers, payload.as_slice().to_vec(), false);
     let to_sign = builder.make_data_to_sign();
-    witness_builder = witness_builder.new_message(to_bytes(&to_sign.to_bytes()));
+    witness_builder = witness_builder.sig_structure(to_bytes(&to_sign.to_bytes()));
 
     let mut sig = config.privkey.sign(&to_sign.to_bytes()).to_bytes();
     if config.random_sign_data == true {

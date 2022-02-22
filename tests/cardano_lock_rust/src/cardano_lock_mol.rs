@@ -1014,7 +1014,7 @@ impl ::core::fmt::Display for CardanoWitnessLock {
         write!(f, "{} {{ ", Self::NAME)?;
         write!(f, "{}: {}", "pubkey", self.pubkey())?;
         write!(f, ", {}: {}", "signature", self.signature())?;
-        write!(f, ", {}: {}", "new_message", self.new_message())?;
+        write!(f, ", {}: {}", "sig_structure", self.sig_structure())?;
         let extra_count = self.count_extra_fields();
         if extra_count != 0 {
             write!(f, ", .. ({} fields)", extra_count)?;
@@ -1064,7 +1064,7 @@ impl CardanoWitnessLock {
         let end = molecule::unpack_number(&slice[12..]) as usize;
         Byte64::new_unchecked(self.0.slice(start..end))
     }
-    pub fn new_message(&self) -> Bytes {
+    pub fn sig_structure(&self) -> Bytes {
         let slice = self.as_slice();
         let start = molecule::unpack_number(&slice[12..]) as usize;
         if self.has_extra_fields() {
@@ -1103,7 +1103,7 @@ impl molecule::prelude::Entity for CardanoWitnessLock {
         Self::new_builder()
             .pubkey(self.pubkey())
             .signature(self.signature())
-            .new_message(self.new_message())
+            .sig_structure(self.sig_structure())
     }
 }
 #[derive(Clone, Copy)]
@@ -1127,7 +1127,7 @@ impl<'r> ::core::fmt::Display for CardanoWitnessLockReader<'r> {
         write!(f, "{} {{ ", Self::NAME)?;
         write!(f, "{}: {}", "pubkey", self.pubkey())?;
         write!(f, ", {}: {}", "signature", self.signature())?;
-        write!(f, ", {}: {}", "new_message", self.new_message())?;
+        write!(f, ", {}: {}", "sig_structure", self.sig_structure())?;
         let extra_count = self.count_extra_fields();
         if extra_count != 0 {
             write!(f, ", .. ({} fields)", extra_count)?;
@@ -1165,7 +1165,7 @@ impl<'r> CardanoWitnessLockReader<'r> {
         let end = molecule::unpack_number(&slice[12..]) as usize;
         Byte64Reader::new_unchecked(&self.as_slice()[start..end])
     }
-    pub fn new_message(&self) -> BytesReader<'r> {
+    pub fn sig_structure(&self) -> BytesReader<'r> {
         let slice = self.as_slice();
         let start = molecule::unpack_number(&slice[12..]) as usize;
         if self.has_extra_fields() {
@@ -1235,7 +1235,7 @@ impl<'r> molecule::prelude::Reader<'r> for CardanoWitnessLockReader<'r> {
 pub struct CardanoWitnessLockBuilder {
     pub(crate) pubkey: Byte32,
     pub(crate) signature: Byte64,
-    pub(crate) new_message: Bytes,
+    pub(crate) sig_structure: Bytes,
 }
 impl CardanoWitnessLockBuilder {
     pub const FIELD_COUNT: usize = 3;
@@ -1247,8 +1247,8 @@ impl CardanoWitnessLockBuilder {
         self.signature = v;
         self
     }
-    pub fn new_message(mut self, v: Bytes) -> Self {
-        self.new_message = v;
+    pub fn sig_structure(mut self, v: Bytes) -> Self {
+        self.sig_structure = v;
         self
     }
 }
@@ -1259,7 +1259,7 @@ impl molecule::prelude::Builder for CardanoWitnessLockBuilder {
         molecule::NUMBER_SIZE * (Self::FIELD_COUNT + 1)
             + self.pubkey.as_slice().len()
             + self.signature.as_slice().len()
-            + self.new_message.as_slice().len()
+            + self.sig_structure.as_slice().len()
     }
     fn write<W: molecule::io::Write>(&self, writer: &mut W) -> molecule::io::Result<()> {
         let mut total_size = molecule::NUMBER_SIZE * (Self::FIELD_COUNT + 1);
@@ -1269,14 +1269,14 @@ impl molecule::prelude::Builder for CardanoWitnessLockBuilder {
         offsets.push(total_size);
         total_size += self.signature.as_slice().len();
         offsets.push(total_size);
-        total_size += self.new_message.as_slice().len();
+        total_size += self.sig_structure.as_slice().len();
         writer.write_all(&molecule::pack_number(total_size as molecule::Number))?;
         for offset in offsets.into_iter() {
             writer.write_all(&molecule::pack_number(offset as molecule::Number))?;
         }
         writer.write_all(self.pubkey.as_slice())?;
         writer.write_all(self.signature.as_slice())?;
-        writer.write_all(self.new_message.as_slice())?;
+        writer.write_all(self.sig_structure.as_slice())?;
         Ok(())
     }
     fn build(&self) -> Self::Entity {
