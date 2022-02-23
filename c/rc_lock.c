@@ -414,8 +414,8 @@ int main() {
   }
 
   // regulation compliance, also as administrators
-  if (args.has_rc_root) {
-    CHECK2(witness_lock.has_rc_identity, ERROR_INVALID_MOL_FORMAT);
+  if (witness_lock.has_rc_identity) {
+    CHECK2(args.has_rc_root, ERROR_INVALID_MOL_FORMAT);
     CHECK2(witness_lock.has_proofs, ERROR_INVALID_MOL_FORMAT);
 
     RceState rce_state;

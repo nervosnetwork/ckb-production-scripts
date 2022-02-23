@@ -244,6 +244,28 @@ fn test_pubkey_hash_on_wl() {
 }
 
 #[test]
+fn test_pubkey_hash_without_rc_identity() {
+    let mut data_loader = DummyDataLoader::new();
+
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, true);
+    config.set_rc_identity(false);
+    config.scheme = TestScheme::OnWhiteList;
+
+    let tx = gen_tx(&mut data_loader, &mut config);
+    let tx = sign_tx(&mut data_loader, tx, &mut config);
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+
+    let consensus = gen_consensus();
+    let tx_env = gen_tx_env();
+    let mut verifier =
+        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    verify_result.expect("pass verification");
+}
+
+#[test]
 fn test_pubkey_hash_on_wl_without_witness() {
     let mut data_loader = DummyDataLoader::new();
 

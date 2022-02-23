@@ -601,6 +601,7 @@ pub fn sign_tx_by_input_group(
                 let witness = WitnessArgs::new_unchecked(tx.witnesses().get(i).unwrap().unpack());
                 let zero_lock = gen_zero_witness_lock(
                     config.use_rc,
+                    config.use_rc_identity,
                     &proof_vec,
                     &identity,
                     config.sig_len,
@@ -653,17 +654,32 @@ pub fn sign_tx_by_input_group(
                     gen_witness_lock(
                         sig_bytes,
                         config.use_rc,
+                        config.use_rc_identity,
                         &proof_vec,
                         &identity,
                         Some(preimage),
                     )
                 } else if config.id.flags == IDENTITY_FLAGS_MULTISIG {
                     let sig = config.multisig.sign(&message.into());
-                    gen_witness_lock(sig, config.use_rc, &proof_vec, &identity, None)
+                    gen_witness_lock(
+                        sig,
+                        config.use_rc,
+                        config.use_rc_identity,
+                        &proof_vec,
+                        &identity,
+                        None,
+                    )
                 } else {
                     let sig = config.private_key.sign_recoverable(&message).expect("sign");
                     let sig_bytes = Bytes::from(sig.serialize());
-                    gen_witness_lock(sig_bytes, config.use_rc, &proof_vec, &identity, None)
+                    gen_witness_lock(
+                        sig_bytes,
+                        config.use_rc,
+                        config.use_rc_identity,
+                        &proof_vec,
+                        &identity,
+                        None,
+                    )
                 };
 
                 witness
@@ -895,6 +911,7 @@ pub fn sign_tx_hash(tx: TransactionView, tx_hash: &[u8], config: &TestConfig) ->
     let witness_lock = gen_witness_lock(
         sig.serialize().into(),
         config.use_rc,
+        config.use_rc_identity,
         &proofs,
         &identity,
         Default::default(),
@@ -1073,6 +1090,7 @@ pub struct TestConfig {
     pub id: Identity,
     pub acp_config: Option<(u8, u8)>,
     pub use_rc: bool,
+    pub use_rc_identity: bool,
     pub scheme: TestScheme,
     pub scheme2: TestScheme2,
     pub rc_root: Bytes,
@@ -1181,6 +1199,7 @@ impl TestConfig {
             id: Identity { flags, blake160 },
             acp_config: None,
             use_rc,
+            use_rc_identity: true,
             rc_root,
             scheme: TestScheme::None,
             scheme2: TestScheme2::None,
@@ -1241,16 +1260,30 @@ impl TestConfig {
         self.use_supply = true;
     }
 
+    pub fn set_rc_identity(&mut self, used: bool) {
+        self.use_rc_identity = used;
+    }
+
     pub fn gen_args(&self) -> Bytes {
         let mut bytes = BytesMut::with_capacity(128);
         let mut rc_lock_flags: u8 = 0;
 
         if self.use_rc {
-            rc_lock_flags |= RC_ROOT_MASK;
+            if self.use_rc_identity {
+                rc_lock_flags |= RC_ROOT_MASK;
 
-            bytes.resize(21, 0);
-            bytes.put(&[rc_lock_flags][..]);
-            bytes.put(self.rc_root.as_ref());
+                bytes.resize(21, 0);
+                bytes.put(&[rc_lock_flags][..]);
+                bytes.put(self.rc_root.as_ref());
+            } else {
+                rc_lock_flags |= RC_ROOT_MASK;
+                // auth
+                bytes.put_u8(self.id.flags);
+                bytes.put(self.id.blake160.as_ref());
+                // rc_root
+                bytes.put(&[rc_lock_flags][..]);
+                bytes.put(self.rc_root.as_ref());
+            }
         } else {
             bytes.put_u8(self.id.flags);
             bytes.put(self.id.blake160.as_ref());
@@ -1303,6 +1336,7 @@ impl TestConfig {
 pub fn gen_witness_lock(
     sig: Bytes,
     use_rc: bool,
+    use_rc_identity: bool,
     proofs: &SmtProofEntryVec,
     identity: &rc_lock::Identity,
     preimage: Option<Bytes>,
@@ -1315,7 +1349,7 @@ pub fn gen_witness_lock(
         builder = builder.preimage(Some(p).pack());
     }
 
-    if use_rc {
+    if use_rc && use_rc_identity {
         let rc_identity = rc_lock::RcIdentityBuilder::default()
             .identity(identity.clone())
             .proofs(proofs.clone())
@@ -1428,6 +1462,7 @@ pub fn iso9796_2_batch_sign(msg: &[u8], key: &PKey<Private>) -> (Vec<u8>, Vec<u8
 
 pub fn gen_zero_witness_lock(
     use_rc: bool,
+    use_rc_identity: bool,
     proofs: &SmtProofEntryVec,
     identity: &rc_lock::Identity,
     sig_len: usize,
@@ -1443,7 +1478,14 @@ pub fn gen_zero_witness_lock(
     } else {
         None
     };
-    let witness_lock = gen_witness_lock(zero.freeze(), use_rc, proofs, identity, preimage);
+    let witness_lock = gen_witness_lock(
+        zero.freeze(),
+        use_rc,
+        use_rc_identity,
+        proofs,
+        identity,
+        preimage,
+    );
 
     let mut res = BytesMut::new();
     res.resize(witness_lock.len(), 0);
