@@ -455,7 +455,7 @@ int verify_via_exec(CkbIdentityType *id, uint8_t *sig, uint32_t sig_len,
   err = ckb_exec_append(&bin_args, pubkey_hash, 20);
   if (err != 0) return err;
   err = ckb_exec_append(&bin_args, msg, sizeof(msg));
-  if (err != 0) return 0;
+  if (err != 0) return err;
   err = ckb_exec_append(&bin_args, sig, sig_len);
   if (err != 0) return err;
   err = ckb_exec_encode_params(&bin_args, &out);
