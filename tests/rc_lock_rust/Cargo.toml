@@ -1,5 +1,5 @@
 [package]
-name = "rc-lock-test"
+name = "omni-lock-test"
 version = "0.1.0"
 authors = ["xjd <xjd@cryptape.com"]
 edition = "2018"

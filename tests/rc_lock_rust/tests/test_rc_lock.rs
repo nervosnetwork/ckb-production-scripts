@@ -159,7 +159,7 @@ fn test_owner_lock_no_wl() {
 
     let mut config = TestConfig::new(IDENTITY_FLAGS_OWNER_LOCK, true);
     // only black list is used, but not on it.
-    // but rc_lock requires at least one white list
+    // but omni_lock requires at least one white list
     config.scheme = TestScheme::NotOnBlackList;
 
     let tx = gen_tx(&mut data_loader, &mut config);
@@ -244,11 +244,11 @@ fn test_pubkey_hash_on_wl() {
 }
 
 #[test]
-fn test_pubkey_hash_without_rc_identity() {
+fn test_pubkey_hash_without_omni_identity() {
     let mut data_loader = DummyDataLoader::new();
 
     let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, true);
-    config.set_rc_identity(false);
+    config.set_omni_identity(false);
     config.scheme = TestScheme::OnWhiteList;
 
     let tx = gen_tx(&mut data_loader, &mut config);
@@ -314,7 +314,7 @@ fn test_pubkey_hash_no_wl() {
 
     let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, true);
     // only black list is used, but not on it.
-    // but rc_lock requires at least one white list
+    // but omni_lock requires at least one white list
     config.scheme = TestScheme::NotOnBlackList;
 
     let tx = gen_tx(&mut data_loader, &mut config);
