@@ -46,21 +46,21 @@ int ckb_exit(signed char);
 #define SCRIPT_SIZE 32768
 #define MAX_LOCK_SCRIPT_HASH_COUNT 2048
 #define MAX_SIGNATURE_SIZE 1024
-#define RC_ROOT_MASK 1
+#define OMNI_ROOT_MASK 1
 #define ACP_MASK (1 << 1)
 #define SINCE_MASK (1 << 2)
 #define SUPPLY_MASK (1 << 3)
 
 #define MAX_CODE_SIZE (1024 * 400)
 
-enum RcLockErrorCode {
-  // rc lock error code is starting from 80
+enum OmniLockErrorCode {
+  // omni lock error code is starting from 80
   ERROR_UNKNOWN_FLAGS = 80,
   ERROR_PROOF_LENGTH_MISMATCHED,
-  ERROR_NO_RCRULE,
+  ERROR_NO_OMNIRULE,
   ERROR_NO_WHITE_LIST,
-  ERROR_INVALID_RC_IDENTITY_ID,
-  ERROR_INVALID_RC_LOCK_ARGS,
+  ERROR_INVALID_IDENTITY_ID,
+  ERROR_INVALID_OMNI_LOCK_ARGS,
   ERROR_ISO9796_2_VERIFY,
   ERROR_ARGS_FORMAT,
 };
@@ -69,10 +69,10 @@ enum RcLockErrorCode {
 typedef struct ArgsType {
   CkbIdentityType id;
 
-  uint8_t rc_lock_flags;
+  uint8_t omni_lock_flags;
 
-  bool has_rc_root;
-  uint8_t rc_root[32];
+  bool has_omni_root;
+  uint8_t omni_root[32];
 
   bool has_since;
   uint64_t since;
@@ -87,7 +87,7 @@ typedef struct ArgsType {
 
 // parsed from lock in witness
 typedef struct WitnessLockType {
-  bool has_rc_identity;
+  bool has_identity;
   bool has_signature;
   bool has_proofs;
 
@@ -136,8 +136,8 @@ bool is_memory_enough(mol_seg_t seg, const uint8_t *cur, uint32_t len) {
 }
 
 // memory layout of args:
-// <identity, 21 bytes> <rc_lock args>
-// <rc_lock flags, 1 byte>  <RC cell type id, 32 bytes, optional> <ckb/udt min,
+// <identity, 21 bytes> <omni_lock args>
+// <omni_lock flags, 1 byte>  <OMNI cell type id, 32 bytes, optional> <ckb/udt min,
 // 2 bytes, optional> <since, 8 bytes, optional>
 int parse_args(ArgsType *args) {
   int err = 0;
@@ -172,15 +172,15 @@ int parse_args(ArgsType *args) {
   CHECK2(cur != NULL, ERROR_ARGS_FORMAT);
 
   CHECK2(is_memory_enough(seg, cur, 1), ERROR_ARGS_FORMAT);
-  args->rc_lock_flags = *cur;
+  args->omni_lock_flags = *cur;
   cur = safe_move_to(seg, cur, 1);
 
-  args->has_rc_root = args->rc_lock_flags & RC_ROOT_MASK;
-  args->has_acp = args->rc_lock_flags & ACP_MASK;
-  args->has_since = args->rc_lock_flags & SINCE_MASK;
-  args->has_supply = args->rc_lock_flags & SUPPLY_MASK;
+  args->has_omni_root = args->omni_lock_flags & OMNI_ROOT_MASK;
+  args->has_acp = args->omni_lock_flags & ACP_MASK;
+  args->has_since = args->omni_lock_flags & SINCE_MASK;
+  args->has_supply = args->omni_lock_flags & SUPPLY_MASK;
   uint32_t expected_size = 0;
-  if (args->has_rc_root) {
+  if (args->has_omni_root) {
     expected_size += 32;
   }
   if (args->has_acp) {
@@ -198,8 +198,8 @@ int parse_args(ArgsType *args) {
   } else {
     CHECK2(cur != NULL, ERROR_ARGS_FORMAT);
     CHECK2(is_memory_enough(seg, cur, expected_size), ERROR_ARGS_FORMAT);
-    if (args->has_rc_root) {
-      memcpy(args->rc_root, cur, 32);
+    if (args->has_omni_root) {
+      memcpy(args->omni_root, cur, 32);
       cur += 32;  // it's safe to move, already checked
     }
     if (args->has_acp) {
@@ -244,7 +244,7 @@ int make_witness(WitnessArgsType *witness) {
   size_t source = CKB_SOURCE_GROUP_INPUT;
   err = ckb_load_witness(NULL, &witness_len, 0, 0, source);
   // when witness is missing, empty or not accessible, make it zero length.
-  // don't fail, because owner lock without rc doesn't require witness.
+  // don't fail, because owner lock without omni doesn't require witness.
   // when it's zero length, any further actions on witness will fail.
   if (err != 0) {
     witness_len = 0;
@@ -317,7 +317,7 @@ exit:
 int parse_witness_lock(WitnessLockType *witness_lock) {
   int err = 0;
   witness_lock->has_signature = false;
-  witness_lock->has_rc_identity = false;
+  witness_lock->has_identity = false;
   witness_lock->has_proofs = false;
 
   bool witness_existing = false;
@@ -327,22 +327,22 @@ int parse_witness_lock(WitnessLockType *witness_lock) {
   CHECK(err);
   witness_existing = witness_args.cur.size > 0;
 
-  // witness or witness lock can be empty if owner lock without rc is used
+  // witness or witness lock can be empty if owner lock without omni is used
   if (!witness_existing) return err;
 
   BytesOptType mol_lock = witness_args.t->lock(&witness_args);
   if (mol_lock.t->is_none(&mol_lock)) return err;
 
   mol2_cursor_t mol_lock_bytes = mol_lock.t->unwrap(&mol_lock);
-  // convert Bytes to RcLockWitnessLock
+  // convert Bytes to OmniLockWitnessLock
   OmniLockWitnessLockType mol_witness_lock =
       make_OmniLockWitnessLock(&mol_lock_bytes);
   IdentityOptType identity_opt =
       mol_witness_lock.t->omni_identity(&mol_witness_lock);
-  witness_lock->has_rc_identity = identity_opt.t->is_some(&identity_opt);
-  if (witness_lock->has_rc_identity) {
-    IdentityType rc_identity = identity_opt.t->unwrap(&identity_opt);
-    mol2_cursor_t id_cur = rc_identity.t->identity(&rc_identity);
+  witness_lock->has_identity = identity_opt.t->is_some(&identity_opt);
+  if (witness_lock->has_identity) {
+    IdentityType omni_identity = identity_opt.t->unwrap(&identity_opt);
+    mol2_cursor_t id_cur = omni_identity.t->identity(&omni_identity);
 
     uint8_t buff[CKB_IDENTITY_LEN] = {0};
     uint32_t read_len = mol2_read_at(&id_cur, buff, sizeof(buff));
@@ -350,7 +350,7 @@ int parse_witness_lock(WitnessLockType *witness_lock) {
     witness_lock->id.flags = buff[0];
     memcpy(witness_lock->id.id, buff + 1, CKB_IDENTITY_LEN - 1);
 
-    witness_lock->proofs = rc_identity.t->proofs(&rc_identity);
+    witness_lock->proofs = omni_identity.t->proofs(&omni_identity);
     witness_lock->has_proofs = true;
   }
 
@@ -403,8 +403,8 @@ int main() {
   err = parse_args(&args);
   CHECK(err);
 
-  if (args.has_rc_root) {
-    if (witness_lock.has_rc_identity) {
+  if (args.has_omni_root) {
+    if (witness_lock.has_identity) {
       identity = witness_lock.id;
     } else {
       identity = args.id;
@@ -414,19 +414,19 @@ int main() {
   }
 
   // regulation compliance, also as administrators
-  if (witness_lock.has_rc_identity) {
-    CHECK2(args.has_rc_root, ERROR_INVALID_MOL_FORMAT);
+  if (witness_lock.has_identity) {
+    CHECK2(args.has_omni_root, ERROR_INVALID_MOL_FORMAT);
     CHECK2(witness_lock.has_proofs, ERROR_INVALID_MOL_FORMAT);
 
     RceState rce_state;
     rce_init_state(&rce_state);
     rce_state.rcrules_in_input_cell = true;
-    err = rce_gather_rcrules_recursively(&rce_state, args.rc_root, 0);
+    err = rce_gather_rcrules_recursively(&rce_state, args.omni_root, 0);
     CHECK(err);
-    CHECK2(rce_state.rcrules_count > 0, ERROR_NO_RCRULE);
+    CHECK2(rce_state.rcrules_count > 0, ERROR_NO_OMNIRULE);
     CHECK2(rce_state.has_wl, ERROR_NO_WHITE_LIST);
 
-    // verify blake160 against proof, using rc rules
+    // verify blake160 against proof, using omni rules
     err = smt_verify_identity(&identity, &witness_lock.proofs, &rce_state);
     CHECK(err);
   } else {

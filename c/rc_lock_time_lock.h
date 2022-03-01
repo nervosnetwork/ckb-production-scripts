@@ -1,5 +1,5 @@
-#ifndef RC_LOCK_TIME_LOCK_H_
-#define RC_LOCK_TIME_LOCK_H_
+#ifndef OMNI_LOCK_TIME_LOCK_H_
+#define OMNI_LOCK_TIME_LOCK_H_
 
 #define ERROR_INCORRECT_SINCE_FLAGS -23
 #define ERROR_INCORRECT_SINCE_VALUE -24
@@ -98,4 +98,4 @@ int check_since(uint64_t since) {
   return CKB_SUCCESS;
 }
 
-#endif  // RC_LOCK_TIME_LOCK_H_
+#endif  // OMNI_LOCK_TIME_LOCK_H_

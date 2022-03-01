@@ -189,7 +189,7 @@ UTEST(owner_lock_rc, no_rcrule_not_pass) {
   convert_setting_to_states();
 
   int r = simulator_main();
-  ASSERT_EQ(ERROR_NO_RCRULE, r);
+  ASSERT_EQ(ERROR_NO_OMNIRULE, r);
 }
 
 UTEST(owner_lock_rc, one_white_list_not_pass) {
@@ -566,7 +566,7 @@ UTEST(pubkey_hash_rc, no_rcrule_not_pass) {
   convert_setting_to_states();
 
   int r = simulator_main();
-  ASSERT_EQ(ERROR_NO_RCRULE, r);
+  ASSERT_EQ(ERROR_NO_OMNIRULE, r);
 }
 
 UTEST(exec, random) {
