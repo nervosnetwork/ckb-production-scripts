@@ -89,6 +89,7 @@ typedef struct ArgsType {
 typedef struct WitnessLockType {
   bool has_rc_identity;
   bool has_signature;
+  bool has_proofs;
 
   CkbIdentityType id;
   uint32_t signature_size;
@@ -317,6 +318,7 @@ int parse_witness_lock(WitnessLockType *witness_lock) {
   int err = 0;
   witness_lock->has_signature = false;
   witness_lock->has_rc_identity = false;
+  witness_lock->has_proofs = false;
 
   bool witness_existing = false;
 
@@ -349,6 +351,7 @@ int parse_witness_lock(WitnessLockType *witness_lock) {
     memcpy(witness_lock->id.id, buff + 1, CKB_IDENTITY_LEN - 1);
 
     witness_lock->proofs = rc_identity.t->proofs(&rc_identity);
+    witness_lock->has_proofs = true;
   }
 
   BytesOptType signature_opt = mol_witness_lock.t->signature(&mol_witness_lock);
@@ -411,9 +414,13 @@ int main() {
   }
 
   // regulation compliance, also as administrators
-  if (args.has_rc_root) {
+  if (witness_lock.has_rc_identity) {
+    CHECK2(args.has_rc_root, ERROR_INVALID_MOL_FORMAT);
+    CHECK2(witness_lock.has_proofs, ERROR_INVALID_MOL_FORMAT);
+
     RceState rce_state;
     rce_init_state(&rce_state);
+    rce_state.rcrules_in_input_cell = true;
     err = rce_gather_rcrules_recursively(&rce_state, args.rc_root, 0);
     CHECK(err);
     CHECK2(rce_state.rcrules_count > 0, ERROR_NO_RCRULE);

@@ -27,3 +27,6 @@ rand = "0.6.5"
 sparse-merkle-tree = { git = "https://github.com/nervosnetwork/sparse-merkle-tree.git", rev = "2dce546"}
 openssl = "0.10.4"
 sha3 = "0.9.1"
+ckb-vm-debug-utils = { git = "https://github.com/nervosnetwork/ckb-vm-debug-utils.git", rev = "f72995f" }
+gdb-remote-protocol = { git = "https://github.com/luser/rust-gdb-remote-protocol", rev = "565ab0c" }
+ckb-vm = { version = "=0.20.0-rc2", features = ["detect-asm"] }

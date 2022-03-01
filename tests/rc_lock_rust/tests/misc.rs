@@ -30,7 +30,9 @@ use ckb_types::{
 };
 use lazy_static::lazy_static;
 use rand::prelude::{thread_rng, ThreadRng};
+use rand::seq::SliceRandom;
 use rand::Rng;
+
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::traits::Hasher;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
@@ -154,31 +156,44 @@ pub fn gen_random_out_point(rng: &mut ThreadRng) -> OutPoint {
 // * build extension script without upgrading, set is_type to false
 // * build RCE cell, is_type = true. Only the Script.code_hash is kept for further use.
 //   when in this case, to make "args" passed in unique
+// when in_input_cell is on, the cell is not in deps but in input.
 fn build_script(
     dummy: &mut DummyDataLoader,
     tx_builder: TransactionBuilder,
     is_type: bool,
+    in_input_cell: bool,
     bin: &Bytes,
     args: Bytes,
 ) -> (TransactionBuilder, Script) {
     // this hash to make type script in code unique
     // then make "type script hash" unique, which will be code_hash in "type script"
     let hash = ckb_hash::blake2b_256(bin);
+    let always_success = build_always_success_script();
 
     let type_script_in_code = {
-        // this args can be anything
-        let args = vec![0u8; 32];
-        Script::new_builder()
-            .args(args.pack())
-            .code_hash(hash.pack())
-            .hash_type(ScriptHashType::Type.into())
-            .build()
+        if in_input_cell {
+            let hash: Bytes = Bytes::copy_from_slice(&hash);
+            always_success
+                .clone()
+                .as_builder()
+                .args(hash.pack())
+                .build()
+        } else {
+            // this args can be anything
+            let args = vec![0u8; 32];
+            Script::new_builder()
+                .args(args.pack())
+                .code_hash(hash.pack())
+                .hash_type(ScriptHashType::Type.into())
+                .build()
+        }
     };
 
     // it not needed to set "type script" when is_type is false
     let capacity = bin.len() as u64;
     let cell = CellOutput::new_builder()
         .capacity(capacity.pack())
+        .lock(always_success)
         .type_(Some(type_script_in_code.clone()).pack())
         .build();
 
@@ -187,12 +202,20 @@ fn build_script(
 
     dummy.cells.insert(out_point.clone(), (cell, bin.clone()));
 
-    let tx_builder = tx_builder.cell_dep(
-        CellDep::new_builder()
-            .out_point(out_point.clone())
-            .dep_type(DepType::Code.into())
-            .build(),
-    );
+    let tx_builder = if in_input_cell {
+        let witness_args = WitnessArgsBuilder::default().build();
+        tx_builder
+            .input(CellInput::new(out_point.clone(), 0))
+            .witness(witness_args.as_bytes().pack())
+    } else {
+        tx_builder.cell_dep(
+            CellDep::new_builder()
+                .out_point(out_point.clone())
+                .dep_type(DepType::Code.into())
+                .build(),
+        )
+    };
+
     let code_hash = if is_type {
         ckb_hash::blake2b_256(type_script_in_code.as_slice())
     } else {
@@ -401,7 +424,10 @@ pub fn sign_tx(
     let (begin_index, witnesses_len) = if config.is_owner_lock() {
         (1, tx.witnesses().len() - 1)
     } else {
-        (0, tx.witnesses().len())
+        (
+            config.leading_witness_count,
+            tx.witnesses().len() - config.leading_witness_count,
+        )
     };
     sign_tx_by_input_group(dummy, tx, begin_index, witnesses_len, config)
 }
@@ -468,12 +494,15 @@ pub fn append_rc(
 ) -> TransactionBuilder {
     let smt_key = config.id.to_smt_key();
     let (proofs, rc_datas, proof_masks) = generate_proofs(config.scheme, &vec![smt_key]);
-    let (rc_root, b0) = generate_rce_cell(dummy, tx_builder, rc_datas);
+    let (rc_root, b0) = generate_rce_cell(dummy, tx_builder, rc_datas, config.smt_in_input);
 
     config.proofs = proofs;
     config.proof_masks = proof_masks;
     config.rc_root = rc_root.as_bytes();
-
+    if config.smt_in_input {
+        // one is RCCellVec, one is RCRule
+        config.leading_witness_count = 2;
+    }
     b0
 }
 
@@ -572,6 +601,7 @@ pub fn sign_tx_by_input_group(
                 let witness = WitnessArgs::new_unchecked(tx.witnesses().get(i).unwrap().unpack());
                 let zero_lock = gen_zero_witness_lock(
                     config.use_rc,
+                    config.use_rc_identity,
                     &proof_vec,
                     &identity,
                     config.sig_len,
@@ -624,15 +654,33 @@ pub fn sign_tx_by_input_group(
                     gen_witness_lock(
                         sig_bytes,
                         config.use_rc,
+                        config.use_rc_identity,
                         &proof_vec,
                         &identity,
                         Some(preimage),
                     )
+                } else if config.id.flags == IDENTITY_FLAGS_MULTISIG {
+                    let sig = config.multisig.sign(&message.into());
+                    gen_witness_lock(
+                        sig,
+                        config.use_rc,
+                        config.use_rc_identity,
+                        &proof_vec,
+                        &identity,
+                        None,
+                    )
                 } else {
                     let sig = config.private_key.sign_recoverable(&message).expect("sign");
                     let sig_bytes = Bytes::from(sig.serialize());
-                    gen_witness_lock(sig_bytes, config.use_rc, &proof_vec, &identity, None)
-                }; // TODO: IDENTITY_FLAGS_EXEC
+                    gen_witness_lock(
+                        sig_bytes,
+                        config.use_rc,
+                        config.use_rc_identity,
+                        &proof_vec,
+                        &identity,
+                        None,
+                    )
+                };
 
                 witness
                     .as_builder()
@@ -766,6 +814,7 @@ pub fn gen_tx_with_grouped_args(
         dummy,
         tx_builder,
         false,
+        false,
         &VALIDATE_SIGNATURE_RSA,
         Default::default(),
     );
@@ -814,6 +863,7 @@ pub fn gen_tx_with_grouped_args(
                 .code_hash(sighash_all_cell_data_hash.clone())
                 .hash_type(ScriptHashType::Data.into())
                 .build();
+            config.running_script = script.clone();
             let previous_output_cell = CellOutput::new_builder()
                 .capacity(dummy_capacity.pack())
                 .lock(script)
@@ -861,6 +911,7 @@ pub fn sign_tx_hash(tx: TransactionView, tx_hash: &[u8], config: &TestConfig) ->
     let witness_lock = gen_witness_lock(
         sig.serialize().into(),
         config.use_rc,
+        config.use_rc_identity,
         &proofs,
         &identity,
         Default::default(),
@@ -920,6 +971,7 @@ pub fn debug_printer(script: &Byte32, msg: &str) {
 
 pub const IDENTITY_FLAGS_PUBKEY_HASH: u8 = 0;
 pub const IDENTITY_FLAGS_ETHEREUM: u8 = 1;
+pub const IDENTITY_FLAGS_MULTISIG: u8 = 6;
 
 pub const IDENTITY_FLAGS_OWNER_LOCK: u8 = 0xFC;
 pub const IDENTITY_FLAGS_EXEC: u8 = 0xFD;
@@ -945,10 +997,100 @@ impl Identity {
     }
 }
 
+pub struct MultisigTestConfig {
+    pub private_keys: Vec<Privkey>,
+    pub pubkeys: Vec<Pubkey>,
+    pub require_first_n: u8,
+    pub threshold: u8,
+    pub count: u8,
+}
+
+impl MultisigTestConfig {
+    pub fn set(&mut self, require_first_n: u8, threshold: u8, count: u8) {
+        let mut private_keys: Vec<Privkey> = vec![];
+        let mut pubkeys: Vec<Pubkey> = vec![];
+        for _ in 0..count {
+            let p = Generator::random_privkey();
+            pubkeys.push(p.pubkey().expect("pubkey"));
+            private_keys.push(p);
+        }
+        self.private_keys = private_keys;
+        self.pubkeys = pubkeys;
+        self.require_first_n = require_first_n;
+        self.threshold = threshold;
+        self.count = count;
+    }
+
+    fn gen_multisig_script(&self) -> Bytes {
+        let mut result = BytesMut::new();
+        result.put_u8(0);
+        result.put_u8(self.require_first_n);
+        result.put_u8(self.threshold);
+        result.put_u8(self.count);
+
+        for p in &self.pubkeys {
+            result.put_slice(&blake160(&p.serialize()));
+        }
+
+        result.freeze()
+    }
+    fn sign(&self, msg: &CkbH256) -> Bytes {
+        // println!("message = {:?}", msg);
+        let mut result = BytesMut::new();
+        // let sig = config.private_key.sign_recoverable(&message).expect("sign");
+        // let sig_bytes = Bytes::from(sig.serialize());
+        let multisig_script = self.gen_multisig_script();
+        result.put_slice(&multisig_script);
+
+        // require first N
+        let mut private_keys = self.private_keys.clone();
+        if self.require_first_n > 0 {
+            for i in 0..self.require_first_n as usize {
+                let sig = private_keys[i].sign_recoverable(msg).expect("sign");
+                result.put_slice(&sig.serialize());
+            }
+            for _ in 0..self.require_first_n {
+                private_keys.remove(0);
+            }
+        }
+        let remaining_threshold: usize = self.threshold as usize - self.require_first_n as usize;
+
+        // remaining with random order
+        private_keys.shuffle(&mut thread_rng());
+
+        for privkey in &private_keys[0..remaining_threshold] {
+            let sig = privkey.sign_recoverable(msg).expect("sign");
+            result.put_slice(&sig.serialize());
+        }
+        result.freeze()
+    }
+
+    pub fn gen_identity(&self) -> Identity {
+        let script = self.gen_multisig_script();
+        Identity {
+            flags: IDENTITY_FLAGS_MULTISIG,
+            blake160: blake160(&script),
+        }
+    }
+}
+
+impl Default for MultisigTestConfig {
+    fn default() -> Self {
+        MultisigTestConfig {
+            private_keys: Default::default(),
+            pubkeys: Default::default(),
+            require_first_n: 0,
+            threshold: 0,
+            count: 0,
+        }
+    }
+}
+
 pub struct TestConfig {
     pub id: Identity,
     pub acp_config: Option<(u8, u8)>,
     pub use_rc: bool,
+    pub use_rc_identity: bool,
     pub scheme: TestScheme,
     pub scheme2: TestScheme2,
     pub rc_root: Bytes,
@@ -956,6 +1098,9 @@ pub struct TestConfig {
     pub proof_masks: Vec<u8>,
     pub private_key: Privkey,
     pub pubkey: Pubkey,
+
+    pub multisig: MultisigTestConfig,
+    pub smt_in_input: bool,
 
     pub rsa_private_key: PKey<Private>,
     pub rsa_pubkey: PKey<Public>,
@@ -977,6 +1122,9 @@ pub struct TestConfig {
     // sudt supply
     pub use_supply: bool,
     pub info_cell: [u8; 32],
+
+    pub running_script: Script,
+    pub leading_witness_count: usize,
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -1051,6 +1199,7 @@ impl TestConfig {
             id: Identity { flags, blake160 },
             acp_config: None,
             use_rc,
+            use_rc_identity: true,
             rc_root,
             scheme: TestScheme::None,
             scheme2: TestScheme2::None,
@@ -1058,6 +1207,8 @@ impl TestConfig {
             proof_masks: Default::default(),
             private_key,
             pubkey,
+            multisig: Default::default(),
+            smt_in_input: false,
             rsa_private_key,
             rsa_pubkey,
             rsa_script: Default::default(),
@@ -1070,6 +1221,8 @@ impl TestConfig {
             use_iso9796_2: false,
             use_supply: false,
             info_cell: Default::default(),
+            running_script: Default::default(),
+            leading_witness_count: 0,
         }
     }
 
@@ -1083,6 +1236,13 @@ impl TestConfig {
     pub fn set_iso9796_2(&mut self) {
         self.use_iso9796_2 = true;
         self.sig_len = 648;
+    }
+    pub fn set_multisig(&mut self, require_first_n: u8, threshold: u8, count: u8) {
+        self.multisig = Default::default();
+        self.multisig.set(require_first_n, threshold, count);
+        self.id = self.multisig.gen_identity();
+
+        self.sig_len = 4 + 20 * count as usize + 65 * threshold as usize;
     }
 
     pub fn set_acp_config(&mut self, min_config: Option<(u8, u8)>) {
@@ -1100,16 +1260,30 @@ impl TestConfig {
         self.use_supply = true;
     }
 
+    pub fn set_rc_identity(&mut self, used: bool) {
+        self.use_rc_identity = used;
+    }
+
     pub fn gen_args(&self) -> Bytes {
         let mut bytes = BytesMut::with_capacity(128);
         let mut rc_lock_flags: u8 = 0;
 
         if self.use_rc {
-            rc_lock_flags |= RC_ROOT_MASK;
+            if self.use_rc_identity {
+                rc_lock_flags |= RC_ROOT_MASK;
 
-            bytes.resize(21, 0);
-            bytes.put(&[rc_lock_flags][..]);
-            bytes.put(self.rc_root.as_ref());
+                bytes.resize(21, 0);
+                bytes.put(&[rc_lock_flags][..]);
+                bytes.put(self.rc_root.as_ref());
+            } else {
+                rc_lock_flags |= RC_ROOT_MASK;
+                // auth
+                bytes.put_u8(self.id.flags);
+                bytes.put(self.id.blake160.as_ref());
+                // rc_root
+                bytes.put(&[rc_lock_flags][..]);
+                bytes.put(self.rc_root.as_ref());
+            }
         } else {
             bytes.put_u8(self.id.flags);
             bytes.put(self.id.blake160.as_ref());
@@ -1162,6 +1336,7 @@ impl TestConfig {
 pub fn gen_witness_lock(
     sig: Bytes,
     use_rc: bool,
+    use_rc_identity: bool,
     proofs: &SmtProofEntryVec,
     identity: &rc_lock::Identity,
     preimage: Option<Bytes>,
@@ -1174,7 +1349,7 @@ pub fn gen_witness_lock(
         builder = builder.preimage(Some(p).pack());
     }
 
-    if use_rc {
+    if use_rc && use_rc_identity {
         let rc_identity = rc_lock::RcIdentityBuilder::default()
             .identity(identity.clone())
             .proofs(proofs.clone())
@@ -1287,6 +1462,7 @@ pub fn iso9796_2_batch_sign(msg: &[u8], key: &PKey<Private>) -> (Vec<u8>, Vec<u8
 
 pub fn gen_zero_witness_lock(
     use_rc: bool,
+    use_rc_identity: bool,
     proofs: &SmtProofEntryVec,
     identity: &rc_lock::Identity,
     sig_len: usize,
@@ -1302,7 +1478,14 @@ pub fn gen_zero_witness_lock(
     } else {
         None
     };
-    let witness_lock = gen_witness_lock(zero.freeze(), use_rc, proofs, identity, preimage);
+    let witness_lock = gen_witness_lock(
+        zero.freeze(),
+        use_rc,
+        use_rc_identity,
+        proofs,
+        identity,
+        preimage,
+    );
 
     let mut res = BytesMut::new();
     res.resize(witness_lock.len(), 0);
@@ -1323,6 +1506,7 @@ pub fn generate_rce_cell(
     dummy: &mut DummyDataLoader,
     mut tx_builder: TransactionBuilder,
     rc_data: Vec<Bytes>,
+    smt_in_input: bool,
 ) -> (Byte32, TransactionBuilder) {
     let mut rng = thread_rng();
     let mut cell_vec_builder = RCCellVecBuilder::default();
@@ -1335,6 +1519,7 @@ pub fn generate_rce_cell(
             dummy,
             tx_builder,
             true,
+            smt_in_input,
             &rc_rule,
             Bytes::copy_from_slice(random_args.as_ref()),
         );
@@ -1362,6 +1547,7 @@ pub fn generate_rce_cell(
         dummy,
         tx_builder,
         true,
+        smt_in_input,
         &Bytes::copy_from_slice(bin),
         Bytes::copy_from_slice(random_args.as_ref()),
     );
