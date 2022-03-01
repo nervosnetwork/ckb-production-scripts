@@ -19,7 +19,7 @@ use ckb_types::{
 };
 use lazy_static::lazy_static;
 use misc::*;
-use rc_lock_test::debug_utils::debug;
+use omni_lock_test::debug_utils::debug;
 use std::fs;
 
 // Script args validation errors
@@ -196,8 +196,8 @@ fn test_multisig_0_2_2_unlock() {
 #[test]
 #[ignore]
 fn test_multisig_0_2_3_unlock_smt_in_input_debug() {
-    let binary = fs::read("../../../build/rc_lock.debug").expect("read_to_string");
-    let rc_lock_debug = Bytes::from(binary);
+    let binary = fs::read("../../../build/omni_lock.debug").expect("read_to_string");
+    let omni_lock_debug = Bytes::from(binary);
 
     let mut data_loader = DummyDataLoader::new();
 
@@ -222,7 +222,7 @@ fn test_multisig_0_2_3_unlock_smt_in_input_debug() {
         "127.0.0.1:9999",
         ScriptGroupType::Lock,
         config.running_script.calc_script_hash(),
-        &rc_lock_debug,
+        &omni_lock_debug,
         &[],
         &verifier,
     );

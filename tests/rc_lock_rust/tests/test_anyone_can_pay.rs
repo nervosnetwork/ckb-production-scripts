@@ -15,7 +15,7 @@ use lazy_static::lazy_static;
 use rand::{thread_rng, Rng, SeedableRng};
 
 use misc::{
-    assert_script_error, blake160, build_always_success_script, build_rc_lock_script,
+    assert_script_error, blake160, build_always_success_script, build_omni_lock_script,
     build_resolved_tx, debug_printer, gen_tx, gen_tx_with_grouped_args, gen_witness_lock, sign_tx,
     sign_tx_by_input_group, sign_tx_hash, DummyDataLoader, TestConfig, TestScheme, ALWAYS_SUCCESS,
     ERROR_DUPLICATED_INPUTS, ERROR_DUPLICATED_OUTPUTS, ERROR_ENCODING, ERROR_NO_PAIR,
@@ -35,7 +35,7 @@ fn test_unlock_by_anyone() {
 
     let tx = gen_tx(&mut data_loader, &mut config);
     let args = config.gen_args();
-    let script = build_rc_lock_script(&mut config, args);
+    let script = build_omni_lock_script(&mut config, args);
     let output = tx.outputs().get(0).unwrap();
     let tx = tx
         .as_advanced_builder()
@@ -65,7 +65,7 @@ fn test_put_output_data() {
 
     let tx = gen_tx(&mut data_loader, &mut config);
     let args = config.gen_args();
-    let script = build_rc_lock_script(&mut config, args);
+    let script = build_omni_lock_script(&mut config, args);
     let output = tx.outputs().get(0).unwrap();
     let tx = tx
         .as_advanced_builder()
@@ -97,7 +97,7 @@ fn test_wrong_output_args() {
     let tx = gen_tx(&mut data_loader, &mut config);
     config.set_acp_config(Some((0, 1)));
     let args = config.gen_args();
-    let script = build_rc_lock_script(&mut config, args);
+    let script = build_omni_lock_script(&mut config, args);
     let output = tx.outputs().get(0).unwrap();
     let tx = tx
         .as_advanced_builder()
@@ -127,7 +127,7 @@ fn test_split_cell() {
 
     let tx = gen_tx(&mut data_loader, &mut config);
     let args = config.gen_args();
-    let script = build_rc_lock_script(&mut config, args);
+    let script = build_omni_lock_script(&mut config, args);
     let output = tx.outputs().get(0).unwrap();
     let tx = tx
         .as_advanced_builder()
@@ -168,7 +168,7 @@ fn test_merge_cell() {
     config.set_acp_config(Some((0, 0)));
 
     let args = config.gen_args();
-    let script = build_rc_lock_script(&mut config, args.clone());
+    let script = build_omni_lock_script(&mut config, args.clone());
     let tx = gen_tx_with_grouped_args(&mut data_loader, vec![(args, 2)], &mut config);
     let output = tx.outputs().get(0).unwrap();
     let tx = tx
@@ -200,7 +200,7 @@ fn test_insufficient_pay() {
 
     let tx = gen_tx(&mut data_loader, &mut config);
     let args = config.gen_args();
-    let script = build_rc_lock_script(&mut config, args);
+    let script = build_omni_lock_script(&mut config, args);
     let output = tx.outputs().get(0).unwrap();
     let tx = tx
         .as_advanced_builder()
@@ -231,7 +231,7 @@ fn test_payment_not_meet_requirement() {
 
     let tx = gen_tx(&mut data_loader, &mut config);
     let args = config.gen_args();
-    let script = build_rc_lock_script(&mut config, args);
+    let script = build_omni_lock_script(&mut config, args);
     let output = tx.outputs().get(0).unwrap();
     let tx = tx
         .as_advanced_builder()
@@ -261,7 +261,7 @@ fn test_no_pair() {
     config.set_acp_config(Some((0, 0)));
 
     let tx = gen_tx(&mut data_loader, &mut config);
-    let another_script = build_rc_lock_script(&mut config, vec![42].into());
+    let another_script = build_omni_lock_script(&mut config, vec![42].into());
     let output = tx.outputs().get(0).unwrap();
     let tx = tx
         .as_advanced_builder()
@@ -292,7 +292,7 @@ fn test_overflow() {
 
     let tx = gen_tx(&mut data_loader, &mut config);
     let args = config.gen_args();
-    let script = build_rc_lock_script(&mut config, args);
+    let script = build_omni_lock_script(&mut config, args);
     let output = tx.outputs().get(0).unwrap();
     let tx = tx
         .as_advanced_builder()
@@ -323,7 +323,7 @@ fn test_only_pay_ckb() {
 
     let tx = gen_tx(&mut data_loader, &mut config);
     let args = config.gen_args();
-    let script = build_rc_lock_script(&mut config, args);
+    let script = build_omni_lock_script(&mut config, args);
     let input = tx.inputs().get(0).unwrap();
     let (prev_output, _) = data_loader.cells.remove(&input.previous_output()).unwrap();
     let prev_output = prev_output
@@ -366,7 +366,7 @@ fn test_only_pay_udt() {
 
     let tx = gen_tx(&mut data_loader, &mut config);
     let args = config.gen_args();
-    let script = build_rc_lock_script(&mut config, args);
+    let script = build_omni_lock_script(&mut config, args);
     let input = tx.inputs().get(0).unwrap();
     let (prev_output, _) = data_loader.cells.remove(&input.previous_output()).unwrap();
     let input_capacity = prev_output.capacity();
@@ -409,7 +409,7 @@ fn test_udt_unlock_by_anyone() {
 
     let tx = gen_tx(&mut data_loader, &mut config);
     let args = config.gen_args();
-    let script = build_rc_lock_script(&mut config, args);
+    let script = build_omni_lock_script(&mut config, args);
     let input = tx.inputs().get(0).unwrap();
     let (prev_output, _) = data_loader.cells.remove(&input.previous_output()).unwrap();
     let prev_output = prev_output
@@ -452,7 +452,7 @@ fn test_udt_overflow() {
 
     let tx = gen_tx(&mut data_loader, &mut config);
     let args = config.gen_args();
-    let script = build_rc_lock_script(&mut config, args);
+    let script = build_omni_lock_script(&mut config, args);
     let input = tx.inputs().get(0).unwrap();
     let (prev_output, _) = data_loader.cells.remove(&input.previous_output()).unwrap();
     let prev_output = prev_output
@@ -495,7 +495,7 @@ fn test_extended_udt() {
 
     let tx = gen_tx(&mut data_loader, &mut config);
     let args = config.gen_args();
-    let script = build_rc_lock_script(&mut config, args);
+    let script = build_omni_lock_script(&mut config, args);
     let input = tx.inputs().get(0).unwrap();
     let (prev_output, _) = data_loader.cells.remove(&input.previous_output()).unwrap();
     let prev_output = prev_output

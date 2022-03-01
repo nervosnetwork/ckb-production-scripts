@@ -37,9 +37,9 @@ use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::traits::Hasher;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 
-use rc_lock_test::omni_lock;
-use rc_lock_test::omni_lock::OmniLockWitnessLock;
-use rc_lock_test::xudt_rce_mol::{
+use omni_lock_test::omni_lock;
+use omni_lock_test::omni_lock::OmniLockWitnessLock;
+use omni_lock_test::xudt_rce_mol::{
     RCCellVecBuilder, RCDataBuilder, RCDataUnion, RCRuleBuilder, SmtProofBuilder,
     SmtProofEntryBuilder, SmtProofEntryVec, SmtProofEntryVecBuilder,
 };
@@ -460,7 +460,7 @@ pub fn build_always_success_script() -> Script {
         .build()
 }
 
-pub fn build_rc_lock_script(config: &mut TestConfig, args: Bytes) -> Script {
+pub fn build_omni_lock_script(config: &mut TestConfig, args: Bytes) -> Script {
     let args = if config.is_owner_lock() {
         if config.scheme == TestScheme::OwnerLockMismatched {
             config.id.blake160 = {
@@ -1260,61 +1260,61 @@ impl TestConfig {
         self.use_supply = true;
     }
 
-    pub fn set_rc_identity(&mut self, used: bool) {
+    pub fn set_omni_identity(&mut self, used: bool) {
         self.use_rc_identity = used;
     }
 
     pub fn gen_args(&self) -> Bytes {
         let mut bytes = BytesMut::with_capacity(128);
-        let mut rc_lock_flags: u8 = 0;
+        let mut omni_lock_flags: u8 = 0;
 
         if self.use_rc {
             if self.use_rc_identity {
-                rc_lock_flags |= RC_ROOT_MASK;
+                omni_lock_flags |= RC_ROOT_MASK;
 
                 bytes.resize(21, 0);
-                bytes.put(&[rc_lock_flags][..]);
+                bytes.put(&[omni_lock_flags][..]);
                 bytes.put(self.rc_root.as_ref());
             } else {
-                rc_lock_flags |= RC_ROOT_MASK;
+                omni_lock_flags |= RC_ROOT_MASK;
                 // auth
                 bytes.put_u8(self.id.flags);
                 bytes.put(self.id.blake160.as_ref());
                 // rc_root
-                bytes.put(&[rc_lock_flags][..]);
+                bytes.put(&[omni_lock_flags][..]);
                 bytes.put(self.rc_root.as_ref());
             }
         } else {
             bytes.put_u8(self.id.flags);
             bytes.put(self.id.blake160.as_ref());
 
-            let mut rc_lock_args = Vec::<u8>::new();
+            let mut omni_lock_args = Vec::<u8>::new();
 
             // acp
             if self.acp_config.is_some() {
-                rc_lock_flags |= ACP_MASK;
+                omni_lock_flags |= ACP_MASK;
             }
             // since
             if self.use_since {
-                rc_lock_flags |= SINCE_MASK;
+                omni_lock_flags |= SINCE_MASK;
             }
             // sudt supply
             if self.use_supply {
-                rc_lock_flags |= SUPPLY_MASK;
+                omni_lock_flags |= SUPPLY_MASK;
             }
-            rc_lock_args.push(rc_lock_flags);
+            omni_lock_args.push(omni_lock_flags);
 
             if let Some((ckb_min, udt_min)) = self.acp_config {
-                rc_lock_args.push(ckb_min);
-                rc_lock_args.push(udt_min);
+                omni_lock_args.push(ckb_min);
+                omni_lock_args.push(udt_min);
             }
             if self.use_since {
-                rc_lock_args.extend(self.args_since.to_le_bytes().iter());
+                omni_lock_args.extend(self.args_since.to_le_bytes().iter());
             }
             if self.use_supply {
-                rc_lock_args.extend(self.info_cell.iter());
+                omni_lock_args.extend(self.info_cell.iter());
             }
-            bytes.put(rc_lock_args.as_slice());
+            bytes.put(omni_lock_args.as_slice());
         }
         bytes.freeze()
     }
