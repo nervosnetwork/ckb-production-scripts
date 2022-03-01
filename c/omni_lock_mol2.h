@@ -1,6 +1,6 @@
 
-#ifndef _RC_LOCK_MOL2_API2_H_
-#define _RC_LOCK_MOL2_API2_H_
+#ifndef _OMNI_LOCK_MOL2_API2_H_
+#define _OMNI_LOCK_MOL2_API2_H_
 
 #ifndef MOLECULEC_VERSION
 #define MOLECULEC_VERSION 6001
@@ -218,4 +218,4 @@ BytesOptType OmniLockWitnessLock_get_preimage_impl(
 }
 #endif /* __cplusplus */
 
-#endif  // _RC_LOCK_MOL2_API2_H_
+#endif  // _OMNI_LOCK_MOL2_API2_H_

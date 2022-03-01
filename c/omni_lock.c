@@ -19,7 +19,7 @@ int ckb_exit(signed char);
 #if defined(CKB_USE_SIM)
 // exclude ckb_dlfcn.h
 #define CKB_C_STDLIB_CKB_DLFCN_H_
-#include "ckb_syscall_rc_lock_sim.h"
+#include "ckb_syscall_omni_lock_sim.h"
 #else
 #include "ckb_syscalls.h"
 #endif
