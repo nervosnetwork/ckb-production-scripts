@@ -6,15 +6,15 @@
 #include "molecule_reader.h"
 #include "molecule_builder.h"
 
-#ifndef RC_LOCK_H
-#define RC_LOCK_H
+#ifndef OMNI_LOCK_H
+#define OMNI_LOCK_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
 
 #ifndef MOLECULE_API_DECORATOR
-#define __DEFINE_MOLECULE_API_DECORATOR_RC_LOCK
+#define __DEFINE_MOLECULE_API_DECORATOR_OMNI_LOCK
 #define MOLECULE_API_DECORATOR
 #endif /* MOLECULE_API_DECORATOR */
 
@@ -364,13 +364,13 @@ MOLECULE_API_DECORATOR mol_seg_res_t MolBuilder_OmniLockWitnessLock_build (mol_b
     return res;
 }
 
-#ifdef __DEFINE_MOLECULE_API_DECORATOR_RC_LOCK
+#ifdef __DEFINE_MOLECULE_API_DECORATOR_OMNI_LOCK
 #undef MOLECULE_API_DECORATOR
-#undef __DEFINE_MOLECULE_API_DECORATOR_RC_LOCK
-#endif /* __DEFINE_MOLECULE_API_DECORATOR_RC_LOCK */
+#undef __DEFINE_MOLECULE_API_DECORATOR_OMNI_LOCK
+#endif /* __DEFINE_MOLECULE_API_DECORATOR_OMNI_LOCK */
 
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
 
-#endif /* RC_LOCK_H */
+#endif /* OMNI_LOCK_H */
