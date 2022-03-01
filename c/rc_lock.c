@@ -335,13 +335,13 @@ int parse_witness_lock(WitnessLockType *witness_lock) {
 
   mol2_cursor_t mol_lock_bytes = mol_lock.t->unwrap(&mol_lock);
   // convert Bytes to RcLockWitnessLock
-  RcLockWitnessLockType mol_witness_lock =
-      make_RcLockWitnessLock(&mol_lock_bytes);
-  RcIdentityOptType rc_identity_opt =
-      mol_witness_lock.t->rc_identity(&mol_witness_lock);
-  witness_lock->has_rc_identity = rc_identity_opt.t->is_some(&rc_identity_opt);
+  OmniLockWitnessLockType mol_witness_lock =
+      make_OmniLockWitnessLock(&mol_lock_bytes);
+  IdentityOptType identity_opt =
+      mol_witness_lock.t->omni_identity(&mol_witness_lock);
+  witness_lock->has_rc_identity = identity_opt.t->is_some(&identity_opt);
   if (witness_lock->has_rc_identity) {
-    RcIdentityType rc_identity = rc_identity_opt.t->unwrap(&rc_identity_opt);
+    IdentityType rc_identity = identity_opt.t->unwrap(&identity_opt);
     mol2_cursor_t id_cur = rc_identity.t->identity(&rc_identity);
 
     uint8_t buff[CKB_IDENTITY_LEN] = {0};
