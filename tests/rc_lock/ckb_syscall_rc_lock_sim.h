@@ -11,7 +11,7 @@
 
 #include "include/secp256k1.h"
 #include "include/secp256k1_recovery.h"
-#include "rc_lock_mol.h"
+#include "omni_lock_mol.h"
 #include "xudt_rce_mol.h"
 
 #define VERY_LONG_DATA_SIZE 655360

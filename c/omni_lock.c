@@ -35,11 +35,11 @@ int ckb_exit(signed char);
 // CHECK is defined in secp256k1
 #undef CHECK
 #include "rce.h"
-#include "rc_lock_mol2.h"
+#include "omni_lock_mol2.h"
 
-#include "rc_lock_acp.h"
-#include "rc_lock_time_lock.h"
-#include "rc_lock_supply.h"
+#include "omni_lock_acp.h"
+#include "omni_lock_time_lock.h"
+#include "omni_lock_supply.h"
 
 // clang-format on
 

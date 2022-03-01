@@ -6,7 +6,7 @@
 
 int ckb_exit(signed char code);
 
-#include "rc_lock.c"
+#include "omni_lock.c"
 #include "utest.h"
 void debug_print_hex(const char* prefix, const uint8_t* buf, size_t length) {
   printf("%s: ", prefix);
