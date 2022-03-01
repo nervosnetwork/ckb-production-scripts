@@ -23,7 +23,7 @@ jobs:
       run: cd tests/xudt_rce_rust && cargo test
     - name: Run xudt simulator tests
       run: cd tests/xudt_rce && bash run.sh
-    - name: Run rc_lock tests
-      run: cd tests/rc_lock_rust && cargo test
+    - name: Run omni_lock tests
+      run: cd tests/omni_lock_rust && cargo test
     - name: Run omni_lock simulator tests
       run: cd tests/omni_lock && bash run.sh
