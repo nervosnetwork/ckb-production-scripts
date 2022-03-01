@@ -6,7 +6,7 @@ tests/xudt_rce/smt_fuzzer/smt_fuzzer.dSYM
 smt_coverage
 smt_fuzzer
 .vscode
-tests/rc_lock/simulator-build-debug
+tests/omni_lock/simulator-build-debug
 cmake-build-debug
 tests/validate_signature_rsa/build.simulator
 tests/validate_signature_rsa/corpus
@@ -15,6 +15,6 @@ tests/validate_signature_rsa/dlopen_coverage
 tests/validate_signature_rsa/dlopen_fuzzer
 tests/validate_signature_rsa/coverage
 tests/validate_signature_rsa/fuzz-*.log
-tests/rc_lock/exec_fuzzer/exec_fuzzer.dSYM
+tests/omni_lock/exec_fuzzer/exec_fuzzer.dSYM
 fuzzer.profraw
 fuzzer.profdata
