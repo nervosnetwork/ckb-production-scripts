@@ -19,94 +19,94 @@ extern "C" {
 #endif /* __cplusplus */
 
 // ----forward declaration--------
+struct AuthType;
+struct AuthVTable;
+struct AuthVTable *GetAuthVTable(void);
+struct AuthType make_Auth(mol2_cursor_t *cur);
+uint32_t Auth_len_impl(struct AuthType *);
+uint8_t Auth_get_impl(struct AuthType *, uint32_t, bool *);
 struct IdentityType;
 struct IdentityVTable;
 struct IdentityVTable *GetIdentityVTable(void);
 struct IdentityType make_Identity(mol2_cursor_t *cur);
-uint32_t Identity_len_impl(struct IdentityType *);
-uint8_t Identity_get_impl(struct IdentityType *, uint32_t, bool *);
-struct RcIdentityType;
-struct RcIdentityVTable;
-struct RcIdentityVTable *GetRcIdentityVTable(void);
-struct RcIdentityType make_RcIdentity(mol2_cursor_t *cur);
-mol2_cursor_t RcIdentity_get_identity_impl(struct RcIdentityType *);
-struct SmtProofEntryVecType RcIdentity_get_proofs_impl(struct RcIdentityType *);
-struct RcIdentityOptType;
-struct RcIdentityOptVTable;
-struct RcIdentityOptVTable *GetRcIdentityOptVTable(void);
-struct RcIdentityOptType make_RcIdentityOpt(mol2_cursor_t *cur);
-bool RcIdentityOpt_is_none_impl(struct RcIdentityOptType *);
-bool RcIdentityOpt_is_some_impl(struct RcIdentityOptType *);
-struct RcIdentityType RcIdentityOpt_unwrap_impl(struct RcIdentityOptType *);
-struct RcLockWitnessLockType;
-struct RcLockWitnessLockVTable;
-struct RcLockWitnessLockVTable *GetRcLockWitnessLockVTable(void);
-struct RcLockWitnessLockType make_RcLockWitnessLock(mol2_cursor_t *cur);
-struct BytesOptType RcLockWitnessLock_get_signature_impl(
-    struct RcLockWitnessLockType *);
-struct RcIdentityOptType RcLockWitnessLock_get_rc_identity_impl(
-    struct RcLockWitnessLockType *);
-struct BytesOptType RcLockWitnessLock_get_preimage_impl(
-    struct RcLockWitnessLockType *);
+mol2_cursor_t Identity_get_identity_impl(struct IdentityType *);
+struct SmtProofEntryVecType Identity_get_proofs_impl(struct IdentityType *);
+struct IdentityOptType;
+struct IdentityOptVTable;
+struct IdentityOptVTable *GetIdentityOptVTable(void);
+struct IdentityOptType make_IdentityOpt(mol2_cursor_t *cur);
+bool IdentityOpt_is_none_impl(struct IdentityOptType *);
+bool IdentityOpt_is_some_impl(struct IdentityOptType *);
+struct IdentityType IdentityOpt_unwrap_impl(struct IdentityOptType *);
+struct OmniLockWitnessLockType;
+struct OmniLockWitnessLockVTable;
+struct OmniLockWitnessLockVTable *GetOmniLockWitnessLockVTable(void);
+struct OmniLockWitnessLockType make_OmniLockWitnessLock(mol2_cursor_t *cur);
+struct BytesOptType OmniLockWitnessLock_get_signature_impl(
+    struct OmniLockWitnessLockType *);
+struct IdentityOptType OmniLockWitnessLock_get_omni_identity_impl(
+    struct OmniLockWitnessLockType *);
+struct BytesOptType OmniLockWitnessLock_get_preimage_impl(
+    struct OmniLockWitnessLockType *);
 
 // ----definition-----------------
+typedef struct AuthVTable {
+  uint32_t (*len)(struct AuthType *);
+  uint8_t (*get)(struct AuthType *, uint32_t, bool *);
+} AuthVTable;
+typedef struct AuthType {
+  mol2_cursor_t cur;
+  AuthVTable *t;
+} AuthType;
+
 typedef struct IdentityVTable {
-  uint32_t (*len)(struct IdentityType *);
-  uint8_t (*get)(struct IdentityType *, uint32_t, bool *);
+  mol2_cursor_t (*identity)(struct IdentityType *);
+  struct SmtProofEntryVecType (*proofs)(struct IdentityType *);
 } IdentityVTable;
 typedef struct IdentityType {
   mol2_cursor_t cur;
   IdentityVTable *t;
 } IdentityType;
 
-typedef struct RcIdentityVTable {
-  mol2_cursor_t (*identity)(struct RcIdentityType *);
-  struct SmtProofEntryVecType (*proofs)(struct RcIdentityType *);
-} RcIdentityVTable;
-typedef struct RcIdentityType {
+typedef struct IdentityOptVTable {
+  bool (*is_none)(struct IdentityOptType *);
+  bool (*is_some)(struct IdentityOptType *);
+  struct IdentityType (*unwrap)(struct IdentityOptType *);
+} IdentityOptVTable;
+typedef struct IdentityOptType {
   mol2_cursor_t cur;
-  RcIdentityVTable *t;
-} RcIdentityType;
+  IdentityOptVTable *t;
+} IdentityOptType;
 
-typedef struct RcIdentityOptVTable {
-  bool (*is_none)(struct RcIdentityOptType *);
-  bool (*is_some)(struct RcIdentityOptType *);
-  struct RcIdentityType (*unwrap)(struct RcIdentityOptType *);
-} RcIdentityOptVTable;
-typedef struct RcIdentityOptType {
+typedef struct OmniLockWitnessLockVTable {
+  struct BytesOptType (*signature)(struct OmniLockWitnessLockType *);
+  struct IdentityOptType (*omni_identity)(struct OmniLockWitnessLockType *);
+  struct BytesOptType (*preimage)(struct OmniLockWitnessLockType *);
+} OmniLockWitnessLockVTable;
+typedef struct OmniLockWitnessLockType {
   mol2_cursor_t cur;
-  RcIdentityOptVTable *t;
-} RcIdentityOptType;
-
-typedef struct RcLockWitnessLockVTable {
-  struct BytesOptType (*signature)(struct RcLockWitnessLockType *);
-  struct RcIdentityOptType (*rc_identity)(struct RcLockWitnessLockType *);
-  struct BytesOptType (*preimage)(struct RcLockWitnessLockType *);
-} RcLockWitnessLockVTable;
-typedef struct RcLockWitnessLockType {
-  mol2_cursor_t cur;
-  RcLockWitnessLockVTable *t;
-} RcLockWitnessLockType;
+  OmniLockWitnessLockVTable *t;
+} OmniLockWitnessLockType;
 
 #ifndef MOLECULEC_C2_DECLARATION_ONLY
 
 // ----implementation-------------
-struct IdentityType make_Identity(mol2_cursor_t *cur) {
-  IdentityType ret;
+struct AuthType make_Auth(mol2_cursor_t *cur) {
+  AuthType ret;
   ret.cur = *cur;
-  ret.t = GetIdentityVTable();
+  ret.t = GetAuthVTable();
   return ret;
 }
-struct IdentityVTable *GetIdentityVTable(void) {
-  static IdentityVTable s_vtable;
+struct AuthVTable *GetAuthVTable(void) {
+  static AuthVTable s_vtable;
   static int inited = 0;
   if (inited) return &s_vtable;
-  s_vtable.len = Identity_len_impl;
-  s_vtable.get = Identity_get_impl;
+  s_vtable.len = Auth_len_impl;
+  s_vtable.get = Auth_get_impl;
   return &s_vtable;
 }
-uint32_t Identity_len_impl(IdentityType *this) { return 21; }
-uint8_t Identity_get_impl(IdentityType *this, uint32_t index, bool *existing) {
+uint32_t Auth_len_impl(AuthType *this) { return 21; }
+uint8_t Auth_get_impl(AuthType *this, uint32_t index, bool *existing) {
   uint8_t ret = {0};
   mol2_cursor_res_t res = mol2_slice_by_offset2(&this->cur, 1 * index, 1);
   if (res.errno != MOL2_OK) {
@@ -118,92 +118,94 @@ uint8_t Identity_get_impl(IdentityType *this, uint32_t index, bool *existing) {
   ret = convert_to_Uint8(&res.cur);
   return ret;
 }
-struct RcIdentityType make_RcIdentity(mol2_cursor_t *cur) {
-  RcIdentityType ret;
+struct IdentityType make_Identity(mol2_cursor_t *cur) {
+  IdentityType ret;
   ret.cur = *cur;
-  ret.t = GetRcIdentityVTable();
+  ret.t = GetIdentityVTable();
   return ret;
 }
-struct RcIdentityVTable *GetRcIdentityVTable(void) {
-  static RcIdentityVTable s_vtable;
+struct IdentityVTable *GetIdentityVTable(void) {
+  static IdentityVTable s_vtable;
   static int inited = 0;
   if (inited) return &s_vtable;
-  s_vtable.identity = RcIdentity_get_identity_impl;
-  s_vtable.proofs = RcIdentity_get_proofs_impl;
+  s_vtable.identity = Identity_get_identity_impl;
+  s_vtable.proofs = Identity_get_proofs_impl;
   return &s_vtable;
 }
-mol2_cursor_t RcIdentity_get_identity_impl(RcIdentityType *this) {
+mol2_cursor_t Identity_get_identity_impl(IdentityType *this) {
   mol2_cursor_t ret;
   mol2_cursor_t ret2 = mol2_table_slice_by_index(&this->cur, 0);
   ret = convert_to_array(&ret2);
   return ret;
 }
-SmtProofEntryVecType RcIdentity_get_proofs_impl(RcIdentityType *this) {
+SmtProofEntryVecType Identity_get_proofs_impl(IdentityType *this) {
   SmtProofEntryVecType ret;
   mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 1);
   ret.cur = cur;
   ret.t = GetSmtProofEntryVecVTable();
   return ret;
 }
-struct RcIdentityOptType make_RcIdentityOpt(mol2_cursor_t *cur) {
-  RcIdentityOptType ret;
+struct IdentityOptType make_IdentityOpt(mol2_cursor_t *cur) {
+  IdentityOptType ret;
   ret.cur = *cur;
-  ret.t = GetRcIdentityOptVTable();
+  ret.t = GetIdentityOptVTable();
   return ret;
 }
-struct RcIdentityOptVTable *GetRcIdentityOptVTable(void) {
-  static RcIdentityOptVTable s_vtable;
+struct IdentityOptVTable *GetIdentityOptVTable(void) {
+  static IdentityOptVTable s_vtable;
   static int inited = 0;
   if (inited) return &s_vtable;
-  s_vtable.is_none = RcIdentityOpt_is_none_impl;
-  s_vtable.is_some = RcIdentityOpt_is_some_impl;
-  s_vtable.unwrap = RcIdentityOpt_unwrap_impl;
+  s_vtable.is_none = IdentityOpt_is_none_impl;
+  s_vtable.is_some = IdentityOpt_is_some_impl;
+  s_vtable.unwrap = IdentityOpt_unwrap_impl;
   return &s_vtable;
 }
-bool RcIdentityOpt_is_none_impl(RcIdentityOptType *this) {
+bool IdentityOpt_is_none_impl(IdentityOptType *this) {
   return mol2_option_is_none(&this->cur);
 }
-bool RcIdentityOpt_is_some_impl(RcIdentityOptType *this) {
+bool IdentityOpt_is_some_impl(IdentityOptType *this) {
   return !mol2_option_is_none(&this->cur);
 }
-RcIdentityType RcIdentityOpt_unwrap_impl(RcIdentityOptType *this) {
-  RcIdentityType ret;
+IdentityType IdentityOpt_unwrap_impl(IdentityOptType *this) {
+  IdentityType ret;
   mol2_cursor_t cur = this->cur;
   ret.cur = cur;
-  ret.t = GetRcIdentityVTable();
+  ret.t = GetIdentityVTable();
   return ret;
 }
-struct RcLockWitnessLockType make_RcLockWitnessLock(mol2_cursor_t *cur) {
-  RcLockWitnessLockType ret;
+struct OmniLockWitnessLockType make_OmniLockWitnessLock(mol2_cursor_t *cur) {
+  OmniLockWitnessLockType ret;
   ret.cur = *cur;
-  ret.t = GetRcLockWitnessLockVTable();
+  ret.t = GetOmniLockWitnessLockVTable();
   return ret;
 }
-struct RcLockWitnessLockVTable *GetRcLockWitnessLockVTable(void) {
-  static RcLockWitnessLockVTable s_vtable;
+struct OmniLockWitnessLockVTable *GetOmniLockWitnessLockVTable(void) {
+  static OmniLockWitnessLockVTable s_vtable;
   static int inited = 0;
   if (inited) return &s_vtable;
-  s_vtable.signature = RcLockWitnessLock_get_signature_impl;
-  s_vtable.rc_identity = RcLockWitnessLock_get_rc_identity_impl;
-  s_vtable.preimage = RcLockWitnessLock_get_preimage_impl;
+  s_vtable.signature = OmniLockWitnessLock_get_signature_impl;
+  s_vtable.omni_identity = OmniLockWitnessLock_get_omni_identity_impl;
+  s_vtable.preimage = OmniLockWitnessLock_get_preimage_impl;
   return &s_vtable;
 }
-BytesOptType RcLockWitnessLock_get_signature_impl(RcLockWitnessLockType *this) {
+BytesOptType OmniLockWitnessLock_get_signature_impl(
+    OmniLockWitnessLockType *this) {
   BytesOptType ret;
   mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 0);
   ret.cur = cur;
   ret.t = GetBytesOptVTable();
   return ret;
 }
-RcIdentityOptType RcLockWitnessLock_get_rc_identity_impl(
-    RcLockWitnessLockType *this) {
-  RcIdentityOptType ret;
+IdentityOptType OmniLockWitnessLock_get_omni_identity_impl(
+    OmniLockWitnessLockType *this) {
+  IdentityOptType ret;
   mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 1);
   ret.cur = cur;
-  ret.t = GetRcIdentityOptVTable();
+  ret.t = GetIdentityOptVTable();
   return ret;
 }
-BytesOptType RcLockWitnessLock_get_preimage_impl(RcLockWitnessLockType *this) {
+BytesOptType OmniLockWitnessLock_get_preimage_impl(
+    OmniLockWitnessLockType *this) {
   BytesOptType ret;
   mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 2);
   ret.cur = cur;

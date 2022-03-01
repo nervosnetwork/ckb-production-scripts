@@ -38,7 +38,7 @@ use sparse_merkle_tree::traits::Hasher;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 
 use rc_lock_test::rc_lock;
-use rc_lock_test::rc_lock::RcLockWitnessLock;
+use rc_lock_test::rc_lock::OmniLockWitnessLock;
 use rc_lock_test::xudt_rce_mol::{
     RCCellVecBuilder, RCDataBuilder, RCDataUnion, RCRuleBuilder, SmtProofBuilder,
     SmtProofEntryBuilder, SmtProofEntryVec, SmtProofEntryVecBuilder,
@@ -989,11 +989,11 @@ impl Identity {
         (&mut ret[1..21]).copy_from_slice(self.blake160.as_ref());
         ret
     }
-    pub fn to_identity(&self) -> rc_lock::Identity {
+    pub fn to_identity(&self) -> rc_lock::Auth {
         let mut ret: [u8; 21] = Default::default();
         ret[0] = self.flags;
         (&mut ret[1..21]).copy_from_slice(self.blake160.as_ref());
-        rc_lock::Identity::from_slice(&ret[..]).unwrap()
+        rc_lock::Auth::from_slice(&ret[..]).unwrap()
     }
 }
 
@@ -1338,10 +1338,10 @@ pub fn gen_witness_lock(
     use_rc: bool,
     use_rc_identity: bool,
     proofs: &SmtProofEntryVec,
-    identity: &rc_lock::Identity,
+    identity: &rc_lock::Auth,
     preimage: Option<Bytes>,
 ) -> Bytes {
-    let builder = RcLockWitnessLock::new_builder();
+    let builder = OmniLockWitnessLock::new_builder();
 
     let mut builder = builder.signature(Some(sig).pack());
 
@@ -1350,12 +1350,12 @@ pub fn gen_witness_lock(
     }
 
     if use_rc && use_rc_identity {
-        let rc_identity = rc_lock::RcIdentityBuilder::default()
+        let rc_identity = rc_lock::IdentityBuilder::default()
             .identity(identity.clone())
             .proofs(proofs.clone())
             .build();
-        let opt = rc_lock::RcIdentityOpt::new_unchecked(rc_identity.as_bytes());
-        builder = builder.rc_identity(opt);
+        let opt = rc_lock::IdentityOpt::new_unchecked(rc_identity.as_bytes());
+        builder = builder.omni_identity(opt);
     }
     builder.build().as_bytes()
 }
@@ -1464,7 +1464,7 @@ pub fn gen_zero_witness_lock(
     use_rc: bool,
     use_rc_identity: bool,
     proofs: &SmtProofEntryVec,
-    identity: &rc_lock::Identity,
+    identity: &rc_lock::Auth,
     sig_len: usize,
     preimage_len: usize,
 ) -> Bytes {
