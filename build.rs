@@ -36,6 +36,10 @@ const BINARIES: &[(&str, &str)] = &[
     (
         "rce_validator",
         "fe951ccda3ada53ccb65e29fa4577d41030fa2b76cce7f24c5f114743bbcd66a"
+    ),
+    (
+        "omni_lock",
+        "f18e295b6a9286108639df659b822b1cc75216776df3d52ac9ed11a1dadadee5"
     )
 ];
 

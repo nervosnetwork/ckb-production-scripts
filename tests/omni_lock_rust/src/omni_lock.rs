@@ -12,8 +12,8 @@ use super::xudt_rce_mol::*;
 use molecule::prelude::*;
 
 #[derive(Clone)]
-pub struct Identity(molecule::bytes::Bytes);
-impl ::core::fmt::LowerHex for Identity {
+pub struct Auth(molecule::bytes::Bytes);
+impl ::core::fmt::LowerHex for Auth {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         use molecule::hex_string;
         if f.alternate() {
@@ -22,27 +22,27 @@ impl ::core::fmt::LowerHex for Identity {
         write!(f, "{}", hex_string(self.as_slice()))
     }
 }
-impl ::core::fmt::Debug for Identity {
+impl ::core::fmt::Debug for Auth {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{}({:#x})", Self::NAME, self)
     }
 }
-impl ::core::fmt::Display for Identity {
+impl ::core::fmt::Display for Auth {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         use molecule::hex_string;
         let raw_data = hex_string(&self.raw_data());
         write!(f, "{}(0x{})", Self::NAME, raw_data)
     }
 }
-impl ::core::default::Default for Identity {
+impl ::core::default::Default for Auth {
     fn default() -> Self {
         let v: Vec<u8> = vec![
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         ];
-        Identity::new_unchecked(v.into())
+        Auth::new_unchecked(v.into())
     }
 }
-impl Identity {
+impl Auth {
     pub const TOTAL_SIZE: usize = 21;
     pub const ITEM_SIZE: usize = 1;
     pub const ITEM_COUNT: usize = 21;
@@ -112,15 +112,15 @@ impl Identity {
     pub fn raw_data(&self) -> molecule::bytes::Bytes {
         self.as_bytes()
     }
-    pub fn as_reader<'r>(&'r self) -> IdentityReader<'r> {
-        IdentityReader::new_unchecked(self.as_slice())
+    pub fn as_reader<'r>(&'r self) -> AuthReader<'r> {
+        AuthReader::new_unchecked(self.as_slice())
     }
 }
-impl molecule::prelude::Entity for Identity {
-    type Builder = IdentityBuilder;
-    const NAME: &'static str = "Identity";
+impl molecule::prelude::Entity for Auth {
+    type Builder = AuthBuilder;
+    const NAME: &'static str = "Auth";
     fn new_unchecked(data: molecule::bytes::Bytes) -> Self {
-        Identity(data)
+        Auth(data)
     }
     fn as_bytes(&self) -> molecule::bytes::Bytes {
         self.0.clone()
@@ -129,10 +129,10 @@ impl molecule::prelude::Entity for Identity {
         &self.0[..]
     }
     fn from_slice(slice: &[u8]) -> molecule::error::VerificationResult<Self> {
-        IdentityReader::from_slice(slice).map(|reader| reader.to_entity())
+        AuthReader::from_slice(slice).map(|reader| reader.to_entity())
     }
     fn from_compatible_slice(slice: &[u8]) -> molecule::error::VerificationResult<Self> {
-        IdentityReader::from_compatible_slice(slice).map(|reader| reader.to_entity())
+        AuthReader::from_compatible_slice(slice).map(|reader| reader.to_entity())
     }
     fn new_builder() -> Self::Builder {
         ::core::default::Default::default()
@@ -164,8 +164,8 @@ impl molecule::prelude::Entity for Identity {
     }
 }
 #[derive(Clone, Copy)]
-pub struct IdentityReader<'r>(&'r [u8]);
-impl<'r> ::core::fmt::LowerHex for IdentityReader<'r> {
+pub struct AuthReader<'r>(&'r [u8]);
+impl<'r> ::core::fmt::LowerHex for AuthReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         use molecule::hex_string;
         if f.alternate() {
@@ -174,19 +174,19 @@ impl<'r> ::core::fmt::LowerHex for IdentityReader<'r> {
         write!(f, "{}", hex_string(self.as_slice()))
     }
 }
-impl<'r> ::core::fmt::Debug for IdentityReader<'r> {
+impl<'r> ::core::fmt::Debug for AuthReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{}({:#x})", Self::NAME, self)
     }
 }
-impl<'r> ::core::fmt::Display for IdentityReader<'r> {
+impl<'r> ::core::fmt::Display for AuthReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         use molecule::hex_string;
         let raw_data = hex_string(&self.raw_data());
         write!(f, "{}(0x{})", Self::NAME, raw_data)
     }
 }
-impl<'r> IdentityReader<'r> {
+impl<'r> AuthReader<'r> {
     pub const TOTAL_SIZE: usize = 21;
     pub const ITEM_SIZE: usize = 1;
     pub const ITEM_COUNT: usize = 21;
@@ -257,14 +257,14 @@ impl<'r> IdentityReader<'r> {
         self.as_slice()
     }
 }
-impl<'r> molecule::prelude::Reader<'r> for IdentityReader<'r> {
-    type Entity = Identity;
-    const NAME: &'static str = "IdentityReader";
+impl<'r> molecule::prelude::Reader<'r> for AuthReader<'r> {
+    type Entity = Auth;
+    const NAME: &'static str = "AuthReader";
     fn to_entity(&self) -> Self::Entity {
         Self::Entity::new_unchecked(self.as_slice().to_owned().into())
     }
     fn new_unchecked(slice: &'r [u8]) -> Self {
-        IdentityReader(slice)
+        AuthReader(slice)
     }
     fn as_slice(&self) -> &'r [u8] {
         self.0
@@ -278,15 +278,15 @@ impl<'r> molecule::prelude::Reader<'r> for IdentityReader<'r> {
         Ok(())
     }
 }
-pub struct IdentityBuilder(pub(crate) [Byte; 21]);
-impl ::core::fmt::Debug for IdentityBuilder {
+pub struct AuthBuilder(pub(crate) [Byte; 21]);
+impl ::core::fmt::Debug for AuthBuilder {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{}({:?})", Self::NAME, &self.0[..])
     }
 }
-impl ::core::default::Default for IdentityBuilder {
+impl ::core::default::Default for AuthBuilder {
     fn default() -> Self {
-        IdentityBuilder([
+        AuthBuilder([
             Byte::default(),
             Byte::default(),
             Byte::default(),
@@ -311,7 +311,7 @@ impl ::core::default::Default for IdentityBuilder {
         ])
     }
 }
-impl IdentityBuilder {
+impl AuthBuilder {
     pub const TOTAL_SIZE: usize = 21;
     pub const ITEM_SIZE: usize = 1;
     pub const ITEM_COUNT: usize = 21;
@@ -404,9 +404,9 @@ impl IdentityBuilder {
         self
     }
 }
-impl molecule::prelude::Builder for IdentityBuilder {
-    type Entity = Identity;
-    const NAME: &'static str = "IdentityBuilder";
+impl molecule::prelude::Builder for AuthBuilder {
+    type Entity = Auth;
+    const NAME: &'static str = "AuthBuilder";
     fn expected_length(&self) -> usize {
         Self::TOTAL_SIZE
     }
@@ -438,12 +438,12 @@ impl molecule::prelude::Builder for IdentityBuilder {
         let mut inner = Vec::with_capacity(self.expected_length());
         self.write(&mut inner)
             .unwrap_or_else(|_| panic!("{} build should be ok", Self::NAME));
-        Identity::new_unchecked(inner.into())
+        Auth::new_unchecked(inner.into())
     }
 }
 #[derive(Clone)]
-pub struct RcIdentity(molecule::bytes::Bytes);
-impl ::core::fmt::LowerHex for RcIdentity {
+pub struct Identity(molecule::bytes::Bytes);
+impl ::core::fmt::LowerHex for Identity {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         use molecule::hex_string;
         if f.alternate() {
@@ -452,12 +452,12 @@ impl ::core::fmt::LowerHex for RcIdentity {
         write!(f, "{}", hex_string(self.as_slice()))
     }
 }
-impl ::core::fmt::Debug for RcIdentity {
+impl ::core::fmt::Debug for Identity {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{}({:#x})", Self::NAME, self)
     }
 }
-impl ::core::fmt::Display for RcIdentity {
+impl ::core::fmt::Display for Identity {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{} {{ ", Self::NAME)?;
         write!(f, "{}: {}", "identity", self.identity())?;
@@ -469,16 +469,16 @@ impl ::core::fmt::Display for RcIdentity {
         write!(f, " }}")
     }
 }
-impl ::core::default::Default for RcIdentity {
+impl ::core::default::Default for Identity {
     fn default() -> Self {
         let v: Vec<u8> = vec![
             37, 0, 0, 0, 12, 0, 0, 0, 33, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 4, 0, 0, 0,
         ];
-        RcIdentity::new_unchecked(v.into())
+        Identity::new_unchecked(v.into())
     }
 }
-impl RcIdentity {
+impl Identity {
     pub const FIELD_COUNT: usize = 2;
     pub fn total_size(&self) -> usize {
         molecule::unpack_number(self.as_slice()) as usize
@@ -496,11 +496,11 @@ impl RcIdentity {
     pub fn has_extra_fields(&self) -> bool {
         Self::FIELD_COUNT != self.field_count()
     }
-    pub fn identity(&self) -> Identity {
+    pub fn identity(&self) -> Auth {
         let slice = self.as_slice();
         let start = molecule::unpack_number(&slice[4..]) as usize;
         let end = molecule::unpack_number(&slice[8..]) as usize;
-        Identity::new_unchecked(self.0.slice(start..end))
+        Auth::new_unchecked(self.0.slice(start..end))
     }
     pub fn proofs(&self) -> SmtProofEntryVec {
         let slice = self.as_slice();
@@ -512,15 +512,15 @@ impl RcIdentity {
             SmtProofEntryVec::new_unchecked(self.0.slice(start..))
         }
     }
-    pub fn as_reader<'r>(&'r self) -> RcIdentityReader<'r> {
-        RcIdentityReader::new_unchecked(self.as_slice())
+    pub fn as_reader<'r>(&'r self) -> IdentityReader<'r> {
+        IdentityReader::new_unchecked(self.as_slice())
     }
 }
-impl molecule::prelude::Entity for RcIdentity {
-    type Builder = RcIdentityBuilder;
-    const NAME: &'static str = "RcIdentity";
+impl molecule::prelude::Entity for Identity {
+    type Builder = IdentityBuilder;
+    const NAME: &'static str = "Identity";
     fn new_unchecked(data: molecule::bytes::Bytes) -> Self {
-        RcIdentity(data)
+        Identity(data)
     }
     fn as_bytes(&self) -> molecule::bytes::Bytes {
         self.0.clone()
@@ -529,10 +529,10 @@ impl molecule::prelude::Entity for RcIdentity {
         &self.0[..]
     }
     fn from_slice(slice: &[u8]) -> molecule::error::VerificationResult<Self> {
-        RcIdentityReader::from_slice(slice).map(|reader| reader.to_entity())
+        IdentityReader::from_slice(slice).map(|reader| reader.to_entity())
     }
     fn from_compatible_slice(slice: &[u8]) -> molecule::error::VerificationResult<Self> {
-        RcIdentityReader::from_compatible_slice(slice).map(|reader| reader.to_entity())
+        IdentityReader::from_compatible_slice(slice).map(|reader| reader.to_entity())
     }
     fn new_builder() -> Self::Builder {
         ::core::default::Default::default()
@@ -544,8 +544,8 @@ impl molecule::prelude::Entity for RcIdentity {
     }
 }
 #[derive(Clone, Copy)]
-pub struct RcIdentityReader<'r>(&'r [u8]);
-impl<'r> ::core::fmt::LowerHex for RcIdentityReader<'r> {
+pub struct IdentityReader<'r>(&'r [u8]);
+impl<'r> ::core::fmt::LowerHex for IdentityReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         use molecule::hex_string;
         if f.alternate() {
@@ -554,12 +554,12 @@ impl<'r> ::core::fmt::LowerHex for RcIdentityReader<'r> {
         write!(f, "{}", hex_string(self.as_slice()))
     }
 }
-impl<'r> ::core::fmt::Debug for RcIdentityReader<'r> {
+impl<'r> ::core::fmt::Debug for IdentityReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{}({:#x})", Self::NAME, self)
     }
 }
-impl<'r> ::core::fmt::Display for RcIdentityReader<'r> {
+impl<'r> ::core::fmt::Display for IdentityReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{} {{ ", Self::NAME)?;
         write!(f, "{}: {}", "identity", self.identity())?;
@@ -571,7 +571,7 @@ impl<'r> ::core::fmt::Display for RcIdentityReader<'r> {
         write!(f, " }}")
     }
 }
-impl<'r> RcIdentityReader<'r> {
+impl<'r> IdentityReader<'r> {
     pub const FIELD_COUNT: usize = 2;
     pub fn total_size(&self) -> usize {
         molecule::unpack_number(self.as_slice()) as usize
@@ -589,11 +589,11 @@ impl<'r> RcIdentityReader<'r> {
     pub fn has_extra_fields(&self) -> bool {
         Self::FIELD_COUNT != self.field_count()
     }
-    pub fn identity(&self) -> IdentityReader<'r> {
+    pub fn identity(&self) -> AuthReader<'r> {
         let slice = self.as_slice();
         let start = molecule::unpack_number(&slice[4..]) as usize;
         let end = molecule::unpack_number(&slice[8..]) as usize;
-        IdentityReader::new_unchecked(&self.as_slice()[start..end])
+        AuthReader::new_unchecked(&self.as_slice()[start..end])
     }
     pub fn proofs(&self) -> SmtProofEntryVecReader<'r> {
         let slice = self.as_slice();
@@ -606,14 +606,14 @@ impl<'r> RcIdentityReader<'r> {
         }
     }
 }
-impl<'r> molecule::prelude::Reader<'r> for RcIdentityReader<'r> {
-    type Entity = RcIdentity;
-    const NAME: &'static str = "RcIdentityReader";
+impl<'r> molecule::prelude::Reader<'r> for IdentityReader<'r> {
+    type Entity = Identity;
+    const NAME: &'static str = "IdentityReader";
     fn to_entity(&self) -> Self::Entity {
         Self::Entity::new_unchecked(self.as_slice().to_owned().into())
     }
     fn new_unchecked(slice: &'r [u8]) -> Self {
-        RcIdentityReader(slice)
+        IdentityReader(slice)
     }
     fn as_slice(&self) -> &'r [u8] {
         self.0
@@ -655,19 +655,19 @@ impl<'r> molecule::prelude::Reader<'r> for RcIdentityReader<'r> {
         if offsets.windows(2).any(|i| i[0] > i[1]) {
             return ve!(Self, OffsetsNotMatch);
         }
-        IdentityReader::verify(&slice[offsets[0]..offsets[1]], compatible)?;
+        AuthReader::verify(&slice[offsets[0]..offsets[1]], compatible)?;
         SmtProofEntryVecReader::verify(&slice[offsets[1]..offsets[2]], compatible)?;
         Ok(())
     }
 }
 #[derive(Debug, Default)]
-pub struct RcIdentityBuilder {
-    pub(crate) identity: Identity,
+pub struct IdentityBuilder {
+    pub(crate) identity: Auth,
     pub(crate) proofs: SmtProofEntryVec,
 }
-impl RcIdentityBuilder {
+impl IdentityBuilder {
     pub const FIELD_COUNT: usize = 2;
-    pub fn identity(mut self, v: Identity) -> Self {
+    pub fn identity(mut self, v: Auth) -> Self {
         self.identity = v;
         self
     }
@@ -676,9 +676,9 @@ impl RcIdentityBuilder {
         self
     }
 }
-impl molecule::prelude::Builder for RcIdentityBuilder {
-    type Entity = RcIdentity;
-    const NAME: &'static str = "RcIdentityBuilder";
+impl molecule::prelude::Builder for IdentityBuilder {
+    type Entity = Identity;
+    const NAME: &'static str = "IdentityBuilder";
     fn expected_length(&self) -> usize {
         molecule::NUMBER_SIZE * (Self::FIELD_COUNT + 1)
             + self.identity.as_slice().len()
@@ -703,12 +703,12 @@ impl molecule::prelude::Builder for RcIdentityBuilder {
         let mut inner = Vec::with_capacity(self.expected_length());
         self.write(&mut inner)
             .unwrap_or_else(|_| panic!("{} build should be ok", Self::NAME));
-        RcIdentity::new_unchecked(inner.into())
+        Identity::new_unchecked(inner.into())
     }
 }
 #[derive(Clone)]
-pub struct RcIdentityOpt(molecule::bytes::Bytes);
-impl ::core::fmt::LowerHex for RcIdentityOpt {
+pub struct IdentityOpt(molecule::bytes::Bytes);
+impl ::core::fmt::LowerHex for IdentityOpt {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         use molecule::hex_string;
         if f.alternate() {
@@ -717,12 +717,12 @@ impl ::core::fmt::LowerHex for RcIdentityOpt {
         write!(f, "{}", hex_string(self.as_slice()))
     }
 }
-impl ::core::fmt::Debug for RcIdentityOpt {
+impl ::core::fmt::Debug for IdentityOpt {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{}({:#x})", Self::NAME, self)
     }
 }
-impl ::core::fmt::Display for RcIdentityOpt {
+impl ::core::fmt::Display for IdentityOpt {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         if let Some(v) = self.to_opt() {
             write!(f, "{}(Some({}))", Self::NAME, v)
@@ -731,35 +731,35 @@ impl ::core::fmt::Display for RcIdentityOpt {
         }
     }
 }
-impl ::core::default::Default for RcIdentityOpt {
+impl ::core::default::Default for IdentityOpt {
     fn default() -> Self {
         let v: Vec<u8> = vec![];
-        RcIdentityOpt::new_unchecked(v.into())
+        IdentityOpt::new_unchecked(v.into())
     }
 }
-impl RcIdentityOpt {
+impl IdentityOpt {
     pub fn is_none(&self) -> bool {
         self.0.is_empty()
     }
     pub fn is_some(&self) -> bool {
         !self.0.is_empty()
     }
-    pub fn to_opt(&self) -> Option<RcIdentity> {
+    pub fn to_opt(&self) -> Option<Identity> {
         if self.is_none() {
             None
         } else {
-            Some(RcIdentity::new_unchecked(self.0.clone()))
+            Some(Identity::new_unchecked(self.0.clone()))
         }
     }
-    pub fn as_reader<'r>(&'r self) -> RcIdentityOptReader<'r> {
-        RcIdentityOptReader::new_unchecked(self.as_slice())
+    pub fn as_reader<'r>(&'r self) -> IdentityOptReader<'r> {
+        IdentityOptReader::new_unchecked(self.as_slice())
     }
 }
-impl molecule::prelude::Entity for RcIdentityOpt {
-    type Builder = RcIdentityOptBuilder;
-    const NAME: &'static str = "RcIdentityOpt";
+impl molecule::prelude::Entity for IdentityOpt {
+    type Builder = IdentityOptBuilder;
+    const NAME: &'static str = "IdentityOpt";
     fn new_unchecked(data: molecule::bytes::Bytes) -> Self {
-        RcIdentityOpt(data)
+        IdentityOpt(data)
     }
     fn as_bytes(&self) -> molecule::bytes::Bytes {
         self.0.clone()
@@ -768,10 +768,10 @@ impl molecule::prelude::Entity for RcIdentityOpt {
         &self.0[..]
     }
     fn from_slice(slice: &[u8]) -> molecule::error::VerificationResult<Self> {
-        RcIdentityOptReader::from_slice(slice).map(|reader| reader.to_entity())
+        IdentityOptReader::from_slice(slice).map(|reader| reader.to_entity())
     }
     fn from_compatible_slice(slice: &[u8]) -> molecule::error::VerificationResult<Self> {
-        RcIdentityOptReader::from_compatible_slice(slice).map(|reader| reader.to_entity())
+        IdentityOptReader::from_compatible_slice(slice).map(|reader| reader.to_entity())
     }
     fn new_builder() -> Self::Builder {
         ::core::default::Default::default()
@@ -781,8 +781,8 @@ impl molecule::prelude::Entity for RcIdentityOpt {
     }
 }
 #[derive(Clone, Copy)]
-pub struct RcIdentityOptReader<'r>(&'r [u8]);
-impl<'r> ::core::fmt::LowerHex for RcIdentityOptReader<'r> {
+pub struct IdentityOptReader<'r>(&'r [u8]);
+impl<'r> ::core::fmt::LowerHex for IdentityOptReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         use molecule::hex_string;
         if f.alternate() {
@@ -791,12 +791,12 @@ impl<'r> ::core::fmt::LowerHex for RcIdentityOptReader<'r> {
         write!(f, "{}", hex_string(self.as_slice()))
     }
 }
-impl<'r> ::core::fmt::Debug for RcIdentityOptReader<'r> {
+impl<'r> ::core::fmt::Debug for IdentityOptReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{}({:#x})", Self::NAME, self)
     }
 }
-impl<'r> ::core::fmt::Display for RcIdentityOptReader<'r> {
+impl<'r> ::core::fmt::Display for IdentityOptReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         if let Some(v) = self.to_opt() {
             write!(f, "{}(Some({}))", Self::NAME, v)
@@ -805,51 +805,51 @@ impl<'r> ::core::fmt::Display for RcIdentityOptReader<'r> {
         }
     }
 }
-impl<'r> RcIdentityOptReader<'r> {
+impl<'r> IdentityOptReader<'r> {
     pub fn is_none(&self) -> bool {
         self.0.is_empty()
     }
     pub fn is_some(&self) -> bool {
         !self.0.is_empty()
     }
-    pub fn to_opt(&self) -> Option<RcIdentityReader<'r>> {
+    pub fn to_opt(&self) -> Option<IdentityReader<'r>> {
         if self.is_none() {
             None
         } else {
-            Some(RcIdentityReader::new_unchecked(self.as_slice()))
+            Some(IdentityReader::new_unchecked(self.as_slice()))
         }
     }
 }
-impl<'r> molecule::prelude::Reader<'r> for RcIdentityOptReader<'r> {
-    type Entity = RcIdentityOpt;
-    const NAME: &'static str = "RcIdentityOptReader";
+impl<'r> molecule::prelude::Reader<'r> for IdentityOptReader<'r> {
+    type Entity = IdentityOpt;
+    const NAME: &'static str = "IdentityOptReader";
     fn to_entity(&self) -> Self::Entity {
         Self::Entity::new_unchecked(self.as_slice().to_owned().into())
     }
     fn new_unchecked(slice: &'r [u8]) -> Self {
-        RcIdentityOptReader(slice)
+        IdentityOptReader(slice)
     }
     fn as_slice(&self) -> &'r [u8] {
         self.0
     }
     fn verify(slice: &[u8], compatible: bool) -> molecule::error::VerificationResult<()> {
         if !slice.is_empty() {
-            RcIdentityReader::verify(&slice[..], compatible)?;
+            IdentityReader::verify(&slice[..], compatible)?;
         }
         Ok(())
     }
 }
 #[derive(Debug, Default)]
-pub struct RcIdentityOptBuilder(pub(crate) Option<RcIdentity>);
-impl RcIdentityOptBuilder {
-    pub fn set(mut self, v: Option<RcIdentity>) -> Self {
+pub struct IdentityOptBuilder(pub(crate) Option<Identity>);
+impl IdentityOptBuilder {
+    pub fn set(mut self, v: Option<Identity>) -> Self {
         self.0 = v;
         self
     }
 }
-impl molecule::prelude::Builder for RcIdentityOptBuilder {
-    type Entity = RcIdentityOpt;
-    const NAME: &'static str = "RcIdentityOptBuilder";
+impl molecule::prelude::Builder for IdentityOptBuilder {
+    type Entity = IdentityOpt;
+    const NAME: &'static str = "IdentityOptBuilder";
     fn expected_length(&self) -> usize {
         self.0
             .as_ref()
@@ -866,12 +866,12 @@ impl molecule::prelude::Builder for RcIdentityOptBuilder {
         let mut inner = Vec::with_capacity(self.expected_length());
         self.write(&mut inner)
             .unwrap_or_else(|_| panic!("{} build should be ok", Self::NAME));
-        RcIdentityOpt::new_unchecked(inner.into())
+        IdentityOpt::new_unchecked(inner.into())
     }
 }
 #[derive(Clone)]
-pub struct RcLockWitnessLock(molecule::bytes::Bytes);
-impl ::core::fmt::LowerHex for RcLockWitnessLock {
+pub struct OmniLockWitnessLock(molecule::bytes::Bytes);
+impl ::core::fmt::LowerHex for OmniLockWitnessLock {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         use molecule::hex_string;
         if f.alternate() {
@@ -880,16 +880,16 @@ impl ::core::fmt::LowerHex for RcLockWitnessLock {
         write!(f, "{}", hex_string(self.as_slice()))
     }
 }
-impl ::core::fmt::Debug for RcLockWitnessLock {
+impl ::core::fmt::Debug for OmniLockWitnessLock {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{}({:#x})", Self::NAME, self)
     }
 }
-impl ::core::fmt::Display for RcLockWitnessLock {
+impl ::core::fmt::Display for OmniLockWitnessLock {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{} {{ ", Self::NAME)?;
         write!(f, "{}: {}", "signature", self.signature())?;
-        write!(f, ", {}: {}", "rc_identity", self.rc_identity())?;
+        write!(f, ", {}: {}", "omni_identity", self.omni_identity())?;
         write!(f, ", {}: {}", "preimage", self.preimage())?;
         let extra_count = self.count_extra_fields();
         if extra_count != 0 {
@@ -898,13 +898,13 @@ impl ::core::fmt::Display for RcLockWitnessLock {
         write!(f, " }}")
     }
 }
-impl ::core::default::Default for RcLockWitnessLock {
+impl ::core::default::Default for OmniLockWitnessLock {
     fn default() -> Self {
         let v: Vec<u8> = vec![16, 0, 0, 0, 16, 0, 0, 0, 16, 0, 0, 0, 16, 0, 0, 0];
-        RcLockWitnessLock::new_unchecked(v.into())
+        OmniLockWitnessLock::new_unchecked(v.into())
     }
 }
-impl RcLockWitnessLock {
+impl OmniLockWitnessLock {
     pub const FIELD_COUNT: usize = 3;
     pub fn total_size(&self) -> usize {
         molecule::unpack_number(self.as_slice()) as usize
@@ -928,11 +928,11 @@ impl RcLockWitnessLock {
         let end = molecule::unpack_number(&slice[8..]) as usize;
         BytesOpt::new_unchecked(self.0.slice(start..end))
     }
-    pub fn rc_identity(&self) -> RcIdentityOpt {
+    pub fn omni_identity(&self) -> IdentityOpt {
         let slice = self.as_slice();
         let start = molecule::unpack_number(&slice[8..]) as usize;
         let end = molecule::unpack_number(&slice[12..]) as usize;
-        RcIdentityOpt::new_unchecked(self.0.slice(start..end))
+        IdentityOpt::new_unchecked(self.0.slice(start..end))
     }
     pub fn preimage(&self) -> BytesOpt {
         let slice = self.as_slice();
@@ -944,15 +944,15 @@ impl RcLockWitnessLock {
             BytesOpt::new_unchecked(self.0.slice(start..))
         }
     }
-    pub fn as_reader<'r>(&'r self) -> RcLockWitnessLockReader<'r> {
-        RcLockWitnessLockReader::new_unchecked(self.as_slice())
+    pub fn as_reader<'r>(&'r self) -> OmniLockWitnessLockReader<'r> {
+        OmniLockWitnessLockReader::new_unchecked(self.as_slice())
     }
 }
-impl molecule::prelude::Entity for RcLockWitnessLock {
-    type Builder = RcLockWitnessLockBuilder;
-    const NAME: &'static str = "RcLockWitnessLock";
+impl molecule::prelude::Entity for OmniLockWitnessLock {
+    type Builder = OmniLockWitnessLockBuilder;
+    const NAME: &'static str = "OmniLockWitnessLock";
     fn new_unchecked(data: molecule::bytes::Bytes) -> Self {
-        RcLockWitnessLock(data)
+        OmniLockWitnessLock(data)
     }
     fn as_bytes(&self) -> molecule::bytes::Bytes {
         self.0.clone()
@@ -961,10 +961,10 @@ impl molecule::prelude::Entity for RcLockWitnessLock {
         &self.0[..]
     }
     fn from_slice(slice: &[u8]) -> molecule::error::VerificationResult<Self> {
-        RcLockWitnessLockReader::from_slice(slice).map(|reader| reader.to_entity())
+        OmniLockWitnessLockReader::from_slice(slice).map(|reader| reader.to_entity())
     }
     fn from_compatible_slice(slice: &[u8]) -> molecule::error::VerificationResult<Self> {
-        RcLockWitnessLockReader::from_compatible_slice(slice).map(|reader| reader.to_entity())
+        OmniLockWitnessLockReader::from_compatible_slice(slice).map(|reader| reader.to_entity())
     }
     fn new_builder() -> Self::Builder {
         ::core::default::Default::default()
@@ -972,13 +972,13 @@ impl molecule::prelude::Entity for RcLockWitnessLock {
     fn as_builder(self) -> Self::Builder {
         Self::new_builder()
             .signature(self.signature())
-            .rc_identity(self.rc_identity())
+            .omni_identity(self.omni_identity())
             .preimage(self.preimage())
     }
 }
 #[derive(Clone, Copy)]
-pub struct RcLockWitnessLockReader<'r>(&'r [u8]);
-impl<'r> ::core::fmt::LowerHex for RcLockWitnessLockReader<'r> {
+pub struct OmniLockWitnessLockReader<'r>(&'r [u8]);
+impl<'r> ::core::fmt::LowerHex for OmniLockWitnessLockReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         use molecule::hex_string;
         if f.alternate() {
@@ -987,16 +987,16 @@ impl<'r> ::core::fmt::LowerHex for RcLockWitnessLockReader<'r> {
         write!(f, "{}", hex_string(self.as_slice()))
     }
 }
-impl<'r> ::core::fmt::Debug for RcLockWitnessLockReader<'r> {
+impl<'r> ::core::fmt::Debug for OmniLockWitnessLockReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{}({:#x})", Self::NAME, self)
     }
 }
-impl<'r> ::core::fmt::Display for RcLockWitnessLockReader<'r> {
+impl<'r> ::core::fmt::Display for OmniLockWitnessLockReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{} {{ ", Self::NAME)?;
         write!(f, "{}: {}", "signature", self.signature())?;
-        write!(f, ", {}: {}", "rc_identity", self.rc_identity())?;
+        write!(f, ", {}: {}", "omni_identity", self.omni_identity())?;
         write!(f, ", {}: {}", "preimage", self.preimage())?;
         let extra_count = self.count_extra_fields();
         if extra_count != 0 {
@@ -1005,7 +1005,7 @@ impl<'r> ::core::fmt::Display for RcLockWitnessLockReader<'r> {
         write!(f, " }}")
     }
 }
-impl<'r> RcLockWitnessLockReader<'r> {
+impl<'r> OmniLockWitnessLockReader<'r> {
     pub const FIELD_COUNT: usize = 3;
     pub fn total_size(&self) -> usize {
         molecule::unpack_number(self.as_slice()) as usize
@@ -1029,11 +1029,11 @@ impl<'r> RcLockWitnessLockReader<'r> {
         let end = molecule::unpack_number(&slice[8..]) as usize;
         BytesOptReader::new_unchecked(&self.as_slice()[start..end])
     }
-    pub fn rc_identity(&self) -> RcIdentityOptReader<'r> {
+    pub fn omni_identity(&self) -> IdentityOptReader<'r> {
         let slice = self.as_slice();
         let start = molecule::unpack_number(&slice[8..]) as usize;
         let end = molecule::unpack_number(&slice[12..]) as usize;
-        RcIdentityOptReader::new_unchecked(&self.as_slice()[start..end])
+        IdentityOptReader::new_unchecked(&self.as_slice()[start..end])
     }
     pub fn preimage(&self) -> BytesOptReader<'r> {
         let slice = self.as_slice();
@@ -1046,14 +1046,14 @@ impl<'r> RcLockWitnessLockReader<'r> {
         }
     }
 }
-impl<'r> molecule::prelude::Reader<'r> for RcLockWitnessLockReader<'r> {
-    type Entity = RcLockWitnessLock;
-    const NAME: &'static str = "RcLockWitnessLockReader";
+impl<'r> molecule::prelude::Reader<'r> for OmniLockWitnessLockReader<'r> {
+    type Entity = OmniLockWitnessLock;
+    const NAME: &'static str = "OmniLockWitnessLockReader";
     fn to_entity(&self) -> Self::Entity {
         Self::Entity::new_unchecked(self.as_slice().to_owned().into())
     }
     fn new_unchecked(slice: &'r [u8]) -> Self {
-        RcLockWitnessLockReader(slice)
+        OmniLockWitnessLockReader(slice)
     }
     fn as_slice(&self) -> &'r [u8] {
         self.0
@@ -1096,25 +1096,25 @@ impl<'r> molecule::prelude::Reader<'r> for RcLockWitnessLockReader<'r> {
             return ve!(Self, OffsetsNotMatch);
         }
         BytesOptReader::verify(&slice[offsets[0]..offsets[1]], compatible)?;
-        RcIdentityOptReader::verify(&slice[offsets[1]..offsets[2]], compatible)?;
+        IdentityOptReader::verify(&slice[offsets[1]..offsets[2]], compatible)?;
         BytesOptReader::verify(&slice[offsets[2]..offsets[3]], compatible)?;
         Ok(())
     }
 }
 #[derive(Debug, Default)]
-pub struct RcLockWitnessLockBuilder {
+pub struct OmniLockWitnessLockBuilder {
     pub(crate) signature: BytesOpt,
-    pub(crate) rc_identity: RcIdentityOpt,
+    pub(crate) omni_identity: IdentityOpt,
     pub(crate) preimage: BytesOpt,
 }
-impl RcLockWitnessLockBuilder {
+impl OmniLockWitnessLockBuilder {
     pub const FIELD_COUNT: usize = 3;
     pub fn signature(mut self, v: BytesOpt) -> Self {
         self.signature = v;
         self
     }
-    pub fn rc_identity(mut self, v: RcIdentityOpt) -> Self {
-        self.rc_identity = v;
+    pub fn omni_identity(mut self, v: IdentityOpt) -> Self {
+        self.omni_identity = v;
         self
     }
     pub fn preimage(mut self, v: BytesOpt) -> Self {
@@ -1122,13 +1122,13 @@ impl RcLockWitnessLockBuilder {
         self
     }
 }
-impl molecule::prelude::Builder for RcLockWitnessLockBuilder {
-    type Entity = RcLockWitnessLock;
-    const NAME: &'static str = "RcLockWitnessLockBuilder";
+impl molecule::prelude::Builder for OmniLockWitnessLockBuilder {
+    type Entity = OmniLockWitnessLock;
+    const NAME: &'static str = "OmniLockWitnessLockBuilder";
     fn expected_length(&self) -> usize {
         molecule::NUMBER_SIZE * (Self::FIELD_COUNT + 1)
             + self.signature.as_slice().len()
-            + self.rc_identity.as_slice().len()
+            + self.omni_identity.as_slice().len()
             + self.preimage.as_slice().len()
     }
     fn write<W: molecule::io::Write>(&self, writer: &mut W) -> molecule::io::Result<()> {
@@ -1137,7 +1137,7 @@ impl molecule::prelude::Builder for RcLockWitnessLockBuilder {
         offsets.push(total_size);
         total_size += self.signature.as_slice().len();
         offsets.push(total_size);
-        total_size += self.rc_identity.as_slice().len();
+        total_size += self.omni_identity.as_slice().len();
         offsets.push(total_size);
         total_size += self.preimage.as_slice().len();
         writer.write_all(&molecule::pack_number(total_size as molecule::Number))?;
@@ -1145,7 +1145,7 @@ impl molecule::prelude::Builder for RcLockWitnessLockBuilder {
             writer.write_all(&molecule::pack_number(offset as molecule::Number))?;
         }
         writer.write_all(self.signature.as_slice())?;
-        writer.write_all(self.rc_identity.as_slice())?;
+        writer.write_all(self.omni_identity.as_slice())?;
         writer.write_all(self.preimage.as_slice())?;
         Ok(())
     }
@@ -1153,6 +1153,6 @@ impl molecule::prelude::Builder for RcLockWitnessLockBuilder {
         let mut inner = Vec::with_capacity(self.expected_length());
         self.write(&mut inner)
             .unwrap_or_else(|_| panic!("{} build should be ok", Self::NAME));
-        RcLockWitnessLock::new_unchecked(inner.into())
+        OmniLockWitnessLock::new_unchecked(inner.into())
     }
 }

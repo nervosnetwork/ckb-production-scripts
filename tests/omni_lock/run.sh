@@ -8,5 +8,5 @@ cmake -DCMAKE_C_COMPILER=clang ..
 make all
 cd ../../..
 echo "Running tests"
-tests/rc_lock/${FOLDER}/rc_lock_simulator
+tests/omni_lock/${FOLDER}/omni_lock_simulator
 echo "Done"

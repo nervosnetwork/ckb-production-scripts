@@ -45,17 +45,17 @@ fn gen_out_point() -> OutPoint {
 }
 
 fn sudt_type_script(loader: &DummyDataLoader, tx: &TransactionView) -> Script {
-    let rc_lock_out_point = tx.inputs().get(0).unwrap().previous_output();
-    let rc_lock_hash = loader
+    let omni_lock_out_point = tx.inputs().get(0).unwrap().previous_output();
+    let omni_lock_hash = loader
         .cells
-        .get(&rc_lock_out_point)
+        .get(&omni_lock_out_point)
         .map(|(output, _)| output.lock().calc_script_hash())
         .unwrap();
     let data_hash = CellOutput::calc_data_hash(&SIMPLE_UDT);
     Script::new_builder()
         .code_hash(data_hash.clone())
         .hash_type(ScriptHashType::Data.into())
-        .args(rc_lock_hash.as_bytes().pack())
+        .args(omni_lock_hash.as_bytes().pack())
         .build()
 }
 

@@ -1,5 +1,5 @@
-#ifndef _RC_LOCK_SUPPLY_H_
-#define _RC_LOCK_SUPPLY_H_
+#ifndef _OMNI_LOCK_SUPPLY_H_
+#define _OMNI_LOCK_SUPPLY_H_
 #include "ckb_syscalls.h"
 
 typedef unsigned __int128 uint128_t;
@@ -209,4 +209,4 @@ exit:
   return err;
 }
 
-#endif //_RC_LOCK_SUPPLY_H_
+#endif //_OMNI_LOCK_SUPPLY_H_

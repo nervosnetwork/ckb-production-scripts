@@ -37,9 +37,9 @@ use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::traits::Hasher;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 
-use rc_lock_test::rc_lock;
-use rc_lock_test::rc_lock::RcLockWitnessLock;
-use rc_lock_test::xudt_rce_mol::{
+use omni_lock_test::omni_lock;
+use omni_lock_test::omni_lock::OmniLockWitnessLock;
+use omni_lock_test::xudt_rce_mol::{
     RCCellVecBuilder, RCDataBuilder, RCDataUnion, RCRuleBuilder, SmtProofBuilder,
     SmtProofEntryBuilder, SmtProofEntryVec, SmtProofEntryVecBuilder,
 };
@@ -82,7 +82,7 @@ pub const ERROR_BURN: i8 = 92;
 pub const ERROR_NO_INFO_CELL: i8 = 93;
 
 lazy_static! {
-    pub static ref RC_LOCK: Bytes = Bytes::from(&include_bytes!("../../../build/rc_lock")[..]);
+    pub static ref OMNI_LOCK: Bytes = Bytes::from(&include_bytes!("../../../build/omni_lock")[..]);
     pub static ref SIMPLE_UDT: Bytes =
         Bytes::from(&include_bytes!("../../../build/simple_udt")[..]);
     pub static ref SECP256K1_DATA_BIN: Bytes =
@@ -460,7 +460,7 @@ pub fn build_always_success_script() -> Script {
         .build()
 }
 
-pub fn build_rc_lock_script(config: &mut TestConfig, args: Bytes) -> Script {
+pub fn build_omni_lock_script(config: &mut TestConfig, args: Bytes) -> Script {
     let args = if config.is_owner_lock() {
         if config.scheme == TestScheme::OwnerLockMismatched {
             config.id.blake160 = {
@@ -479,7 +479,7 @@ pub fn build_rc_lock_script(config: &mut TestConfig, args: Bytes) -> Script {
             args
         }
     };
-    let sighash_all_cell_data_hash = CellOutput::calc_data_hash(&RC_LOCK);
+    let sighash_all_cell_data_hash = CellOutput::calc_data_hash(&OMNI_LOCK);
     Script::new_builder()
         .args(args.pack())
         .code_hash(sighash_all_cell_data_hash.clone())
@@ -731,15 +731,15 @@ pub fn gen_tx_with_grouped_args(
     // dep contract code
     let sighash_all_cell = CellOutput::new_builder()
         .capacity(
-            Capacity::bytes(RC_LOCK.len())
+            Capacity::bytes(OMNI_LOCK.len())
                 .expect("script capacity")
                 .pack(),
         )
         .build();
-    let sighash_all_cell_data_hash = CellOutput::calc_data_hash(&RC_LOCK);
+    let sighash_all_cell_data_hash = CellOutput::calc_data_hash(&OMNI_LOCK);
     dummy.cells.insert(
         sighash_all_out_point.clone(),
-        (sighash_all_cell, RC_LOCK.clone()),
+        (sighash_all_cell, OMNI_LOCK.clone()),
     );
     // always success
     let always_success_out_point = {
@@ -989,11 +989,11 @@ impl Identity {
         (&mut ret[1..21]).copy_from_slice(self.blake160.as_ref());
         ret
     }
-    pub fn to_identity(&self) -> rc_lock::Identity {
+    pub fn to_identity(&self) -> omni_lock::Auth {
         let mut ret: [u8; 21] = Default::default();
         ret[0] = self.flags;
         (&mut ret[1..21]).copy_from_slice(self.blake160.as_ref());
-        rc_lock::Identity::from_slice(&ret[..]).unwrap()
+        omni_lock::Auth::from_slice(&ret[..]).unwrap()
     }
 }
 
@@ -1260,61 +1260,61 @@ impl TestConfig {
         self.use_supply = true;
     }
 
-    pub fn set_rc_identity(&mut self, used: bool) {
+    pub fn set_omni_identity(&mut self, used: bool) {
         self.use_rc_identity = used;
     }
 
     pub fn gen_args(&self) -> Bytes {
         let mut bytes = BytesMut::with_capacity(128);
-        let mut rc_lock_flags: u8 = 0;
+        let mut omni_lock_flags: u8 = 0;
 
         if self.use_rc {
             if self.use_rc_identity {
-                rc_lock_flags |= RC_ROOT_MASK;
+                omni_lock_flags |= RC_ROOT_MASK;
 
                 bytes.resize(21, 0);
-                bytes.put(&[rc_lock_flags][..]);
+                bytes.put(&[omni_lock_flags][..]);
                 bytes.put(self.rc_root.as_ref());
             } else {
-                rc_lock_flags |= RC_ROOT_MASK;
+                omni_lock_flags |= RC_ROOT_MASK;
                 // auth
                 bytes.put_u8(self.id.flags);
                 bytes.put(self.id.blake160.as_ref());
                 // rc_root
-                bytes.put(&[rc_lock_flags][..]);
+                bytes.put(&[omni_lock_flags][..]);
                 bytes.put(self.rc_root.as_ref());
             }
         } else {
             bytes.put_u8(self.id.flags);
             bytes.put(self.id.blake160.as_ref());
 
-            let mut rc_lock_args = Vec::<u8>::new();
+            let mut omni_lock_args = Vec::<u8>::new();
 
             // acp
             if self.acp_config.is_some() {
-                rc_lock_flags |= ACP_MASK;
+                omni_lock_flags |= ACP_MASK;
             }
             // since
             if self.use_since {
-                rc_lock_flags |= SINCE_MASK;
+                omni_lock_flags |= SINCE_MASK;
             }
             // sudt supply
             if self.use_supply {
-                rc_lock_flags |= SUPPLY_MASK;
+                omni_lock_flags |= SUPPLY_MASK;
             }
-            rc_lock_args.push(rc_lock_flags);
+            omni_lock_args.push(omni_lock_flags);
 
             if let Some((ckb_min, udt_min)) = self.acp_config {
-                rc_lock_args.push(ckb_min);
-                rc_lock_args.push(udt_min);
+                omni_lock_args.push(ckb_min);
+                omni_lock_args.push(udt_min);
             }
             if self.use_since {
-                rc_lock_args.extend(self.args_since.to_le_bytes().iter());
+                omni_lock_args.extend(self.args_since.to_le_bytes().iter());
             }
             if self.use_supply {
-                rc_lock_args.extend(self.info_cell.iter());
+                omni_lock_args.extend(self.info_cell.iter());
             }
-            bytes.put(rc_lock_args.as_slice());
+            bytes.put(omni_lock_args.as_slice());
         }
         bytes.freeze()
     }
@@ -1338,10 +1338,10 @@ pub fn gen_witness_lock(
     use_rc: bool,
     use_rc_identity: bool,
     proofs: &SmtProofEntryVec,
-    identity: &rc_lock::Identity,
+    identity: &omni_lock::Auth,
     preimage: Option<Bytes>,
 ) -> Bytes {
-    let builder = RcLockWitnessLock::new_builder();
+    let builder = OmniLockWitnessLock::new_builder();
 
     let mut builder = builder.signature(Some(sig).pack());
 
@@ -1350,12 +1350,12 @@ pub fn gen_witness_lock(
     }
 
     if use_rc && use_rc_identity {
-        let rc_identity = rc_lock::RcIdentityBuilder::default()
+        let rc_identity = omni_lock::IdentityBuilder::default()
             .identity(identity.clone())
             .proofs(proofs.clone())
             .build();
-        let opt = rc_lock::RcIdentityOpt::new_unchecked(rc_identity.as_bytes());
-        builder = builder.rc_identity(opt);
+        let opt = omni_lock::IdentityOpt::new_unchecked(rc_identity.as_bytes());
+        builder = builder.omni_identity(opt);
     }
     builder.build().as_bytes()
 }
@@ -1464,7 +1464,7 @@ pub fn gen_zero_witness_lock(
     use_rc: bool,
     use_rc_identity: bool,
     proofs: &SmtProofEntryVec,
-    identity: &rc_lock::Identity,
+    identity: &omni_lock::Auth,
     sig_len: usize,
     preimage_len: usize,
 ) -> Bytes {

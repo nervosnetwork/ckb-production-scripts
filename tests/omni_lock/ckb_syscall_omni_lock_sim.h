@@ -11,7 +11,7 @@
 
 #include "include/secp256k1.h"
 #include "include/secp256k1_recovery.h"
-#include "rc_lock_mol.h"
+#include "omni_lock_mol.h"
 #include "xudt_rce_mol.h"
 
 #define VERY_LONG_DATA_SIZE 655360
@@ -152,41 +152,41 @@ mol_seg_t build_proof_vec(slice_t* proof, uint32_t proof_len) {
   return res.seg;
 }
 
-mol_seg_t build_identity(uint8_t flags, uint8_t* blake160) {
+mol_seg_t build_auth(uint8_t flags, uint8_t* blake160) {
   mol_builder_t b;
-  MolBuilder_Identity_init(&b);
+  MolBuilder_Auth_init(&b);
   b.data_ptr[0] = flags;
   memcpy(&b.data_ptr[1], blake160, 20);
-  mol_seg_res_t res = MolBuilder_Identity_build(b);
+  mol_seg_res_t res = MolBuilder_Auth_build(b);
   ASSERT(res.errno == 0);
   return res.seg;
 }
 
 mol_seg_t build_rc_identity(mol_seg_t* identity, mol_seg_t* proofs) {
   mol_builder_t b;
-  MolBuilder_RcIdentity_init(&b);
-  MolBuilder_RcIdentity_set_identity(&b, identity->ptr, identity->size);
-  MolBuilder_RcIdentity_set_proofs(&b, proofs->ptr, proofs->size);
+  MolBuilder_Identity_init(&b);
+  MolBuilder_Identity_set_identity(&b, identity->ptr, identity->size);
+  MolBuilder_Identity_set_proofs(&b, proofs->ptr, proofs->size);
 
-  mol_seg_res_t res = MolBuilder_RcIdentity_build(b);
+  mol_seg_res_t res = MolBuilder_Identity_build(b);
   ASSERT(res.errno == 0);
   return res.seg;
 }
 
 mol_seg_t build_witness_lock() {
   mol_builder_t witness_lock;
-  MolBuilder_RcLockWitnessLock_init(&witness_lock);
+  MolBuilder_OmniLockWitnessLock_init(&witness_lock);
 
   mol_seg_t signature =
       build_bytes(g_setting.signature, sizeof(g_setting.signature));
   mol_seg_t proofs = build_proof_vec(g_setting.proofs, g_setting.proof_count);
-  mol_seg_t identity = build_identity(g_setting.flags, g_setting.blake160);
+  mol_seg_t identity = build_auth(g_setting.flags, g_setting.blake160);
   mol_seg_t rc_identity = build_rc_identity(&identity, &proofs);
 
-  MolBuilder_RcLockWitnessLock_set_signature(&witness_lock, signature.ptr,
+  MolBuilder_OmniLockWitnessLock_set_signature(&witness_lock, signature.ptr,
                                              signature.size);
   if (g_setting.use_rc) {
-    MolBuilder_RcLockWitnessLock_set_rc_identity(&witness_lock, rc_identity.ptr,
+    MolBuilder_OmniLockWitnessLock_set_omni_identity(&witness_lock, rc_identity.ptr,
                                                  rc_identity.size);
   }
 
@@ -195,7 +195,7 @@ mol_seg_t build_witness_lock() {
   free(identity.ptr);
   free(rc_identity.ptr);
 
-  mol_seg_res_t res = MolBuilder_RcLockWitnessLock_build(witness_lock);
+  mol_seg_res_t res = MolBuilder_OmniLockWitnessLock_build(witness_lock);
   ASSERT(res.errno == 0);
   return res.seg;
 }

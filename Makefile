@@ -9,8 +9,8 @@ SECP256K1_SRC_20210801 := deps/secp256k1-20210801/src/ecmult_static_pre_context.
 
 XUDT_RCE_CFLAGS=$(subst ckb-c-std-lib,ckb-c-stdlib-20210713,$(CFLAGS)) -I deps/sparse-merkle-tree/c
 
-RC_LOCK_CFLAGS :=$(subst ckb-c-std-lib,ckb-c-stdlib-20210801,$(CFLAGS)) -I deps/sparse-merkle-tree/c
-RC_LOCK_CFLAGS := $(subst secp256k1,secp256k1-20210801,$(RC_LOCK_CFLAGS))
+OMNI_LOCK_CFLAGS :=$(subst ckb-c-std-lib,ckb-c-stdlib-20210801,$(CFLAGS)) -I deps/sparse-merkle-tree/c
+OMNI_LOCK_CFLAGS := $(subst secp256k1,secp256k1-20210801,$(OMNI_LOCK_CFLAGS))
 
 PROTOCOL_HEADER := c/blockchain.h
 PROTOCOL_SCHEMA := c/blockchain.mol
@@ -28,7 +28,7 @@ PASSED_MBEDTLS_CFLAGS := -O3 -fPIC -nostdinc -nostdlib -DCKB_DECLARATION_ONLY -I
 BUILDER_DOCKER := nervos/ckb-riscv-gnu-toolchain@sha256:aae8a3f79705f67d505d1f1d5ddc694a4fd537ed1c7e9622420a470d59ba2ec3
 CLANG_FORMAT_DOCKER := kason223/clang-format@sha256:3cce35b0400a7d420ec8504558a02bdfc12fd2d10e40206f140c4545059cd95d
 
-all: build/simple_udt build/anyone_can_pay build/always_success build/validate_signature_rsa build/xudt_rce build/rce_validator build/rc_lock
+all: build/simple_udt build/anyone_can_pay build/always_success build/validate_signature_rsa build/xudt_rce build/rce_validator build/omni_lock
 
 all-via-docker: ${PROTOCOL_HEADER}
 	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make"
@@ -112,8 +112,8 @@ validate_signature_rsa_clean:
 ${PROTOCOL_SCHEMA}:
 	curl -L -o $@ ${PROTOCOL_URL}
 
-ALL_C_SOURCE := $(wildcard c/rc_lock.c c/rc_lock_acp.h c/rc_lock_time_lock.h \
-	tests/rc_lock/rc_lock_sim.c tests/rc_lock/ckb_syscall_rc_lock_sim.h tests/rc_lock/rc_lock_supply.h\
+ALL_C_SOURCE := $(wildcard c/omni_lock.c c/omni_lock_acp.h c/omni_lock_time_lock.h \
+	tests/omni_lock/omni_lock_sim.c tests/omni_lock/ckb_syscall_omni_lock_sim.h tests/omni_lock/omni_lock_supply.h\
 	c/rce_validator.c /always_success.c c/rce.h c/xudt_rce.c \
 	c/rce_validator.c tests/xudt_rce/*.c tests/xudt_rce/*.h\
 	c/validate_signature_rsa.h c/validate_signature_rsa.c)
@@ -129,7 +129,7 @@ mol:
 	make c/xudt_rce_mol.h
 	make c/xudt_rce_mol2.h
 	make xudt/src/xudt_rce_mol.rs
-	make rc_lock_mol
+	make omni_lock_mol
 
 xudt/src/xudt_rce_mol.rs: c/xudt_rce.mol
 	${MOLC} --language rust --schema-file $< | rustfmt > $@
@@ -141,11 +141,11 @@ c/xudt_rce_mol2.h: c/xudt_rce.mol
 	moleculec --language - --schema-file c/xudt_rce.mol --format json > build/blockchain_mol2.json
 	moleculec-c2 --input build/blockchain_mol2.json | clang-format -style=Google > c/xudt_rce_mol2.h
 
-rc_lock_mol:
-	${MOLC} --language rust --schema-file c/rc_lock.mol | rustfmt > tests/rc_lock_rust/src/rc_lock.rs
-	${MOLC} --language c --schema-file c/rc_lock.mol > c/rc_lock_mol.h
-	${MOLC} --language - --schema-file c/rc_lock.mol --format json > build/rc_lock_mol2.json
-	moleculec-c2 --input build/rc_lock_mol2.json | clang-format -style=Google > c/rc_lock_mol2.h
+omni_lock_mol:
+	${MOLC} --language rust --schema-file c/omni_lock.mol | rustfmt > tests/omni_lock_rust/src/omni_lock.rs
+	${MOLC} --language c --schema-file c/omni_lock.mol > c/omni_lock_mol.h
+	${MOLC} --language - --schema-file c/omni_lock.mol --format json > build/omni_lock_mol2.json
+	moleculec-c2 --input build/omni_lock_mol2.json | clang-format -style=Google > c/omni_lock_mol2.h
 
 build/xudt_rce: c/xudt_rce.c c/rce.h
 	$(CC) $(XUDT_RCE_CFLAGS) $(LDFLAGS) -o $@ $<
@@ -157,8 +157,8 @@ build/rce_validator: c/rce_validator.c c/rce.h
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
-build/rc_lock: c/rc_lock.c c/rc_lock_supply.h c/rc_lock_acp.h c/rce.h c/secp256k1_lock.h build/secp256k1_data_info_20210801.h $(SECP256K1_SRC_20210801) c/ckb_identity.h
-	$(CC) $(RC_LOCK_CFLAGS) $(LDFLAGS) -o $@ $<
+build/omni_lock: c/omni_lock.c c/omni_lock_supply.h c/omni_lock_acp.h c/rce.h c/secp256k1_lock.h build/secp256k1_data_info_20210801.h $(SECP256K1_SRC_20210801) c/ckb_identity.h
+	$(CC) $(OMNI_LOCK_CFLAGS) $(LDFLAGS) -o $@ $<
 	cp $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
@@ -190,7 +190,7 @@ clean:
 	rm -rf build/*.debug
 	rm -f build/xudt_rce
 	rm -f build/rce_validator
-	rm -f build/rc_lock
+	rm -f build/omni_lock
 	cd deps/secp256k1 && [ -f "Makefile" ] && make clean
 	cd deps/secp256k1-20210801 && [ -f "Makefile" ] && make clean
 	make -C deps/mbedtls/library clean

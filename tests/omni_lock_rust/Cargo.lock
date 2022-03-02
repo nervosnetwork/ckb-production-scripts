@@ -791,6 +791,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "omni-lock-test"
+version = "0.1.0"
+dependencies = [
+ "blake2b-rs",
+ "ckb-chain-spec",
+ "ckb-crypto",
+ "ckb-error",
+ "ckb-hash",
+ "ckb-script",
+ "ckb-traits",
+ "ckb-types",
+ "ckb-vm",
+ "ckb-vm-debug-utils",
+ "gdb-remote-protocol",
+ "lazy_static",
+ "openssl",
+ "rand 0.6.5",
+ "sha3",
+ "sparse-merkle-tree",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1073,28 +1095,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cbf7e9e623549b0e21f6e97cf8ecf247c1a8fd2e8a992ae265314300b2455d5c"
 dependencies = [
  "rand_core 0.3.1",
-]
-
-[[package]]
-name = "rc-lock-test"
-version = "0.1.0"
-dependencies = [
- "blake2b-rs",
- "ckb-chain-spec",
- "ckb-crypto",
- "ckb-error",
- "ckb-hash",
- "ckb-script",
- "ckb-traits",
- "ckb-types",
- "ckb-vm",
- "ckb-vm-debug-utils",
- "gdb-remote-protocol",
- "lazy_static",
- "openssl",
- "rand 0.6.5",
- "sha3",
- "sparse-merkle-tree",
 ]
 
 [[package]]
