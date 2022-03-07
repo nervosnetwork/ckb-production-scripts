@@ -27,16 +27,20 @@ const BINARIES: &[(&str, &str)] = &[
     ),
     (
         "validate_signature_rsa",
-        "4358d3433c7e0db302346ff45b87aff05ca47166cf9cdede6242616b7936591e",
+        "a638f65f650bdac13bf91134ed7eec8feded1dac5e6add9e26cf658b2a693066",
     ),
     (
         "xudt_rce",
-        "8b4ecdfdb4279a5b27d55cc0c8362a0e135315ac387e600b043748dad2a247fb",
+        "022b3f6ad414bb3877d5618a417b06b7e306ce2c4f4bcbf68f617a16fb8ca697",
     ),
     (
         "rce_validator",
-        "8a359444a55b3bc8fcf77ef883939ea0fa9980629b66ad28e13b315728d29a08"
+        "fe951ccda3ada53ccb65e29fa4577d41030fa2b76cce7f24c5f114743bbcd66a"
     ),
+    (
+        "omni_lock",
+        "f18e295b6a9286108639df659b822b1cc75216776df3d52ac9ed11a1dadadee5"
+    )
 ];
 
 fn main() {

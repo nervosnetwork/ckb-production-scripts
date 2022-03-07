@@ -8,6 +8,9 @@
 #define CKB_VERIFY_RSA 1
 // when algorithm_id is CKB_VERIFY_ISO9796_2, use RsaInfo structure
 #define CKB_VERIFY_ISO9796_2 2
+// when algorithm_id is CKB_VERIFY_ISO9796_2_BATCH, use modified RsaInfo
+// structure
+#define CKB_VERIFY_ISO9796_2_BATCH 3
 
 // used as key_size enum values: their "KeySize" are 1024, 2048, 4098 bits.
 // The term "KeySize" has same meaning below.
@@ -108,8 +111,9 @@ uint32_t get_key_size(uint8_t key_size_enum);
  * @param signature_size size of signature_buffer.
  * @param message_buffer pointer to message buffer.
  * @param message_size size of message_buffer.
- * @param output ignore. Not used
- * @param output_len ignore. Not used.
+ * @param output blake160 hash of pubkey; NULL if not needed.
+ * @param output_len length of output buffer size, should be >= 20. NULL if not
+ * needed.
  * @return 0 succeed; otherwise fail.
  */
 int validate_signature(void *prefilled_data, const uint8_t *signature_buffer,
