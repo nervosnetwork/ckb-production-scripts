@@ -1,4 +1,0 @@
-fuzz-*.log
-exec_fuzzer
-exec_coverage
-crash-*
