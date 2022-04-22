@@ -13,6 +13,10 @@ jobs:
       run: git submodule update --init
     - name: Build contract
       run: make all-via-docker
+    - name: Build exec scripts
+      run: make -f tests/taproot_lock/exec_script.Makefile all-via-docker
+    - name: Run taproot lock tests
+      run: cd tests/taproot_lock_rust && cargo test
     - name: Build test extensions
       run: make -f tests/xudt_rce/extension_scripts.Makefile all-via-docker
     - name: Run simulator tests
