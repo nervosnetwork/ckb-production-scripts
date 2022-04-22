@@ -6,8 +6,8 @@
 	url = https://github.com/nervosnetwork/ckb-c-stdlib.git
 [submodule "deps/ckb-c-stdlib-20210801"]
 	path = deps/ckb-c-stdlib-20210801
-	url = https://github.com/XuJiandong/ckb-c-stdlib.git
-	branch = ckb-identity
+	url = https://github.com/nervosnetwork/ckb-c-stdlib.git
+	branch = master
 [submodule "deps/ckb-c-stdlib-20210713"]
 	path = deps/ckb-c-stdlib-20210713
 	url = https://github.com/nervosnetwork/ckb-c-stdlib.git

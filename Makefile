@@ -168,7 +168,7 @@ build/rce_validator: c/rce_validator.c c/rce.h
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
-build/taproot_lock: c/taproot_lock.c build/secp256k1_data_info_20210801.h $(SECP256K1_SRC_20210801) deps/ckb-c-stdlib-20210801/ckb_identity.h
+build/taproot_lock: c/taproot_lock.c build/secp256k1_data_info_20210801.h $(SECP256K1_SRC_20210801) c/ckb_identity.h
 	$(CC) $(TAPROOT_LOCK_CFLAGS) $(LDFLAGS) -o $@ $<
 	cp $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
