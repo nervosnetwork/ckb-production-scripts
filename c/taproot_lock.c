@@ -316,12 +316,6 @@ int validate_signature_schnorr(void *prefilled_data, const uint8_t *sig,
   if (sig_len != SCHNORR_SIGNATURE_SIZE || msg_len != 32) {
     return ERROR_IDENTITY_ARGUMENTS_LEN;
   }
-#if 0
-  printf("validate_signature_schnorr msg = %d, %d", msg[0], msg[1]);
-  printf("validate_signature_schnorr pubkey = %d, %d", sig[0], sig[1]);
-  printf("validate_signature_schnorr sig = %d, %d", sig[SCHNORR_PUBKEY_SIZE], sig[SCHNORR_PUBKEY_SIZE+1]);
-#endif
-
   secp256k1_context ctx;
   uint8_t secp_data[CKB_SECP256K1_DATA_SIZE];
   err = ckb_secp256k1_custom_verify_only_initialize(&ctx, secp_data);

@@ -17,3 +17,17 @@ jobs:
       run: make -f tests/taproot_lock/exec_script.Makefile all-via-docker
     - name: Run taproot lock tests
       run: cd tests/taproot_lock_rust && cargo test
+    - name: Build test extensions
+      run: make -f tests/xudt_rce/extension_scripts.Makefile all-via-docker
+    - name: Run simulator tests
+      run: bash tests/validate_signature_rsa/run.sh
+    - name: Run tests
+      run: cargo test
+    - name: Run xudt tests
+      run: cd tests/xudt_rce_rust && cargo test
+    - name: Run xudt simulator tests
+      run: cd tests/xudt_rce && bash run.sh
+    - name: Run omni_lock tests
+      run: cd tests/omni_lock_rust && cargo test
+    - name: Run omni_lock simulator tests
+      run: cd tests/omni_lock && bash run.sh

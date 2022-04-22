@@ -3866,6 +3866,8 @@
 #include "mbedtls/config_psa.h"
 #endif
 
+#define MBEDTLS_HAVE_INT64
+
 #include "mbedtls/check_config.h"
 
 #endif /* MBEDTLS_CONFIG_H */
