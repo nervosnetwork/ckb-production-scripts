@@ -39,12 +39,6 @@ use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::traits::Hasher;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 
-use ckb_script::cost_model::transferred_byte_cycles;
-use ckb_vm::machine::asm::{AsmCoreMachine, AsmMachine};
-use ckb_vm::{DefaultMachineBuilder, SupportMachine};
-use ckb_vm_debug_utils::{GdbHandler, Stdio};
-use gdb_remote_protocol::process_packets_from;
-use std::net::TcpListener;
 use taproot_lock_test::taproot_lock::{
     TaprootLockWitnessLock, TaprootScriptPath, TaprootScriptPathOpt, TaprootScriptPathOptBuilder,
 };
@@ -156,8 +150,10 @@ pub struct TestConfig {
     pub scheme: TestScheme,
     pub scheme2: TestScheme2,
     pub script_path_spending: bool,
+    pub taproot_script_failed: bool,
+    pub key_path_spending_failed: bool,
 
-    // intermedia states
+    // inter media states
     smt_root: Bytes,
     smt_proof: Bytes,
     keypair: KeyPair,
@@ -181,6 +177,11 @@ impl WitnessLockMaker for TestConfig {
             let internal_key = Byte32::from_slice(&self.internal_key.serialize()).unwrap();
             let smt_root = Byte32::from_slice(&self.smt_root).unwrap();
 
+            let args2 = if self.taproot_script_failed {
+                Bytes::copy_from_slice(&[0xFF])
+            } else {
+                Default::default()
+            };
             let script_path = TaprootScriptPath::new_builder()
                 .taproot_output_key(output_key)
                 .taproot_internal_key(internal_key)
@@ -188,7 +189,7 @@ impl WitnessLockMaker for TestConfig {
                 .smt_proof(self.smt_proof.pack())
                 .y_parity(self.y_parity.into())
                 .exec_script(self.exec_script.clone())
-                .args2(Default::default())
+                .args2(args2.pack())
                 .build();
             let script_path2 = TaprootScriptPathOpt::new_builder()
                 .set(Some(script_path))
@@ -258,6 +259,8 @@ impl TestConfig {
             taproot_script: Default::default(),
             real_tweak32: Default::default(),
             script_path_spending: false,
+            taproot_script_failed: false,
+            key_path_spending_failed: false,
         }
     }
 
@@ -529,7 +532,12 @@ pub fn sign_tx_by_input_group(
                 let message = generate_sighash_all(config, &tx, begin_index);
                 config.msg = Message::from_slice(&message[..]).expect("from_slice");
                 let sig = secp.schnorrsig_sign_no_aux_rand(&config.msg, &config.keypair);
-                config.sig = sig.clone();
+
+                config.sig = if config.key_path_spending_failed {
+                    Signature::from_slice(&[0; 64]).unwrap()
+                } else {
+                    sig.clone()
+                };
 
                 debug!("msg = {:?}", &config.msg.as_ref()[..4]);
                 debug!("pubkey = {:?}", &config.output_key.serialize()[..4]);
@@ -754,7 +762,7 @@ pub fn assert_script_error(err: Error, err_code: i8) {
 pub fn gen_consensus() -> Consensus {
     let hardfork_switch = HardForkSwitch::new_without_any_enabled()
         .as_builder()
-        .rfc_0232(200)
+        .rfc_0032(200)
         .build()
         .unwrap();
     ConsensusBuilder::default()
@@ -768,69 +776,4 @@ pub fn gen_tx_env() -> TxVerifyEnv {
         .epoch(epoch.pack())
         .build();
     TxVerifyEnv::new_commit(&header)
-}
-
-/*
-* addr: the address listening on, e.g. 127.0.0.1:9999
-* script_group: the script_group (type/lock) to run
-* program: bytes of risc-v binary which must contain debug information
-* args: arguments passed to script
-* verifier:
-*/
-pub fn debug<'a, DL: CellDataProvider + HeaderProvider>(
-    addr: &str,
-    script_type: ScriptGroupType,
-    script_hash: Byte32,
-    program: &Bytes,
-    args: &[Bytes],
-    verifier: &TransactionScriptsVerifier<'a, DL>,
-) {
-    let script_group = get_script_group(&verifier, script_type, &script_hash).unwrap();
-
-    // GDB path
-    let listener = TcpListener::bind(addr).expect("listen");
-    debug!("Listening on {}", addr);
-    let script_version = ScriptVersion::V1;
-    let max_cycle = 70_000_000u64;
-
-    for res in listener.incoming() {
-        debug!("Got connection");
-        if let Ok(stream) = res {
-            let core_machine = AsmCoreMachine::new(
-                script_version.vm_isa(),
-                script_version.vm_version(),
-                max_cycle,
-            );
-            let builder = DefaultMachineBuilder::new(core_machine)
-                .instruction_cycle_func(verifier.cost_model())
-                .syscall(Box::new(Stdio::new(true)));
-            let builder = verifier
-                .generate_syscalls(script_version, script_group)
-                .into_iter()
-                .fold(builder, |builder, syscall| builder.syscall(syscall));
-            let mut machine = AsmMachine::new(builder.build(), None);
-            let bytes = machine.load_program(&program, args).expect("load program");
-            machine
-                .machine
-                .add_cycles(transferred_byte_cycles(bytes))
-                .expect("load program cycles");
-            machine.machine.set_running(true);
-            let h = GdbHandler::new(machine);
-            process_packets_from(stream.try_clone().unwrap(), stream, h);
-        }
-        debug!("Connection closed");
-    }
-}
-
-fn get_script_group<'a, DL: CellDataProvider + HeaderProvider>(
-    verifier: &'a TransactionScriptsVerifier<'a, DL>,
-    group_type: ScriptGroupType,
-    hash: &Byte32,
-) -> Option<&'a ScriptGroup> {
-    for (t, h, g) in verifier.groups() {
-        if group_type == t && h == hash {
-            return Some(g);
-        }
-    }
-    None
 }
