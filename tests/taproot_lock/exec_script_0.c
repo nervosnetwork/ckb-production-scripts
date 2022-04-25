@@ -1,9 +1,7 @@
 // uncomment to enable printf in CKB-VM
 #define CKB_C_STDLIB_PRINTF
 
-#include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
