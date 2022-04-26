@@ -1207,10 +1207,11 @@ checksum = "7bd3e3206899af3f8b12af284fafc038cc1dc2b41d1b89dd17297221c5d225de"
 
 [[package]]
 name = "sparse-merkle-tree"
-version = "0.5.2-rc1"
-source = "git+https://github.com/nervosnetwork/sparse-merkle-tree.git?rev=2dce546#2dce546eab6f7eaaab3a0886247fd12ac798ad28"
+version = "0.5.3"
+source = "git+https://github.com/nervosnetwork/sparse-merkle-tree.git?rev=dddbed3#dddbed3c524011efb7bf7fb5314e93b06b7aebb0"
 dependencies = [
- "blake2b-rs 0.1.5",
+ "blake2b-rs 0.2.0",
+ "cc",
  "cfg-if 0.1.10",
 ]
 
