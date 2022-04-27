@@ -57,6 +57,7 @@ pub const ERROR_MOL: i8 = 61;
 pub const ERROR_ARGS: i8 = 62;
 pub const ERROR_SCHNORR: i8 = 63;
 pub const ERROR_MISMATCHED: i8 = 64;
+pub const ERROR_INVALID_PROOF: i8 = 84;
 
 lazy_static! {
     pub static ref TAPROOT_LOCK: Bytes =
@@ -152,6 +153,8 @@ pub struct TestConfig {
     pub script_path_spending: bool,
     pub taproot_script_failed: bool,
     pub key_path_spending_failed: bool,
+    pub y_parity_failed: bool,
+    pub proof_failed: bool,
 
     // inter media states
     smt_root: Bytes,
@@ -182,12 +185,17 @@ impl WitnessLockMaker for TestConfig {
             } else {
                 Default::default()
             };
+            let y_parity = if self.y_parity_failed {
+                self.y_parity ^ 1
+            } else {
+                self.y_parity
+            };
             let script_path = TaprootScriptPath::new_builder()
                 .taproot_output_key(output_key)
                 .taproot_internal_key(internal_key)
                 .smt_root(smt_root)
                 .smt_proof(self.smt_proof.pack())
-                .y_parity(self.y_parity.into())
+                .y_parity(y_parity.into())
                 .exec_script(self.exec_script.clone())
                 .args2(args2.pack())
                 .build();
@@ -261,6 +269,8 @@ impl TestConfig {
             script_path_spending: false,
             taproot_script_failed: false,
             key_path_spending_failed: false,
+            y_parity_failed: false,
+            proof_failed: false,
         }
     }
 
@@ -611,9 +621,18 @@ pub fn gen_tx(dummy: &mut DummyDataLoader, config: &mut TestConfig) -> Transacti
         let mut hash32 = [0u8; 32];
         hash32.copy_from_slice(hash.as_slice());
         let (root, proof) = build_smt_on_wl(&vec![hash32]);
+        let proof = if config.proof_failed {
+            let mut p = proof.clone();
+            for item in p.iter_mut() {
+                *item ^= 1
+            }
+            p
+        } else {
+            proof
+        };
 
         config.smt_root = Bytes::copy_from_slice(root.as_slice());
-        config.smt_proof = Bytes::copy_from_slice(proof.as_slice());
+        config.smt_proof = proof.into();
 
         let mut tagged_msg = [0u8; 64];
         tagged_msg[..32].copy_from_slice(&config.internal_key.serialize()[..]);
@@ -753,7 +772,6 @@ pub fn assert_script_error(err: Error, err_code: i8) {
     //     err,
     //     ScriptError::ValidationFailure(err_code).input_lock_script(1)
     // );
-
     assert!(err
         .to_string()
         .contains(format!("error code {}", err_code).as_str()));
