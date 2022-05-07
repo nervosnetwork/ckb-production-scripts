@@ -17,15 +17,21 @@ TAPROOT_LOCK_CFLAGS := $(subst secp256k1,secp256k1-20210801,$(TAPROOT_LOCK_CFLAG
 # docker pull nervos/ckb-riscv-gnu-toolchain:gnu-bionic-20191012
 BUILDER_DOCKER := nervos/ckb-riscv-gnu-toolchain@sha256:aae8a3f79705f67d505d1f1d5ddc694a4fd537ed1c7e9622420a470d59ba2ec3
 
-all: build/exec_script_0
+all: build/exec_script_0 build/example_script
 
 all-via-docker:
 	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make -f tests/taproot_lock/exec_script.Makefile all"
 
 build/exec_script_0: tests/taproot_lock/exec_script_0.c
 	$(CC) $(TAPROOT_LOCK_CFLAGS) $(LDFLAGS) -o $@ $<
-	$(OBJCOPY) --only-keep-debug $@ $@.debug
+	cp $@ $@.debug
+	$(OBJCOPY) --strip-debug --strip-all $@
+
+build/example_script: tests/taproot_lock/example_script.c
+	$(CC) $(TAPROOT_LOCK_CFLAGS) $(LDFLAGS) -o $@ $<
+	cp $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
 clean:
 	rm -rf build/exec_script_0
+	rm -rf build/example_script

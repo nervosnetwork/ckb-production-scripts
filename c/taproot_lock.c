@@ -393,9 +393,10 @@ int exec_script(uint8_t *code_hash, uint8_t hash_type, uint8_t *args,
     return ERROR_ARGS;
   }
   size_t hex_args_len = args_len * 2 + 1;
-  char hex_args[args_len];
+  char hex_args[hex_args_len];
+
   size_t hex_args2_len = args2_len * 2 + 1;
-  char hex_args2[args2_len];
+  char hex_args2[hex_args2_len];
 
   err = ckb_bin2hex(args, args_len, hex_args, hex_args_len);
   CHECK(err);
