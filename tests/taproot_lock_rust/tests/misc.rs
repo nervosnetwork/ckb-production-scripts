@@ -39,12 +39,6 @@ use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::traits::Hasher;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 
-use ckb_script::cost_model::transferred_byte_cycles;
-use ckb_vm::machine::asm::{AsmCoreMachine, AsmMachine};
-use ckb_vm::{DefaultMachineBuilder, SupportMachine};
-use ckb_vm_debug_utils::{GdbHandler, Stdio};
-use gdb_remote_protocol::process_packets_from;
-use std::net::TcpListener;
 use taproot_lock_test::taproot_lock::{
     TaprootLockWitnessLock, TaprootScriptPath, TaprootScriptPathOpt, TaprootScriptPathOptBuilder,
 };
@@ -63,6 +57,7 @@ pub const ERROR_MOL: i8 = 61;
 pub const ERROR_ARGS: i8 = 62;
 pub const ERROR_SCHNORR: i8 = 63;
 pub const ERROR_MISMATCHED: i8 = 64;
+pub const ERROR_INVALID_PROOF: i8 = 84;
 
 lazy_static! {
     pub static ref TAPROOT_LOCK: Bytes =
@@ -73,6 +68,8 @@ lazy_static! {
         Bytes::from(&include_bytes!("../../../build/always_success")[..]);
     pub static ref EXEC_SCRIPT_0: Bytes =
         Bytes::from(&include_bytes!("../../../build/exec_script_0")[..]);
+    pub static ref EXEC_EXAMPLE_SCRIPT: Bytes =
+        Bytes::from(&include_bytes!("../../../build/example_script")[..]);
     pub static ref SMT_EXISTING: H256 = H256::from([
         1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0
@@ -156,8 +153,13 @@ pub struct TestConfig {
     pub scheme: TestScheme,
     pub scheme2: TestScheme2,
     pub script_path_spending: bool,
+    pub taproot_script_failed: bool,
+    pub key_path_spending_failed: bool,
+    pub y_parity_failed: bool,
+    pub proof_failed: bool,
+    pub use_example_script: bool,
 
-    // intermedia states
+    // inter media states
     smt_root: Bytes,
     smt_proof: Bytes,
     keypair: KeyPair,
@@ -170,7 +172,10 @@ pub struct TestConfig {
     real_tweak32: Bytes,
     exec_script: Script,
     pub taproot_script: Script,
-
+    example_keypair: KeyPair,
+    example_id: Identity,
+    example_sig: Signature,
+    example_pubkey: PublicKey,
     secp256k1_ctx: Secp256k1<All>,
 }
 
@@ -181,14 +186,32 @@ impl WitnessLockMaker for TestConfig {
             let internal_key = Byte32::from_slice(&self.internal_key.serialize()).unwrap();
             let smt_root = Byte32::from_slice(&self.smt_root).unwrap();
 
+            let args2 = if self.taproot_script_failed {
+                Bytes::copy_from_slice(&[0xFF])
+            } else {
+                if self.use_example_script {
+                    let mut b = BytesMut::new();
+                    let pubkey = self.example_pubkey.serialize();
+                    b.put_slice(pubkey.as_ref());
+                    b.put_slice(self.example_sig.as_ref());
+                    b.freeze()
+                } else {
+                    Default::default()
+                }
+            };
+            let y_parity = if self.y_parity_failed {
+                self.y_parity ^ 1
+            } else {
+                self.y_parity
+            };
             let script_path = TaprootScriptPath::new_builder()
                 .taproot_output_key(output_key)
                 .taproot_internal_key(internal_key)
                 .smt_root(smt_root)
                 .smt_proof(self.smt_proof.pack())
-                .y_parity(self.y_parity.into())
+                .y_parity(y_parity.into())
                 .exec_script(self.exec_script.clone())
-                .args2(Default::default())
+                .args2(args2.pack())
                 .build();
             let script_path2 = TaprootScriptPathOpt::new_builder()
                 .set(Some(script_path))
@@ -208,15 +231,10 @@ impl WitnessLockMaker for TestConfig {
     }
 
     fn make_empty_witness_lock(&self) -> Bytes {
-        if self.script_path_spending {
-            assert!(false);
-            Default::default()
-        } else {
-            let len = self.make_witness_lock().len();
-            let mut res = BytesMut::new();
-            res.resize(len, 0);
-            res.freeze()
-        }
+        let len = self.make_witness_lock().len();
+        let mut res = BytesMut::new();
+        res.resize(len, 0);
+        res.freeze()
     }
 }
 
@@ -232,16 +250,24 @@ impl TestConfig {
         let flags = IDENTITY_FLAGS_SCHNORR;
         let secp = Secp256k1::new();
         let secret_key = SecretKey::from_slice(&[0xcd; 32]).expect("secret key");
+        let example_secret_key = SecretKey::from_slice(&[0xef; 32]).expect("secret key");
 
         let key_pair = KeyPair::from_secret_key(&secp, secret_key);
         let pubkey = PublicKey::from_keypair(&secp, &key_pair);
 
-        let blake160 = blake160(&pubkey.serialize()[..]);
+        let blake160_hash = blake160(&pubkey.serialize()[..]);
         let sig = Signature::from_slice(&[0u8; 64]).expect("from_slice");
         let msg = Message::from_slice(&[0u8; 32]).expect("from_slice");
 
+        let example_keypair = KeyPair::from_secret_key(&secp, example_secret_key);
+        let example_pubkey = PublicKey::from_keypair(&secp, &example_keypair);
+        let example_blake160 = blake160(&example_pubkey.serialize()[..]);
+
         TestConfig {
-            id: Identity { flags, blake160 },
+            id: Identity {
+                flags,
+                blake160: blake160_hash,
+            },
             smt_root: Default::default(),
             smt_proof: Default::default(),
             scheme: TestScheme::None,
@@ -258,6 +284,18 @@ impl TestConfig {
             taproot_script: Default::default(),
             real_tweak32: Default::default(),
             script_path_spending: false,
+            taproot_script_failed: false,
+            key_path_spending_failed: false,
+            y_parity_failed: false,
+            proof_failed: false,
+            use_example_script: false,
+            example_keypair,
+            example_id: Identity {
+                flags: IDENTITY_FLAGS_SCHNORR,
+                blake160: example_blake160,
+            },
+            example_sig: Signature::from_slice(&[0u8; 64]).unwrap(),
+            example_pubkey,
         }
     }
 
@@ -529,7 +567,12 @@ pub fn sign_tx_by_input_group(
                 let message = generate_sighash_all(config, &tx, begin_index);
                 config.msg = Message::from_slice(&message[..]).expect("from_slice");
                 let sig = secp.schnorrsig_sign_no_aux_rand(&config.msg, &config.keypair);
-                config.sig = sig.clone();
+
+                config.sig = if config.key_path_spending_failed {
+                    Signature::from_slice(&[0; 64]).unwrap()
+                } else {
+                    sig.clone()
+                };
 
                 debug!("msg = {:?}", &config.msg.as_ref()[..4]);
                 debug!("pubkey = {:?}", &config.output_key.serialize()[..4]);
@@ -588,14 +631,18 @@ pub fn gen_tx(dummy: &mut DummyDataLoader, config: &mut TestConfig) -> Transacti
     tx_builder = b0;
 
     if config.script_path_spending {
-        let (b0, s) = build_script(
-            dummy,
-            tx_builder,
-            false,
-            true,
-            &EXEC_SCRIPT_0,
-            Default::default(),
-        );
+        let args = if config.use_example_script {
+            config.example_id.clone().into()
+        } else {
+            Default::default()
+        };
+        let bin: &Bytes = if config.use_example_script {
+            &EXEC_EXAMPLE_SCRIPT
+        } else {
+            &EXEC_SCRIPT_0
+        };
+
+        let (b0, s) = build_script(dummy, tx_builder, false, true, bin, args);
         tx_builder = b0;
         config.exec_script = s;
 
@@ -603,9 +650,18 @@ pub fn gen_tx(dummy: &mut DummyDataLoader, config: &mut TestConfig) -> Transacti
         let mut hash32 = [0u8; 32];
         hash32.copy_from_slice(hash.as_slice());
         let (root, proof) = build_smt_on_wl(&vec![hash32]);
+        let proof = if config.proof_failed {
+            let mut p = proof.clone();
+            for item in p.iter_mut() {
+                *item ^= 1
+            }
+            p
+        } else {
+            proof
+        };
 
         config.smt_root = Bytes::copy_from_slice(root.as_slice());
-        config.smt_proof = Bytes::copy_from_slice(proof.as_slice());
+        config.smt_proof = proof.into();
 
         let mut tagged_msg = [0u8; 64];
         tagged_msg[..32].copy_from_slice(&config.internal_key.serialize()[..]);
@@ -661,9 +717,24 @@ pub fn gen_tx(dummy: &mut DummyDataLoader, config: &mut TestConfig) -> Transacti
         .input_type(Some(Bytes::copy_from_slice(&random_extra_witness[..])).pack());
 
     if config.script_path_spending {
+        // example script needs signatures
+        if config.use_example_script {
+            let temp_tx_builder = tx_builder.clone();
+            let witness_args = witness_builder.build();
+            let temp_tx_builder = temp_tx_builder
+                .input(CellInput::new(out_point.clone(), 0))
+                .witness(witness_args.as_bytes().pack());
+
+            let tx = temp_tx_builder.build();
+            let secp = &config.secp256k1_ctx;
+            let message = generate_sighash_all(config, &tx, 0);
+            let msg = Message::from_slice(&message[..]).expect("from_slice");
+            config.example_sig = secp.schnorrsig_sign_no_aux_rand(&msg, &config.example_keypair);
+        }
         let lock = config.make_witness_lock();
         witness_builder = witness_builder.lock(Some(lock).pack());
     }
+
     let witness_args = witness_builder.build();
     tx_builder = tx_builder
         .input(CellInput::new(out_point, 0))
@@ -745,7 +816,6 @@ pub fn assert_script_error(err: Error, err_code: i8) {
     //     err,
     //     ScriptError::ValidationFailure(err_code).input_lock_script(1)
     // );
-
     assert!(err
         .to_string()
         .contains(format!("error code {}", err_code).as_str()));
@@ -754,7 +824,7 @@ pub fn assert_script_error(err: Error, err_code: i8) {
 pub fn gen_consensus() -> Consensus {
     let hardfork_switch = HardForkSwitch::new_without_any_enabled()
         .as_builder()
-        .rfc_0232(200)
+        .rfc_0032(200)
         .build()
         .unwrap();
     ConsensusBuilder::default()
@@ -768,69 +838,4 @@ pub fn gen_tx_env() -> TxVerifyEnv {
         .epoch(epoch.pack())
         .build();
     TxVerifyEnv::new_commit(&header)
-}
-
-/*
-* addr: the address listening on, e.g. 127.0.0.1:9999
-* script_group: the script_group (type/lock) to run
-* program: bytes of risc-v binary which must contain debug information
-* args: arguments passed to script
-* verifier:
-*/
-pub fn debug<'a, DL: CellDataProvider + HeaderProvider>(
-    addr: &str,
-    script_type: ScriptGroupType,
-    script_hash: Byte32,
-    program: &Bytes,
-    args: &[Bytes],
-    verifier: &TransactionScriptsVerifier<'a, DL>,
-) {
-    let script_group = get_script_group(&verifier, script_type, &script_hash).unwrap();
-
-    // GDB path
-    let listener = TcpListener::bind(addr).expect("listen");
-    debug!("Listening on {}", addr);
-    let script_version = ScriptVersion::V1;
-    let max_cycle = 70_000_000u64;
-
-    for res in listener.incoming() {
-        debug!("Got connection");
-        if let Ok(stream) = res {
-            let core_machine = AsmCoreMachine::new(
-                script_version.vm_isa(),
-                script_version.vm_version(),
-                max_cycle,
-            );
-            let builder = DefaultMachineBuilder::new(core_machine)
-                .instruction_cycle_func(verifier.cost_model())
-                .syscall(Box::new(Stdio::new(true)));
-            let builder = verifier
-                .generate_syscalls(script_version, script_group)
-                .into_iter()
-                .fold(builder, |builder, syscall| builder.syscall(syscall));
-            let mut machine = AsmMachine::new(builder.build(), None);
-            let bytes = machine.load_program(&program, args).expect("load program");
-            machine
-                .machine
-                .add_cycles(transferred_byte_cycles(bytes))
-                .expect("load program cycles");
-            machine.machine.set_running(true);
-            let h = GdbHandler::new(machine);
-            process_packets_from(stream.try_clone().unwrap(), stream, h);
-        }
-        debug!("Connection closed");
-    }
-}
-
-fn get_script_group<'a, DL: CellDataProvider + HeaderProvider>(
-    verifier: &'a TransactionScriptsVerifier<'a, DL>,
-    group_type: ScriptGroupType,
-    hash: &Byte32,
-) -> Option<&'a ScriptGroup> {
-    for (t, h, g) in verifier.groups() {
-        if group_type == t && h == hash {
-            return Some(g);
-        }
-    }
-    None
 }
