@@ -556,8 +556,8 @@ int verify_multisig(const uint8_t *lock_bytes, size_t lock_bytes_len,
   // Verify threshold signatures, threshold is a uint8_t, at most it is
   // 255, meaning this array will definitely have a reasonable upper bound.
   // Also this code uses C99's new feature to allocate a variable length array.
-  uint8_t used_signatures[threshold];
-  memset(used_signatures, 0, threshold);
+  uint8_t used_signatures[pubkeys_cnt];
+  memset(used_signatures, 0, pubkeys_cnt);
 
   // We are using bitcoin's [secp256k1
   // library](https://github.com/bitcoin-core/secp256k1) for signature
