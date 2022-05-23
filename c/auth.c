@@ -2,6 +2,13 @@
 // clang-format off
 #include "mbedtls/md.h"
 
+// configuration for secp256k1
+#define ENABLE_MODULE_EXTRAKEYS
+#define ENABLE_MODULE_SCHNORRSIG
+#define SECP256K1_BUILD
+// in secp256k1_ctz64_var: we don't have __builtin_ctzl in gcc for RISC-V
+#define __builtin_ctzl secp256k1_ctz64_var_debruijn
+
 #include "ckb_consts.h"
 #if defined(CKB_USE_SIM)
 // exclude ckb_dlfcn.h
@@ -12,13 +19,15 @@
 #endif
 
 #include "ckb_keccak256.h"
-#include "secp256k1_helper.h"
+#include "secp256k1_helper_20210801.h"
+#include "include/secp256k1_schnorrsig.h"
 
 #include "ckb_auth.h"
 #include "validate_signature_rsa.h"
 // secp256k1 also defines this macros
 #undef CHECK2
 #undef CHECK
+#undef CKB_SUCCESS
 #include "validate_signature_rsa.c"
 #include "ckb_exec.h"
 // clang-format on
@@ -33,6 +42,8 @@
 #define RECID_INDEX 64
 #define SHA256_SIZE 32
 #define RIPEMD160_SIZE 20
+#define SCHNORR_SIGNATURE_SIZE (32 + 64)
+#define SCHNORR_PUBKEY_SIZE 32
 
 enum AuthErrorCodeType {
   ERROR_NOT_IMPLEMENTED = 100,
@@ -44,7 +55,9 @@ enum AuthErrorCodeType {
   ERROR_EXEC_INVALID_PARAM,
   ERROR_EXEC_NOT_PAIRED,
   ERROR_EXEC_INVALID_SIG,
-  ERROR_EXEC_INVALID_MSG
+  ERROR_EXEC_INVALID_MSG,
+  // schnorr
+  ERROR_SCHNORR,
 };
 
 typedef int (*validate_signature_t)(void *prefilled_data, const uint8_t *sig,
@@ -236,6 +249,43 @@ int validate_signature_btc(void *prefilled_data, const uint8_t *sig,
 
 exit:
   return err;
+}
+
+int validate_signature_schnorr(void *prefilled_data, const uint8_t *sig,
+                               size_t sig_len, const uint8_t *msg,
+                               size_t msg_len, uint8_t *output,
+                               size_t *output_len) {
+  int err = 0;
+  int success = 0;
+
+  if (*output_len < BLAKE160_SIZE) {
+    return SECP256K1_PUBKEY_SIZE;
+  }
+  if (sig_len != SCHNORR_SIGNATURE_SIZE || msg_len != 32) {
+    return ERROR_INVALID_ARG;
+  }
+  secp256k1_context ctx;
+  uint8_t secp_data[CKB_SECP256K1_DATA_SIZE];
+  err = ckb_secp256k1_custom_verify_only_initialize(&ctx, secp_data);
+  if (err != 0) return err;
+
+  secp256k1_xonly_pubkey pk;
+  success = secp256k1_xonly_pubkey_parse(&ctx, &pk, sig);
+  if (!success) return ERROR_SCHNORR;
+  success =
+      secp256k1_schnorrsig_verify(&ctx, sig + SCHNORR_PUBKEY_SIZE, msg, &pk);
+  if (!success) return ERROR_SCHNORR;
+
+  uint8_t temp[BLAKE2B_BLOCK_SIZE] = {0};
+  blake2b_state blake2b_ctx;
+  blake2b_init(&blake2b_ctx, BLAKE2B_BLOCK_SIZE);
+  blake2b_update(&blake2b_ctx, sig, SCHNORR_PUBKEY_SIZE);
+  blake2b_final(&blake2b_ctx, temp, BLAKE2B_BLOCK_SIZE);
+
+  memcpy(output, temp, BLAKE160_SIZE);
+  *output_len = BLAKE160_SIZE;
+
+  return 0;
 }
 
 int convert_copy(const uint8_t *msg, size_t msg_len, uint8_t *new_msg,
@@ -630,7 +680,9 @@ __attribute__((visibility("default"))) int ckb_auth_validate(
     err = verify_multisig(signature, signature_size, message, pubkey_hash);
     CHECK(err);
   } else if (auth_algorithm_id == AuthAlgorithmIdSchnorr) {
-    return ERROR_NOT_IMPLEMENTED;
+    err = verify(pubkey_hash, signature, signature_size, message, message_size,
+                 validate_signature_schnorr, convert_copy);
+    CHECK(err);
   } else if (auth_algorithm_id == AuthAlgorithmIdRsa) {
     uint8_t hash[BLAKE160_SIZE];
     size_t len = BLAKE160_SIZE;

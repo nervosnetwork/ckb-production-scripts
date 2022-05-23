@@ -27,3 +27,7 @@ jobs:
       run: cd tests/auth && bash run.sh
     - name: Run auth_rust tests
       run: cd tests/auth_rust && bash run.sh
+    - name: Run omni_lock tests
+      run: cd tests/omni_lock_rust && cargo test
+    - name: Run omni_lock simulator tests
+      run: cd tests/omni_lock && bash run.sh

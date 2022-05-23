@@ -606,29 +606,29 @@ fn ckbmultisig_verify() {
 #[test]
 fn ckbmultisig_verify_sing_size_failed() {}
 
-#[test]
-fn schnorr() {
-    {
-        let auth = auth_builder(AlgorithmType::SchnorrOrTaproot).unwrap();
-        let config = TestConfig::new(&auth, EntryCategoryType::DynamicLinking, 1);
-        let verify_result = verify_unit(&config);
-        assert_script_error(
-            verify_result.unwrap_err(),
-            AuthErrorCodeType::NotImplemented,
-            "schnorr",
-        );
-    }
-    {
-        let auth = auth_builder(AlgorithmType::SchnorrOrTaproot).unwrap();
-        let config = TestConfig::new(&auth, EntryCategoryType::Exec, 1);
-        let verify_result = verify_unit(&config);
-        assert_script_error(
-            verify_result.unwrap_err(),
-            AuthErrorCodeType::NotImplemented,
-            "schnorr",
-        );
-    }
-}
+// #[test]
+// fn schnorr() {
+//     {
+//         let auth = auth_builder(AlgorithmType::SchnorrOrTaproot).unwrap();
+//         let config = TestConfig::new(&auth, EntryCategoryType::DynamicLinking, 1);
+//         let verify_result = verify_unit(&config);
+//         assert_script_error(
+//             verify_result.unwrap_err(),
+//             AuthErrorCodeType::NotImplemented,
+//             "schnorr",
+//         );
+//     }
+//     {
+//         let auth = auth_builder(AlgorithmType::SchnorrOrTaproot).unwrap();
+//         let config = TestConfig::new(&auth, EntryCategoryType::Exec, 1);
+//         let verify_result = verify_unit(&config);
+//         assert_script_error(
+//             verify_result.unwrap_err(),
+//             AuthErrorCodeType::NotImplemented,
+//             "schnorr",
+//         );
+//     }
+// }
 
 fn unit_test_rsa(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
     unit_test_success(auth, run_type);

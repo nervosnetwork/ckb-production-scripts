@@ -26,7 +26,7 @@
 
 enum ErrorCode {
   // 0 is the only success code. We can use 0 directly.
-  // CKB_SUCCESS = 0,
+  CKB_SUCCESS = 0,
   // error code is starting from 40, to avoid conflict with
   // common error code in other scripts.
   ERROR_RSA_INVALID_PARAM1 = 40,
@@ -196,7 +196,7 @@ __attribute__((visibility("default"))) int load_prefilled_data(void *data,
                                                                size_t *len) {
   (void)data;
   *len = 0;
-  return 0;
+  return CKB_SUCCESS;
 }
 
 uint8_t *get_rsa_signature(RsaInfo *info) {
@@ -279,7 +279,7 @@ int validate_signature_rsa(void *prefilled_data,
     *output_len = BLAKE160_SIZE;
   }
 
-  err = 0;
+  err = CKB_SUCCESS;
 
 exit:
   if (is_rsa_inited) mbedtls_rsa_free(&rsa);
@@ -573,7 +573,13 @@ int validate_signature_iso9796_2(void *_p, const uint8_t *sig_buf,
     *out_len = BLAKE160_SIZE;
   }
 
+  err = 0;
 exit:
+  if (err == 0) {
+    mbedtls_printf("validate_signature_iso9796_2() passed.\n");
+  } else {
+    mbedtls_printf("validate_signature_iso9796_2() failed: %d\n", err);
+  }
   return err;
 }
 
@@ -601,8 +607,8 @@ int validate_signature_iso9796_2_batch(void *_p, const uint8_t *sig_buf,
     const uint8_t *msg_shard = msg_buf + index * 8;
     uint32_t sig_shard_len = one_sig_len;
 
-    memcpy(sig_shard, sig_buf, 8 + key_size/8);
-    memcpy(sig_shard + 8 + key_size/8 , sig_buf + 8 + key_size/8 + index * raw_sig_len, raw_sig_len);
+    memcpy(sig_shard, sig_buf, 8);
+    memcpy(sig_shard + 8, sig_buf + 8 + index * raw_sig_len, raw_sig_len);
 
     err = validate_signature_iso9796_2(NULL, sig_shard, sig_shard_len,
                                        msg_shard, 8, out, out_len);

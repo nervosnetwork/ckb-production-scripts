@@ -351,6 +351,11 @@ int test_validate_signature(uint8_t key_size_enum, uint8_t md_type,
                            output, &output_len);
   CHECK(err);
 
+  uint8_t pubkey_hash[20];
+  get_pubkey_hash(info, pubkey_hash);
+  CHECK2(memcmp(pubkey_hash, output, 20) == 0, ERROR_WRONG_PUBKEY);
+  CHECK2(output_len == 20, ERROR_WRONG_PUBKEY);
+
   err = 0;
 exit:
   if (err == 0) {
