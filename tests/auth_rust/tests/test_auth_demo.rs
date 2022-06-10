@@ -17,7 +17,7 @@ use misc::{
     assert_script_error, auth_builder, build_resolved_tx, debug_printer, gen_args, gen_consensus,
     gen_tx, gen_tx_env, gen_tx_with_grouped_args, sign_tx, AlgorithmType, Auth, AuthErrorCodeType,
     BitcoinAuth, CKbAuth, CkbMultisigAuth, DogecoinAuth, DummyDataLoader, EntryCategoryType,
-    EosAuth, EthereumAuth, TestConfig, TronAuth, MAX_CYCLES,
+    EosAuth, EthereumAuth, SchnorrAuth, TestConfig, TronAuth, MAX_CYCLES,
 };
 mod misc;
 
@@ -606,29 +606,10 @@ fn ckbmultisig_verify() {
 #[test]
 fn ckbmultisig_verify_sing_size_failed() {}
 
-// #[test]
-// fn schnorr() {
-//     {
-//         let auth = auth_builder(AlgorithmType::SchnorrOrTaproot).unwrap();
-//         let config = TestConfig::new(&auth, EntryCategoryType::DynamicLinking, 1);
-//         let verify_result = verify_unit(&config);
-//         assert_script_error(
-//             verify_result.unwrap_err(),
-//             AuthErrorCodeType::NotImplemented,
-//             "schnorr",
-//         );
-//     }
-//     {
-//         let auth = auth_builder(AlgorithmType::SchnorrOrTaproot).unwrap();
-//         let config = TestConfig::new(&auth, EntryCategoryType::Exec, 1);
-//         let verify_result = verify_unit(&config);
-//         assert_script_error(
-//             verify_result.unwrap_err(),
-//             AuthErrorCodeType::NotImplemented,
-//             "schnorr",
-//         );
-//     }
-// }
+#[test]
+fn schnorr_verify() {
+    unit_test_common(AlgorithmType::SchnorrOrTaproot);
+}
 
 fn unit_test_rsa(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
     unit_test_success(auth, run_type);

@@ -34,7 +34,7 @@ dependencies = [
  "log",
  "openssl",
  "rand 0.6.5",
- "secp256k1",
+ "secp256k1 0.22.1",
  "serde",
  "sha3",
  "sparse-merkle-tree",
@@ -183,7 +183,7 @@ dependencies = [
  "faster-hex",
  "lazy_static",
  "rand 0.7.3",
- "secp256k1",
+ "secp256k1 0.19.0",
  "thiserror",
 ]
 
@@ -1101,8 +1101,17 @@ version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6179428c22c73ac0fbb7b5579a56353ce78ba29759b3b8575183336ea74cdfb"
 dependencies = [
+ "secp256k1-sys 0.3.0",
+]
+
+[[package]]
+name = "secp256k1"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26947345339603ae8395f68e2f3d85a6b0a8ddfe6315818e80b8504415099db0"
+dependencies = [
  "rand 0.6.5",
- "secp256k1-sys",
+ "secp256k1-sys 0.5.2",
 ]
 
 [[package]]
@@ -1110,6 +1119,15 @@ name = "secp256k1-sys"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11553d210db090930f4432bea123b31f70bbf693ace14504ea2a35e796c28dd2"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "secp256k1-sys"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "152e20a0fd0519390fc43ab404663af8a0b794273d2a91d60ad4a39f13ffe110"
 dependencies = [
  "cc",
 ]

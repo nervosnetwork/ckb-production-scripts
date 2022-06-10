@@ -668,8 +668,8 @@ impl Auth for CKbAuth {
 
 #[derive(Clone)]
 pub struct EthereumAuth {
-    pub privkey: secp256k1::key::SecretKey,
-    pub pubkey: secp256k1::key::PublicKey,
+    pub privkey: secp256k1::SecretKey,
+    pub pubkey: secp256k1::PublicKey,
 }
 impl EthereumAuth {
     fn new() -> Box<dyn Auth> {
@@ -678,7 +678,7 @@ impl EthereumAuth {
         let (privkey, pubkey) = generator.generate_keypair(&mut rng);
         Box::new(EthereumAuth { privkey, pubkey })
     }
-    pub fn get_eth_pub_key_hash(pubkey: &secp256k1::key::PublicKey) -> Vec<u8> {
+    pub fn get_eth_pub_key_hash(pubkey: &secp256k1::PublicKey) -> Vec<u8> {
         let pubkey = pubkey.serialize_uncompressed();
         let mut hasher = Keccak256::new();
         hasher.update(&pubkey[1..].to_vec());
@@ -689,9 +689,13 @@ impl EthereumAuth {
     pub fn eth_sign(msg: &H256, privkey: &secp256k1::SecretKey) -> Bytes {
         let secp: secp256k1::Secp256k1<secp256k1::All> = secp256k1::Secp256k1::gen_new();
         let msg = secp256k1::Message::from_slice(msg.as_bytes()).unwrap();
-        let sign = secp.sign_recoverable(&msg, privkey);
+        let sign = secp.sign_ecdsa_recoverable(&msg, privkey);
         let (rid, sign) = sign.serialize_compact();
-        let sign = ckb_crypto::secp::Signature::from_compact(rid, sign);
+
+        let mut data = [0; 65];
+        data[0..64].copy_from_slice(&sign[0..64]);
+        data[64] = rid.to_i32() as u8;
+        let sign = ckb_crypto::secp::Signature::from_slice(&data).unwrap();
         Bytes::from(sign.serialize())
     }
 }
@@ -718,8 +722,8 @@ impl Auth for EthereumAuth {
 
 #[derive(Clone)]
 pub struct EosAuth {
-    pub privkey: secp256k1::key::SecretKey,
-    pub pubkey: secp256k1::key::PublicKey,
+    pub privkey: secp256k1::SecretKey,
+    pub pubkey: secp256k1::PublicKey,
 }
 impl EosAuth {
     fn new() -> Box<dyn Auth> {
@@ -747,8 +751,8 @@ impl Auth for EosAuth {
 
 #[derive(Clone)]
 pub struct TronAuth {
-    pub privkey: secp256k1::key::SecretKey,
-    pub pubkey: secp256k1::key::PublicKey,
+    pub privkey: secp256k1::SecretKey,
+    pub pubkey: secp256k1::PublicKey,
 }
 impl TronAuth {
     fn new() -> Box<dyn Auth> {
@@ -975,21 +979,45 @@ impl Auth for CkbMultisigAuth {
 }
 
 #[derive(Clone)]
-struct SchnorrAuth {}
+pub struct SchnorrAuth {
+    pub privkey: secp256k1::SecretKey,
+    pub pubkey: secp256k1::PublicKey,
+}
 impl SchnorrAuth {
-    fn new() -> Box<dyn Auth> {
-        Box::new(SchnorrAuth {})
+    pub fn new() -> Box<dyn Auth> {
+        let generator: secp256k1::Secp256k1<secp256k1::All> = secp256k1::Secp256k1::new();
+        let mut rng = thread_rng();
+        let (privkey, pubkey) = generator.generate_keypair(&mut rng);
+        Box::new(SchnorrAuth { privkey, pubkey })
     }
 }
 impl Auth for SchnorrAuth {
     fn get_pub_key_hash(&self) -> Vec<u8> {
-        [0; 20].to_vec()
+        let secp: secp256k1::Secp256k1<secp256k1::All> = secp256k1::Secp256k1::gen_new();
+        let key_pair = secp256k1::KeyPair::from_secret_key(&secp, self.privkey);
+        let xonly = secp256k1::XOnlyPublicKey::from_keypair(&key_pair).serialize();
+
+        Vec::from(&ckb_hash::blake2b_256(xonly)[..20])
     }
     fn get_algorithm_type(&self) -> u8 {
         AlgorithmType::SchnorrOrTaproot as u8
     }
-    fn sign(&self, _msg: &H256) -> Bytes {
-        Bytes::from([0; 64].to_vec())
+    fn get_sign_size(&self) -> usize {
+        32 + 64
+    }
+    fn sign(&self, msg: &H256) -> Bytes {
+        let secp: secp256k1::Secp256k1<secp256k1::All> = secp256k1::Secp256k1::gen_new();
+        let secp_msg = secp256k1::Message::from_slice(msg.as_bytes()).unwrap();
+        let key_pair = secp256k1::KeyPair::from_secret_key(&secp, self.privkey);
+        let sign = secp.sign_schnorr_no_aux_rand(&secp_msg, &key_pair);
+
+        let mut ret = BytesMut::with_capacity(32 + 64);
+        let xonly = secp256k1::XOnlyPublicKey::from_keypair(&key_pair)
+            .serialize()
+            .to_vec();
+        ret.put(Bytes::from(xonly.clone()));
+        ret.put(Bytes::from(sign.as_ref().to_vec()));
+        ret.freeze()
     }
 }
 
