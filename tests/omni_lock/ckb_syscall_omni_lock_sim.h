@@ -184,10 +184,10 @@ mol_seg_t build_witness_lock() {
   mol_seg_t rc_identity = build_rc_identity(&identity, &proofs);
 
   MolBuilder_OmniLockWitnessLock_set_signature(&witness_lock, signature.ptr,
-                                             signature.size);
+                                               signature.size);
   if (g_setting.use_rc) {
-    MolBuilder_OmniLockWitnessLock_set_omni_identity(&witness_lock, rc_identity.ptr,
-                                                 rc_identity.size);
+    MolBuilder_OmniLockWitnessLock_set_omni_identity(
+        &witness_lock, rc_identity.ptr, rc_identity.size);
   }
 
   free(signature.ptr);
@@ -788,6 +788,20 @@ int ckb_look_for_dep_with_hash2(const uint8_t* code_hash, uint8_t hash_type,
   *index = *(uint16_t*)code_hash;
   return 0;
 }
+
+int ckb_checked_load_input_by_field(void* addr, uint64_t* len, size_t offset,
+                                    size_t index, size_t source, size_t field) {
+  return 0;
+}
+
+long __internal_syscall(long n, long _a0, long _a1, long _a2, long _a3,
+                        long _a4, long _a5) {
+  return 0;
+}
+
+#define syscall(n, a, b, c, d, e, f)                                           \
+  __internal_syscall(n, (long)(a), (long)(b), (long)(c), (long)(d), (long)(e), \
+                     (long)(f))
 
 #include <dlfcn.h>
 

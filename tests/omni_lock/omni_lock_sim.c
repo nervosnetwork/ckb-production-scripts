@@ -7,6 +7,7 @@
 int ckb_exit(signed char code);
 
 #include "omni_lock.c"
+#undef syscall
 #include "utest.h"
 void debug_print_hex(const char* prefix, const uint8_t* buf, size_t length) {
   printf("%s: ", prefix);

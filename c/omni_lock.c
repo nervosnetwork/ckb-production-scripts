@@ -29,6 +29,7 @@ int ckb_exit(signed char);
 #include "ckb_swappable_signatures.h"
 #include "validate_signature_rsa.h"
 
+#include "opentx.h"
 #include "ckb_identity.h"
 #include "ckb_smt.h"
 
@@ -45,11 +46,13 @@ int ckb_exit(signed char);
 
 #define SCRIPT_SIZE 32768
 #define MAX_LOCK_SCRIPT_HASH_COUNT 2048
-#define MAX_SIGNATURE_SIZE 1024
+// open tx make signature larger
+#define MAX_SIGNATURE_SIZE (1024 + 4096)
 #define OMNI_ROOT_MASK 1
 #define ACP_MASK (1 << 1)
 #define SINCE_MASK (1 << 2)
 #define SUPPLY_MASK (1 << 3)
+#define OPENTX_MASK (1 << 4)
 
 #define MAX_CODE_SIZE (1024 * 400)
 
@@ -67,7 +70,7 @@ enum OmniLockErrorCode {
 
 // parsed from args in lock script
 typedef struct ArgsType {
-  CkbIdentityType id;
+  CkbAuthType id;
 
   uint8_t omni_lock_flags;
 
@@ -82,6 +85,7 @@ typedef struct ArgsType {
   int udt_minimum;  // used for ACP
 
   bool has_supply;
+  bool has_opentx;
   uint8_t info_cell[32];  // type script hash
 } ArgsType;
 
@@ -91,7 +95,7 @@ typedef struct WitnessLockType {
   bool has_signature;
   bool has_proofs;
 
-  CkbIdentityType id;
+  CkbAuthType id;
   uint32_t signature_size;
   uint8_t signature[MAX_SIGNATURE_SIZE];
   uint32_t preimage_size;
@@ -137,8 +141,8 @@ bool is_memory_enough(mol_seg_t seg, const uint8_t *cur, uint32_t len) {
 
 // memory layout of args:
 // <identity, 21 bytes> <omni_lock args>
-// <omni_lock flags, 1 byte>  <OMNI cell type id, 32 bytes, optional> <ckb/udt min,
-// 2 bytes, optional> <since, 8 bytes, optional>
+// <omni_lock flags, 1 byte>  <OMNI cell type id, 32 bytes, optional> <ckb/udt
+// min, 2 bytes, optional> <since, 8 bytes, optional>
 int parse_args(ArgsType *args) {
   int err = 0;
   uint8_t script[SCRIPT_SIZE];
@@ -179,6 +183,7 @@ int parse_args(ArgsType *args) {
   args->has_acp = args->omni_lock_flags & ACP_MASK;
   args->has_since = args->omni_lock_flags & SINCE_MASK;
   args->has_supply = args->omni_lock_flags & SUPPLY_MASK;
+  args->has_opentx = args->omni_lock_flags & OPENTX_MASK;
   uint32_t expected_size = 0;
   if (args->has_omni_root) {
     expected_size += 32;
@@ -273,7 +278,7 @@ int make_witness(WitnessArgsType *witness) {
   return 0;
 }
 
-int smt_verify_identity(CkbIdentityType *id, SmtProofEntryVecType *proofs,
+int smt_verify_identity(CkbAuthType *id, SmtProofEntryVecType *proofs,
                         RceState *rce_state) {
   int err = 0;
   uint32_t proof_len = proofs->t->len(proofs);
@@ -395,7 +400,7 @@ int main() {
   ArgsType args = {0};
   // this identity can be either from witness lock (witness_lock.id) or script
   // args (args.id)
-  CkbIdentityType identity = {0};
+  CkbAuthType identity = {0};
 
   err = parse_witness_lock(&witness_lock);
   CHECK(err);
@@ -452,7 +457,7 @@ int main() {
   ckb_identity_init_code_buffer(code_buff, MAX_CODE_SIZE);
   err = ckb_verify_identity(&identity, witness_lock.signature,
                             witness_lock.signature_size, witness_lock.preimage,
-                            witness_lock.preimage_size);
+                            witness_lock.preimage_size, args.has_opentx);
   CHECK(err);
 exit:
   return err;

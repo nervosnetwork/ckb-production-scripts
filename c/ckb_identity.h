@@ -36,12 +36,12 @@ enum CkbIdentityErrorCode {
   ERROR_INVALID_PREIMAGE,
 };
 
-typedef struct CkbIdentityType {
+typedef struct CkbAuthType {
   uint8_t flags;
   // unique id, it can be: blake160 (20 bytes) hash of lock script, pubkey or
   // preimage
   uint8_t id[20];
-} CkbIdentityType;
+} CkbAuthType;
 
 enum IdentityFlagsType {
   IdentityFlagsCkb = 0,
@@ -169,7 +169,8 @@ int validate_signature_secp256k1(void *prefilled_data, const uint8_t *sig,
   size_t out_pubkey_size = PUBKEY_SIZE;
   ret = _ckb_recover_secp256k1_pubkey(sig, sig_len, msg, msg_len, out_pubkey,
                                       &out_pubkey_size, true);
-  if (ret != 0) return ret;
+  if (ret != 0)
+    return ret;
 
   blake2b_state ctx;
   blake2b_init(&ctx, BLAKE2B_BLOCK_SIZE);
@@ -194,7 +195,8 @@ int validate_signature_secp256k1_pw(void *prefilled_data, const uint8_t *sig,
   size_t out_pubkey_size = UNCOMPRESSED_PUBKEY_SIZE;
   ret = _ckb_recover_secp256k1_pubkey(sig, sig_len, msg, msg_len, out_pubkey,
                                       &out_pubkey_size, false);
-  if (ret != 0) return ret;
+  if (ret != 0)
+    return ret;
 
   // here are the 2 differences than validate_signature_secp256k1
   SHA3_CTX sha3_ctx;
@@ -208,7 +210,7 @@ int validate_signature_secp256k1_pw(void *prefilled_data, const uint8_t *sig,
   return ret;
 }
 
-int generate_sighash_all(uint8_t *msg, size_t msg_len) {
+int generate_message(uint8_t *msg, size_t msg_len) {
   int ret;
   uint64_t len = 0;
   unsigned char temp[MAX_WITNESS_SIZE];
@@ -326,17 +328,33 @@ static int _ckb_convert_keccak256_hash(const uint8_t *msg, size_t msg_len,
   return 0;
 }
 
-int verify_sighash_all(uint8_t *pubkey_hash, uint8_t *sig, uint32_t sig_len,
-                       validate_signature_t func, convert_msg_t convert) {
+int verify_signature(uint8_t *pubkey_hash, uint8_t *sig, uint32_t sig_len,
+                     validate_signature_t func, convert_msg_t convert,
+                     bool enable_opentx) {
   int ret = 0;
   uint8_t old_msg[BLAKE2B_BLOCK_SIZE];
   uint8_t new_msg[BLAKE2B_BLOCK_SIZE];
-  ret = generate_sighash_all(old_msg, sizeof(old_msg));
-  if (ret != 0) {
-    return ret;
+  if (enable_opentx) {
+    OpenTxWitness opentx_witness = {0};
+    ret = opentx_parse_witness(sig, sig_len, &opentx_witness);
+    if (ret != 0)
+      return ret;
+    ret = opentx_generate_message(&opentx_witness, sig, sig_len, old_msg,
+                                  sizeof(old_msg));
+    if (ret != 0)
+      return ret;
+    sig = opentx_witness.real_sig;
+    sig_len = opentx_witness.real_sig_len;
+  } else {
+    ret = generate_message(old_msg, sizeof(old_msg));
+
+    if (ret != 0) {
+      return ret;
+    }
   }
   ret = convert(old_msg, sizeof(old_msg), new_msg, sizeof(new_msg));
-  if (ret != 0) return ret;
+  if (ret != 0)
+    return ret;
 
   uint8_t output_pubkey_hash[BLAKE160_SIZE];
   size_t output_len = BLAKE160_SIZE;
@@ -375,36 +393,40 @@ bool is_lock_script_hash_present(uint8_t *lock_script_hash) {
   return false;
 }
 
-int verify_via_dl(CkbIdentityType *id, uint8_t *sig, uint32_t sig_len,
+int verify_via_dl(CkbAuthType *id, uint8_t *sig, uint32_t sig_len,
                   uint8_t *preimage, uint32_t preimage_len,
-                  CkbSwappableSignatureInstance *inst) {
+                  CkbSwappableSignatureInstance *inst, bool enable_opentx) {
   int err = 0;
   uint8_t hash[BLAKE2B_BLOCK_SIZE];
 
   // code hash: 32 bytes
   // hash type: 1 byte
   // pubkey hash: 20 bytes
-  if (preimage_len != (32 + 1 + 20)) return ERROR_INVALID_PREIMAGE;
+  if (preimage_len != (32 + 1 + 20))
+    return ERROR_INVALID_PREIMAGE;
 
   blake2b_state ctx;
   blake2b_init(&ctx, BLAKE2B_BLOCK_SIZE);
   blake2b_update(&ctx, preimage, preimage_len);
   blake2b_final(&ctx, hash, BLAKE2B_BLOCK_SIZE);
-  if (memcmp(hash, id->id, BLAKE160_SIZE) != 0) return ERROR_INVALID_PREIMAGE;
+  if (memcmp(hash, id->id, BLAKE160_SIZE) != 0)
+    return ERROR_INVALID_PREIMAGE;
 
   uint8_t *code_hash = preimage;
   uint8_t hash_type = *(preimage + 32);
   uint8_t *pubkey_hash = preimage + 32 + 1;
 
   err = ckb_initialize_swappable_signature(code_hash, hash_type, inst);
-  if (err != 0) return err;
+  if (err != 0)
+    return err;
 
-  return verify_sighash_all(pubkey_hash, sig, sig_len, inst->verify_func,
-                            _ckb_convert_copy);
+  return verify_signature(pubkey_hash, sig, sig_len, inst->verify_func,
+                          _ckb_convert_copy, enable_opentx);
 }
 
-int verify_via_exec(CkbIdentityType *id, uint8_t *sig, uint32_t sig_len,
-                    uint8_t *preimage, uint32_t preimage_len) {
+int verify_via_exec(CkbAuthType *id, uint8_t *sig, uint32_t sig_len,
+                    uint8_t *preimage, uint32_t preimage_len,
+                    bool enable_opentx) {
   int err = 0;
   uint8_t hash[BLAKE2B_BLOCK_SIZE];
 
@@ -430,9 +452,24 @@ int verify_via_exec(CkbIdentityType *id, uint8_t *sig, uint32_t sig_len,
 
   // get message
   uint8_t msg[BLAKE2B_BLOCK_SIZE];
-  ret = generate_sighash_all(msg, sizeof(msg));
-  if (ret != 0) {
-    return ret;
+
+  if (enable_opentx) {
+    OpenTxWitness opentx_witness = {0};
+    ret = opentx_parse_witness(sig, sig_len, &opentx_witness);
+    if (ret != 0)
+      return ret;
+    ret = opentx_generate_message(&opentx_witness, sig, sig_len, msg,
+                                  sizeof(msg));
+    if (ret != 0)
+      return ret;
+    sig = opentx_witness.real_sig;
+    sig_len = opentx_witness.real_sig_len;
+  } else {
+    ret = generate_message(msg, sizeof(msg));
+
+    if (ret != 0) {
+      return ret;
+    }
   }
 
   uint8_t *code_hash = preimage;
@@ -449,17 +486,23 @@ int verify_via_exec(CkbIdentityType *id, uint8_t *sig, uint32_t sig_len,
   // <code hash in hex>:<hash type in hex>:<pubkey hash in hex>:<message
   // 1>:<signature 1>
   err = ckb_exec_append(&bin_args, code_hash, 32);
-  if (err != 0) return err;
+  if (err != 0)
+    return err;
   err = ckb_exec_append(&bin_args, &hash_type, 1);
-  if (err != 0) return err;
+  if (err != 0)
+    return err;
   err = ckb_exec_append(&bin_args, pubkey_hash, 20);
-  if (err != 0) return err;
+  if (err != 0)
+    return err;
   err = ckb_exec_append(&bin_args, msg, sizeof(msg));
-  if (err != 0) return err;
+  if (err != 0)
+    return err;
   err = ckb_exec_append(&bin_args, sig, sig_len);
-  if (err != 0) return err;
+  if (err != 0)
+    return err;
   err = ckb_exec_encode_params(&bin_args, &out);
-  if (err != 0) return err;
+  if (err != 0)
+    return err;
 
   const char *argv[1] = {out.buff};
   return ckb_exec_cell(code_hash, hash_type, *offset, *length, 1, argv);
@@ -544,7 +587,8 @@ int verify_multisig(const uint8_t *lock_bytes, size_t lock_bytes_len,
   secp256k1_context context;
   uint8_t secp_data[CKB_SECP256K1_DATA_SIZE];
   ret = ckb_secp256k1_custom_verify_only_initialize(&context, secp_data);
-  if (ret != 0) return ret;
+  if (ret != 0)
+    return ret;
 
   // We will perform *threshold* number of signature verifications here.
   for (size_t i = 0; i < threshold; i++) {
@@ -552,8 +596,8 @@ int verify_multisig(const uint8_t *lock_bytes, size_t lock_bytes_len,
     secp256k1_ecdsa_recoverable_signature signature;
     size_t signature_offset = multisig_script_len + i * SIGNATURE_SIZE;
     if (secp256k1_ecdsa_recoverable_signature_parse_compact(
-        &context, &signature, &lock_bytes[signature_offset],
-        lock_bytes[signature_offset + RECID_INDEX]) == 0) {
+            &context, &signature, &lock_bytes[signature_offset],
+            lock_bytes[signature_offset + RECID_INDEX]) == 0) {
       return ERROR_SECP_PARSE_SIGNATURE;
     }
 
@@ -613,31 +657,47 @@ int verify_multisig(const uint8_t *lock_bytes, size_t lock_bytes_len,
   return 0;
 }
 
-
 static uint8_t *g_identity_code_buffer = NULL;
 static uint32_t g_identity_code_size = 0;
 
-int ckb_verify_identity(CkbIdentityType *id, uint8_t *sig, uint32_t sig_size,
-                        uint8_t *preimage, uint32_t preimage_size) {
+int ckb_verify_identity(CkbAuthType *id, uint8_t *sig, uint32_t sig_len,
+                        uint8_t *preimage, uint32_t preimage_size,
+                        bool enable_opentx) {
   if (id->flags == IdentityFlagsCkb) {
-    if (sig == NULL || sig_size != SECP256K1_SIGNATURE_SIZE) {
+    if (sig == NULL || sig_len != SECP256K1_SIGNATURE_SIZE) {
       return ERROR_IDENTITY_WRONG_ARGS;
     }
-    return verify_sighash_all(id->id, sig, sig_size,
-                              validate_signature_secp256k1, _ckb_convert_copy);
+    return verify_signature(id->id, sig, sig_len, validate_signature_secp256k1,
+                            _ckb_convert_copy, enable_opentx);
   } else if (id->flags == IdentityFlagsEthereum) {
-    if (sig == NULL || sig_size != SECP256K1_SIGNATURE_SIZE) {
+    if (sig == NULL || sig_len != SECP256K1_SIGNATURE_SIZE) {
       return ERROR_IDENTITY_WRONG_ARGS;
     }
-    return verify_sighash_all(id->id, sig, sig_size,
-                              validate_signature_secp256k1_pw,
-                              _ckb_convert_keccak256_hash);
+    return verify_signature(id->id, sig, sig_len,
+                            validate_signature_secp256k1_pw,
+                            _ckb_convert_keccak256_hash, enable_opentx);
   } else if (id->flags == IdentityCkbMultisig) {
+    int ret = 0;
     uint8_t msg[BLAKE2B_BLOCK_SIZE];
-    int ret = generate_sighash_all(msg, sizeof(msg));
-    if (ret != 0)
-      return ret;
-    return verify_multisig(sig, sig_size, msg, id->id);
+    if (enable_opentx) {
+      OpenTxWitness opentx_witness = {0};
+      ret = opentx_parse_witness(sig, sig_len, &opentx_witness);
+      if (ret != 0)
+        return ret;
+      ret = opentx_generate_message(&opentx_witness, sig, sig_len, msg,
+                                    sizeof(msg));
+      if (ret != 0)
+        return ret;
+      sig = opentx_witness.real_sig;
+      sig_len = opentx_witness.real_sig_len;
+    } else {
+      ret = generate_message(msg, sizeof(msg));
+
+      if (ret != 0) {
+        return ret;
+      }
+    }
+    return verify_multisig(sig, sig_len, msg, id->id);
   } else if (id->flags == IdentityFlagsOwnerLock) {
     if (is_lock_script_hash_present(id->id)) {
       return 0;
@@ -645,17 +705,19 @@ int ckb_verify_identity(CkbIdentityType *id, uint8_t *sig, uint32_t sig_size,
       return ERROR_IDENTITY_LOCK_SCRIPT_HASH_NOT_FOUND;
     }
   } else if (id->flags == IdentityFlagsDl) {
-    if (g_identity_code_buffer == NULL) return ERROR_IDENTITY_WRONG_ARGS;
+    if (g_identity_code_buffer == NULL)
+      return ERROR_IDENTITY_WRONG_ARGS;
     CkbSwappableSignatureInstance swappable_inst = {
         .code_buffer = g_identity_code_buffer,
         .code_buffer_size = g_identity_code_size,
         .prefilled_data_buffer = NULL,
         .prefilled_buffer_size = 0,
         .verify_func = NULL};
-    return verify_via_dl(id, sig, sig_size, preimage, preimage_size,
-                         &swappable_inst);
+    return verify_via_dl(id, sig, sig_len, preimage, preimage_size,
+                         &swappable_inst, enable_opentx);
   } else if (id->flags == IdentityFlagsExec) {
-    return verify_via_exec(id, sig, sig_size, preimage, preimage_size);
+    return verify_via_exec(id, sig, sig_len, preimage, preimage_size,
+                           enable_opentx);
   }
   return CKB_INVALID_DATA;
 }
