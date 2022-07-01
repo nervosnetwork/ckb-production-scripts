@@ -9,9 +9,16 @@
 #include <stdint.h>
 
 #include "ckb_consts.h"
-#include "ckb_syscalls.h"
+
+
 #define MOLECULEC_VERSION 7000
 #include "blockchain.h"
+
+#ifdef OPENTX_FUZZER
+#include "ckb_syscall_opentx_fuzzer.h"
+#else
+#include "ckb_syscalls.h"
+#endif
 
 #ifndef BLAKE2B_BLOCK_SIZE
 #define BLAKE2B_BLOCK_SIZE 32
@@ -293,7 +300,7 @@ int hash_input(HashCache *cache, bool with_offset, size_t base_index,
     input_seg.ptr = input;
     input_seg.size = (mol_num_t)len;
     err = MolReader_OutPoint_verify(&input_seg, false);
-    CHECK2(err == 0, OPENTX_ERROR_ENCODING);
+    CHECK2(err == MOL_OK, OPENTX_ERROR_ENCODING);
 
     if (si->arg2 & 0x1) {
       mol_seg_t tx_hash = MolReader_OutPoint_get_tx_hash(&input_seg);
@@ -439,9 +446,8 @@ int process_si(HashCache *cache, SignatureInput *si, size_t base_input_index,
       err = hash_input(cache, true, base_input_index, si);
       CHECK(err);
       break;
-    case OPENTX_TERMINAL_COMMAND:
-      // Terminate
-      err = 0;
+    case 0x20:
+      hash_concat(cache, si);
       break;
     default:
       err = OPENTX_ERROR_UNKNOWN_COMMAND;
@@ -471,6 +477,7 @@ int opentx_generate_message(OpenTxWitness *witness, uint8_t *buf, size_t len,
     }
     err = process_si(&cache, &si, witness->base_input_index,
                      witness->base_output_index);
+    CHECK(err);
   }
   // At last, the signature input list is also fed into blake2b instance
   hash_cache_append2(&cache, witness->sil, witness->sil_len);

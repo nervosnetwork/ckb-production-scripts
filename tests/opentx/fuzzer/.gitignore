@@ -1,4 +1,5 @@
 fuzz-*.log
-oepntx_fuzzer
+opentx_fuzzer
 opentx_coverage
 crash-*
+corpus

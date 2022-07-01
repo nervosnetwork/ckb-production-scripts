@@ -16,16 +16,16 @@ LLVM_COV=llvm-cov
 
 CORPUS_DIR=corpus
 
-FUZZER_FLAGS=-g -O1 -fsanitize=fuzzer,address,undefined -fsanitize-recover=address -I ../../../c -I ../../../deps/ckb-c-stdlib-20210801
+FUZZER_FLAGS=-g -O1 -DOPENTX_FUZZER -fsanitize=fuzzer,address,undefined -fsanitize-recover=address -I . -I ../../../c -I ../../../deps/ckb-c-stdlib-20210801 -I ../../../deps/ckb-c-stdlib-20210801/molecule
 
 COVERAGE_DIR=coverage
-COVERAGE_FLAGS=-fprofile-instr-generate -fcoverage-mapping -I ../../../c -I ../../../deps/ckb-c-stdlib-20210801
+COVERAGE_FLAGS=-DOPENTX_FUZZER -fprofile-instr-generate -fcoverage-mapping -I . -I ../../../c -I ../../../deps/ckb-c-stdlib-20210801 -I ../../../deps/ckb-c-stdlib-20210801/molecule
 
 ifeq ($(OS),MacOS)
 	COVERAGE_FLAGS+=-Wl,-U,_LLVMFuzzerCustomMutator -Wl,-U,_LLVMFuzzerInitialize
 endif
 
-EXTERNAL_HEADERS=../../../c/opentx.h
+EXTERNAL_HEADERS=../../../c/opentx.h opentx_fuzzer.c
 
 all: fuzzer coverage
 
