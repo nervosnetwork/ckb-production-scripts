@@ -10,7 +10,6 @@
 
 #include "ckb_consts.h"
 
-
 #define MOLECULEC_VERSION 7000
 #include "blockchain.h"
 
@@ -358,8 +357,13 @@ void hash_concat(HashCache *cache, SignatureInput *si) {
 int opentx_parse_witness(uint8_t *buf, size_t len, OpenTxWitness *witness) {
   int err = 0;
   CHECK2(len >= 8, OPENTX_ERROR_ENCODING);
-  witness->base_input_index = *(uint32_t *)buf;
-  witness->base_output_index = *(uint32_t *)(buf + 4);
+  uint32_t base_input_index;
+  uint32_t base_output_index;
+  memcpy(&base_input_index, buf, 4);
+  memcpy(&base_output_index, buf + 4, 4);
+  witness->base_input_index = base_input_index;
+  witness->base_output_index = base_output_index;
+
   size_t offset = 8;
   size_t temp_count = 0;
   while (offset < len) {
@@ -388,10 +392,12 @@ exit:
 int parse_si(uint8_t *buf, size_t len, SignatureInput *si) {
   int err = 0;
   CHECK2(len >= 4, OPENTX_ERROR_ENCODING);
-  uint32_t *p = (uint32_t *)buf;
-  si->command = (*p) & 0xFF;
-  si->arg1 = ((*p) >> 8) & 0xFFF;
-  si->arg2 = ((*p) >> 20) & 0xFFF;
+  uint32_t data = 0;
+  memcpy(&data, buf, 4);
+
+  si->command = data & 0xFF;
+  si->arg1 = (data >> 8) & 0xFFF;
+  si->arg2 = (data >> 20) & 0xFFF;
 exit:
   return err;
 }

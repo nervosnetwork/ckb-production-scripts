@@ -3,7 +3,8 @@
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-uint8_t g_data[256] = {0};
+uint8_t g_data[4096] = {0};
+size_t g_data_len = 4096;
 
 uint8_t g_script[] = {
     0x38, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x30, 0x00, 0x00, 0x00,
@@ -25,7 +26,7 @@ long __internal_syscall(long n, long a0, long a1, long a2, long a3, long a4,
 
   // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0009-vm-syscalls/0009-vm-syscalls.md#partial-loading
   const uint8_t* data = g_data;
-  size_t data_length = sizeof(g_data);
+  size_t data_length = MIN(g_data_len, sizeof(g_data));
   size_t size = *len;
 
   if (field == CKB_CELL_FIELD_CAPACITY) {
