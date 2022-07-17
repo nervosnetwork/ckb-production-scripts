@@ -44,46 +44,46 @@ fn gen_opentx_si_all() -> OpentxWitness {
         base_input_index: 1,
         base_output_index: 1,
         input: vec![
-            // OpentxSigInput {
-            //     cmd: OpentxCommand::TxHash,
-            //     arg1: 0,
-            //     arg2: 0,
-            // },
-            // OpentxSigInput {
-            //     cmd: OpentxCommand::GroupInputOutputLen,
-            //     arg1: 0,
-            //     arg2: 0,
-            // },
-            // OpentxSigInput {
-            //     cmd: OpentxCommand::IndexOutput,
-            //     arg1: 0,
-            //     arg2: CELL_MASK_CAPACITY
-            //         | CELL_MASK_LOCK_CODE_HASH
-            //         | CELL_MASK_LOCK_HASH_TYPE
-            //         | CELL_MASK_LOCK_ARGS
-            //         | CELL_MASK_TYPE_CODE_HASH
-            //         | CELL_MASK_TYPE_HASH_TYPE
-            //         | CELL_MASK_TYPE_ARGS
-            //         | CELL_MASK_CELL_DATA
-            //         | CELL_MASK_TYPE_SCRIPT_HASH
-            //         | CELL_MASK_LOCK_SCRIPT_HASH
-            //         | CELL_MASK_WHOLE_CELL,
-            // },
-            // OpentxSigInput {
-            //     cmd: OpentxCommand::OffsetOutput,
-            //     arg1: 1,
-            //     arg2: CELL_MASK_CAPACITY
-            //         | CELL_MASK_LOCK_CODE_HASH
-            //         | CELL_MASK_LOCK_HASH_TYPE
-            //         | CELL_MASK_LOCK_ARGS
-            //         | CELL_MASK_TYPE_CODE_HASH
-            //         | CELL_MASK_TYPE_HASH_TYPE
-            //         | CELL_MASK_TYPE_ARGS
-            //         | CELL_MASK_CELL_DATA
-            //         | CELL_MASK_TYPE_SCRIPT_HASH
-            //         | CELL_MASK_LOCK_SCRIPT_HASH
-            //         | CELL_MASK_WHOLE_CELL,
-            // },
+            OpentxSigInput {
+                cmd: OpentxCommand::TxHash,
+                arg1: 0,
+                arg2: 0,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::GroupInputOutputLen,
+                arg1: 0,
+                arg2: 0,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::IndexOutput,
+                arg1: 0,
+                arg2: CELL_MASK_CAPACITY
+                    | CELL_MASK_LOCK_CODE_HASH
+                    | CELL_MASK_LOCK_HASH_TYPE
+                    | CELL_MASK_LOCK_ARGS
+                    | CELL_MASK_TYPE_CODE_HASH
+                    | CELL_MASK_TYPE_HASH_TYPE
+                    | CELL_MASK_TYPE_ARGS
+                    | CELL_MASK_CELL_DATA
+                    | CELL_MASK_TYPE_SCRIPT_HASH
+                    | CELL_MASK_LOCK_SCRIPT_HASH
+                    | CELL_MASK_WHOLE_CELL,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::OffsetOutput,
+                arg1: 1,
+                arg2: CELL_MASK_CAPACITY
+                    | CELL_MASK_LOCK_CODE_HASH
+                    | CELL_MASK_LOCK_HASH_TYPE
+                    | CELL_MASK_LOCK_ARGS
+                    | CELL_MASK_TYPE_CODE_HASH
+                    | CELL_MASK_TYPE_HASH_TYPE
+                    | CELL_MASK_TYPE_ARGS
+                    | CELL_MASK_CELL_DATA
+                    | CELL_MASK_TYPE_SCRIPT_HASH
+                    | CELL_MASK_LOCK_SCRIPT_HASH
+                    | CELL_MASK_WHOLE_CELL,
+            },
             OpentxSigInput {
                 cmd: OpentxCommand::IndexInput,
                 arg1: 0,
@@ -99,41 +99,41 @@ fn gen_opentx_si_all() -> OpentxWitness {
                     | CELL_MASK_LOCK_SCRIPT_HASH
                     | CELL_MASK_WHOLE_CELL,
             },
-            // OpentxSigInput {
-            //     cmd: OpentxCommand::OffsetInput,
-            //     arg1: 1,
-            //     arg2: CELL_MASK_CAPACITY
-            //         | CELL_MASK_LOCK_CODE_HASH
-            //         | CELL_MASK_LOCK_HASH_TYPE
-            //         | CELL_MASK_LOCK_ARGS
-            //         | CELL_MASK_TYPE_CODE_HASH
-            //         | CELL_MASK_TYPE_HASH_TYPE
-            //         | CELL_MASK_TYPE_ARGS
-            //         | CELL_MASK_CELL_DATA
-            //         | CELL_MASK_TYPE_SCRIPT_HASH
-            //         | CELL_MASK_LOCK_SCRIPT_HASH
-            //         | CELL_MASK_WHOLE_CELL,
-            // },
-            // OpentxSigInput {
-            //     cmd: OpentxCommand::CellInputIndex,
-            //     arg1: 0,
-            //     arg2: INPUT_MASK_TX_HASH
-            //         | INPUT_MASK_INDEX
-            //         | INPUT_MASK_SINCE
-            //         | INPUT_MASK_PREVIOUS_OUTPUT
-            //         | INPUT_MASK_TX_HASH
-            //         | INPUT_MASK_WHOLE,
-            // },
-            // OpentxSigInput {
-            //     cmd: OpentxCommand::CellInputOffset,
-            //     arg1: 2,
-            //     arg2: INPUT_MASK_TX_HASH
-            //         | INPUT_MASK_INDEX
-            //         | INPUT_MASK_SINCE
-            //         | INPUT_MASK_PREVIOUS_OUTPUT
-            //         | INPUT_MASK_TX_HASH
-            //         | INPUT_MASK_WHOLE,
-            // },
+            OpentxSigInput {
+                cmd: OpentxCommand::OffsetInput,
+                arg1: 1,
+                arg2: CELL_MASK_CAPACITY
+                    | CELL_MASK_LOCK_CODE_HASH
+                    | CELL_MASK_LOCK_HASH_TYPE
+                    | CELL_MASK_LOCK_ARGS
+                    | CELL_MASK_TYPE_CODE_HASH
+                    | CELL_MASK_TYPE_HASH_TYPE
+                    | CELL_MASK_TYPE_ARGS
+                    | CELL_MASK_CELL_DATA
+                    | CELL_MASK_TYPE_SCRIPT_HASH
+                    | CELL_MASK_LOCK_SCRIPT_HASH
+                    | CELL_MASK_WHOLE_CELL,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::CellInputIndex,
+                arg1: 0,
+                arg2: INPUT_MASK_TX_HASH
+                    | INPUT_MASK_INDEX
+                    | INPUT_MASK_SINCE
+                    | INPUT_MASK_PREVIOUS_OUTPUT
+                    | INPUT_MASK_TX_HASH
+                    | INPUT_MASK_WHOLE,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::CellInputOffset,
+                arg1: 2,
+                arg2: INPUT_MASK_TX_HASH
+                    | INPUT_MASK_INDEX
+                    | INPUT_MASK_SINCE
+                    | INPUT_MASK_PREVIOUS_OUTPUT
+                    | INPUT_MASK_TX_HASH
+                    | INPUT_MASK_WHOLE,
+            },
             OpentxSigInput {
                 cmd: OpentxCommand::End,
                 arg1: 0,
