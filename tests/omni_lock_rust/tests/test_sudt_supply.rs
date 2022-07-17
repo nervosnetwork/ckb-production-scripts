@@ -11,10 +11,10 @@ use rand::{thread_rng, Rng};
 
 use misc::{
     assert_script_error, build_always_success_script, build_resolved_tx, debug_printer, gen_tx,
-    sign_tx, DummyDataLoader, TestConfig, ALWAYS_SUCCESS, CKB_INVALID_DATA, ERROR_BURN,
-    ERROR_EXCEED_SUPPLY, ERROR_NO_INFO_CELL, ERROR_SUPPLY_AMOUNT, IDENTITY_FLAGS_ETHEREUM,
-    MAX_CYCLES, SIMPLE_UDT,
+    sign_tx, TestConfig, ALWAYS_SUCCESS, CKB_INVALID_DATA, ERROR_BURN, ERROR_EXCEED_SUPPLY,
+    ERROR_NO_INFO_CELL, ERROR_SUPPLY_AMOUNT, IDENTITY_FLAGS_ETHEREUM, MAX_CYCLES, SIMPLE_UDT,
 };
+use omni_lock_test::dummy_data_loader::DummyDataLoader;
 
 mod misc;
 

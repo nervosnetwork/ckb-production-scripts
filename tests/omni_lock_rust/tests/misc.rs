@@ -3,19 +3,17 @@ use openssl::pkey::{PKey, Private, Public};
 use openssl::rsa::Rsa;
 use openssl::sign::Signer;
 use sha3::{Digest, Keccak256};
-use std::collections::HashMap;
 
 use ckb_chain_spec::consensus::{Consensus, ConsensusBuilder};
 use ckb_crypto::secp::{Generator, Privkey, Pubkey};
 use ckb_error::Error;
 use ckb_hash::{Blake2b, Blake2bBuilder};
 use ckb_script::TxVerifyEnv;
-use ckb_traits::{CellDataProvider, HeaderProvider};
 use ckb_types::bytes::{BufMut, BytesMut};
 use ckb_types::{
     bytes::Bytes,
     core::{
-        cell::{CellMeta, CellMetaBuilder, ResolvedTransaction},
+        cell::{CellMetaBuilder, ResolvedTransaction},
         hardfork::HardForkSwitch,
         Capacity, DepType, EpochNumberWithFraction, HeaderView, ScriptHashType, TransactionBuilder,
         TransactionView,
@@ -37,6 +35,8 @@ use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::traits::Hasher;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 
+use omni_lock_test::ckb_sys_call::*;
+use omni_lock_test::dummy_data_loader::DummyDataLoader;
 use omni_lock_test::omni_lock;
 use omni_lock_test::omni_lock::OmniLockWitnessLock;
 use omni_lock_test::xudt_rce_mol::{
@@ -143,6 +143,52 @@ pub fn gen_random_out_point(rng: &mut ThreadRng) -> OutPoint {
         Pack::pack(&buf)
     };
     OutPoint::new(hash, 0)
+}
+
+#[derive(Copy, Clone)]
+pub enum OpentxCommand {
+    TxHash = 0x00,
+    GroupInputOutputLen = 0x01,
+    IndexOutput = 0x11,
+    OffsetOutput = 0x12,
+    IndexInput = 0x13,
+    OffsetInput = 0x14,
+    CellInputIndex = 0x15,
+    CellInputOffset = 0x16,
+    ConcatArg1Arg2 = 0x20,
+    End = 0xF0,
+}
+
+pub const CELL_MASK_CAPACITY: u32 = 0x1;
+pub const CELL_MASK_LOCK_CODE_HASH: u32 = 0x2;
+pub const CELL_MASK_LOCK_HASH_TYPE: u32 = 0x4;
+pub const CELL_MASK_LOCK_ARGS: u32 = 0x8;
+pub const CELL_MASK_TYPE_CODE_HASH: u32 = 0x10;
+pub const CELL_MASK_TYPE_HASH_TYPE: u32 = 0x20;
+pub const CELL_MASK_TYPE_ARGS: u32 = 0x40;
+pub const CELL_MASK_CELL_DATA: u32 = 0x80;
+pub const CELL_MASK_TYPE_SCRIPT_HASH: u32 = 0x100;
+pub const CELL_MASK_LOCK_SCRIPT_HASH: u32 = 0x200;
+pub const CELL_MASK_WHOLE_CELL: u32 = 0x400;
+
+pub const INPUT_MASK_TX_HASH: u32 = 0x1;
+pub const INPUT_MASK_INDEX: u32 = 0x2;
+pub const INPUT_MASK_SINCE: u32 = 0x4;
+pub const INPUT_MASK_PREVIOUS_OUTPUT: u32 = 0x8;
+pub const INPUT_MASK_WHOLE: u32 = 0x10;
+
+#[derive(Clone)]
+pub struct OpentxSigInput {
+    pub cmd: OpentxCommand,
+    pub arg1: u32,
+    pub arg2: u32,
+}
+
+#[derive(Clone)]
+pub struct OpentxWitness {
+    pub base_input_index: usize,
+    pub base_output_index: usize,
+    pub input: Vec<OpentxSigInput>,
 }
 
 //
@@ -353,47 +399,6 @@ fn build_rc_rule(smt_root: &[u8; 32], is_black: bool, is_emergency: bool) -> Byt
     res.as_bytes()
 }
 
-#[derive(Default)]
-pub struct DummyDataLoader {
-    pub cells: HashMap<OutPoint, (CellOutput, ckb_types::bytes::Bytes)>,
-}
-
-impl DummyDataLoader {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-impl CellDataProvider for DummyDataLoader {
-    // load Cell Data
-    fn load_cell_data(&self, cell: &CellMeta) -> Option<ckb_types::bytes::Bytes> {
-        cell.mem_cell_data.clone().or_else(|| {
-            self.cells
-                .get(&cell.out_point)
-                .map(|(_, data)| data.clone())
-        })
-    }
-
-    fn load_cell_data_hash(&self, cell: &CellMeta) -> Option<Byte32> {
-        self.load_cell_data(cell)
-            .map(|e| CellOutput::calc_data_hash(&e))
-    }
-
-    fn get_cell_data(&self, _out_point: &OutPoint) -> Option<ckb_types::bytes::Bytes> {
-        None
-    }
-
-    fn get_cell_data_hash(&self, _out_point: &OutPoint) -> Option<Byte32> {
-        None
-    }
-}
-
-impl HeaderProvider for DummyDataLoader {
-    fn get_header(&self, _hash: &Byte32) -> Option<HeaderView> {
-        None
-    }
-}
-
 pub fn blake160(message: &[u8]) -> Bytes {
     let r = ckb_hash::blake2b_256(message);
     Bytes::copy_from_slice(&r[..20])
@@ -576,6 +581,331 @@ pub fn write_back_preimage_hash(dummy: &mut DummyDataLoader, flags: u8, hash: By
         .collect();
 }
 
+fn calc_group_len(is_input: bool, ckb_sys_call: &CkbSysCall) -> u64 {
+    let mut index = 0;
+    loop {
+        let source = if is_input {
+            CkbSysCallSource::GroupInput
+        } else {
+            CkbSysCallSource::GroupOutpout
+        };
+        let ret = ckb_sys_call.sys_load_cell_by_field(index, source, CkbSysCallCellField::Capacity);
+        if ret.is_err() {
+            break;
+        }
+        index += 1;
+    }
+
+    index as u64
+}
+
+fn get_cell(ckb_sys_call: &CkbSysCall, index: usize, is_input: bool) -> Option<CellOutput> {
+    if is_input {
+        let cell = ckb_sys_call.transaction.inputs().get(index);
+        if cell.is_none() {
+            Option::None
+        } else {
+            let cell = ckb_sys_call
+                .dummy
+                .cells
+                .get(&cell.unwrap().previous_output());
+            if cell.is_none() {
+                Option::None
+            } else {
+                Option::Some(cell.unwrap().0.clone())
+            }
+        }
+    } else {
+        ckb_sys_call.transaction.output(index)
+    }
+}
+
+struct OpentxCache {
+    blake2b: Blake2b,
+}
+
+impl OpentxCache {
+    pub fn new() -> Self {
+        OpentxCache {
+            blake2b: ckb_hash::new_blake2b(),
+        }
+    }
+
+    pub fn update(&mut self, data: &[u8]) {
+        self.blake2b.update(data);
+        //dbg_print_bytes(&data.to_vec(), -1, "update blake2b");
+    }
+
+    pub fn finalize(self) -> [u8; 32] {
+        let mut msg = [0u8; 32];
+        self.blake2b.finalize(&mut msg);
+        msg
+    }
+}
+
+fn hash_cell(
+    cache: &mut OpentxCache,
+    ckb_sys_call: &CkbSysCall,
+    si: &OpentxSigInput,
+    is_input: bool,
+    with_offset: bool,
+    base_index: usize,
+) {
+    let mut index = si.arg1 as usize;
+    if with_offset {
+        index += base_index
+    }
+    let source = if is_input {
+        CkbSysCallSource::Input
+    } else {
+        CkbSysCallSource::Outpout
+    };
+    if si.arg2 & CELL_MASK_CAPACITY != 0 {
+        let data =
+            ckb_sys_call.sys_load_cell_by_field(index, source, CkbSysCallCellField::Capacity);
+        if data.is_ok() {
+            cache.update(&data.clone().ok().unwrap());
+        }
+    }
+    if si.arg2 & CELL_MASK_LOCK_CODE_HASH != 0 {
+        let cell = get_cell(&ckb_sys_call, index, is_input);
+        if cell.is_some() {
+            let cell = cell.unwrap();
+            cache.update(&cell.lock().code_hash().as_slice().to_vec());
+        }
+    }
+    if si.arg2 & CELL_MASK_LOCK_HASH_TYPE != 0 {
+        let cell = get_cell(&ckb_sys_call, index, is_input);
+        if cell.is_some() {
+            let cell = cell.unwrap();
+            let hash_type = cell.lock().hash_type();
+            cache.update(hash_type.as_slice());
+        }
+    }
+    if si.arg2 & CELL_MASK_LOCK_ARGS != 0 {
+        let cell = get_cell(&ckb_sys_call, index, is_input);
+        if cell.is_some() {
+            let cell = cell.unwrap();
+            let args = cell.lock().args().as_slice().split_at(4).1.to_vec();
+            cache.update(args.as_slice());
+        }
+    }
+
+    if si.arg2 & CELL_MASK_TYPE_CODE_HASH != 0 {
+        let cell = get_cell(&ckb_sys_call, index, is_input);
+        if cell.is_some() && cell.clone().unwrap().type_().is_some() {
+            let cell = cell.unwrap();
+            let type_cell = Script::from_slice(cell.type_().as_slice()).unwrap();
+            cache.update(&type_cell.code_hash().as_slice());
+        }
+    }
+    if si.arg2 & CELL_MASK_TYPE_HASH_TYPE != 0 {
+        let cell = get_cell(&ckb_sys_call, index, is_input);
+        if cell.is_some() && cell.clone().unwrap().type_().is_some() {
+            let cell = cell.unwrap();
+            let cell_type = Script::from_slice(cell.type_().as_slice()).unwrap();
+            let hash_type = cell_type.hash_type();
+            cache.update(hash_type.as_slice());
+        }
+    }
+    if si.arg2 & CELL_MASK_TYPE_ARGS != 0 {
+        let cell = get_cell(&ckb_sys_call, index, is_input);
+        if cell.is_some() && cell.clone().unwrap().type_().is_some() {
+            let cell = cell.unwrap();
+            let cell_type = Script::from_slice(cell.type_().as_slice()).unwrap();
+            let args = cell_type.args().as_slice().split_at(4).1.to_vec();
+            cache.update(&args);
+        }
+    }
+    if si.arg2 & CELL_MASK_CELL_DATA != 0 {
+        let data = ckb_sys_call.sys_load_cell_data(index, source);
+        if data.is_ok() {
+            cache.update(data.clone().ok().unwrap().as_slice());
+        }
+    }
+
+    if si.arg2 & CELL_MASK_TYPE_SCRIPT_HASH != 0 {
+        let cell = get_cell(&ckb_sys_call, index, is_input);
+        if cell.is_some() && cell.clone().unwrap().type_().is_some() {
+            let cell = cell.unwrap();
+            let cell_type = Script::from_slice(cell.type_().as_slice()).unwrap();
+            let hash = cell_type.calc_script_hash();
+            cache.update(hash.as_slice());
+        }
+    }
+
+    if si.arg2 & CELL_MASK_LOCK_SCRIPT_HASH != 0 {
+        let cell = get_cell(&ckb_sys_call, index, is_input);
+        if cell.is_some() {
+            let hash = cell.unwrap().lock().calc_script_hash();
+            cache.update(hash.as_slice());
+        }
+    }
+
+    if si.arg2 & CELL_MASK_WHOLE_CELL != 0 {
+        let data = ckb_sys_call.sys_load_cell(index, source);
+        if data.is_ok() {
+            cache.update(data.clone().ok().unwrap().as_slice());
+        }
+    }
+}
+
+fn hash_input(
+    cache: &mut OpentxCache,
+    ckb_sys_call: &CkbSysCall,
+    si: &OpentxSigInput,
+    with_offset: bool,
+    base_index: usize,
+) {
+    let index = if with_offset {
+        si.arg1 as usize + base_index
+    } else {
+        si.arg1 as usize
+    };
+
+    if (si.arg2 & INPUT_MASK_TX_HASH) != 0 {
+        let cell = ckb_sys_call.transaction.inputs().get(index);
+        if cell.is_some() {
+            let cell = cell.unwrap();
+            let data = cell.previous_output().tx_hash();
+            cache.update(&data.as_slice());
+        }
+    }
+
+    if (si.arg2 & INPUT_MASK_INDEX) != 0 {
+        let cell = ckb_sys_call.transaction.inputs().get(index);
+        if cell.is_some() {
+            let cell = cell.unwrap();
+            let data = cell.previous_output().index();
+            cache.update(data.as_slice());
+        }
+    }
+
+    if (si.arg2 & INPUT_MASK_SINCE) != 0 {
+        let data = ckb_sys_call.sys_load_input_by_field(
+            index,
+            CkbSysCallSource::Input,
+            CkbSysCallInputField::Since,
+        );
+
+        if data.is_ok() {
+            let data = data.ok().unwrap();
+            cache.update(&data);
+        }
+    }
+
+    if (si.arg2 & INPUT_MASK_PREVIOUS_OUTPUT) != 0 {
+        let data = ckb_sys_call.sys_load_input_by_field(
+            index,
+            CkbSysCallSource::Input,
+            CkbSysCallInputField::OutPoint,
+        );
+
+        if data.is_ok() {
+            let data = data.ok().unwrap();
+            cache.update(&data);
+        }
+    }
+
+    if (si.arg2 & INPUT_MASK_WHOLE) != 0 {
+        let data = ckb_sys_call.sys_load_input(index, CkbSysCallSource::Input);
+        if data.is_ok() {
+            let data = data.ok().unwrap();
+            cache.update(&data);
+        }
+    }
+}
+
+fn get_opentx_message(
+    dummy: &mut DummyDataLoader,
+    tx: &TransactionView,
+    _: usize, // index
+    config: &TestConfig,
+) -> ([u8; 32], Bytes) {
+    let ckb_sys_call = CkbSysCall::new(tx, &dummy);
+
+    let mut cache = OpentxCache::new();
+    let mut s_data =
+        BytesMut::with_capacity(config.opentx_sig_input.clone().unwrap().input.len() * 4);
+    let opentx_sig_input = config.opentx_sig_input.clone().unwrap();
+    for si in opentx_sig_input.input {
+        match si.cmd {
+            OpentxCommand::TxHash => {
+                let tx_hash = ckb_sys_call.sys_load_tx_hash();
+                cache.update(tx_hash.as_slice());
+            }
+            OpentxCommand::GroupInputOutputLen => {
+                cache.update(&calc_group_len(true, &ckb_sys_call).to_le_bytes());
+                cache.update(&calc_group_len(false, &ckb_sys_call).to_le_bytes());
+            }
+            OpentxCommand::IndexOutput => {
+                hash_cell(&mut cache, &ckb_sys_call, &si, false, false, 0);
+            }
+            OpentxCommand::OffsetOutput => {
+                hash_cell(
+                    &mut cache,
+                    &ckb_sys_call,
+                    &si,
+                    false,
+                    true,
+                    opentx_sig_input.base_output_index,
+                );
+            }
+            OpentxCommand::IndexInput => {
+                hash_cell(&mut cache, &ckb_sys_call, &si, true, false, 0);
+            }
+            OpentxCommand::OffsetInput => {
+                hash_cell(
+                    &mut cache,
+                    &ckb_sys_call,
+                    &si,
+                    true,
+                    true,
+                    opentx_sig_input.base_input_index,
+                );
+            }
+            OpentxCommand::CellInputIndex => {
+                hash_input(&mut cache, &ckb_sys_call, &si, false, 0);
+            }
+            OpentxCommand::CellInputOffset => {
+                hash_input(
+                    &mut cache,
+                    &ckb_sys_call,
+                    &si,
+                    true,
+                    opentx_sig_input.base_input_index,
+                );
+            }
+            OpentxCommand::ConcatArg1Arg2 => {
+                let data = (si.arg1 & 0xfff) | ((si.arg2 & 0xfff) << 12);
+                let data = data.to_le_bytes();
+                cache.update(&data[0..3]);
+            }
+            OpentxCommand::End => {}
+        }
+
+        let s: u32 = (si.cmd as u32) + (si.arg1 << 8) + (si.arg2 << 20);
+        s_data.put_u32_le(s);
+    }
+
+    let s_data = s_data.freeze();
+    cache.update(s_data.to_vec().as_slice());
+
+    let msg = cache.finalize();
+    (msg, s_data)
+}
+
+fn get_opentx_sig(config: &TestConfig, sil_data: Bytes, sig_bytes: Bytes) -> Bytes {
+    let mut data = BytesMut::with_capacity(config.get_opentx_sig_len() + sig_bytes.len());
+    data.put_u32_le(config.opentx_sig_input.clone().unwrap().base_input_index as u32);
+    data.put_u32_le(config.opentx_sig_input.clone().unwrap().base_output_index as u32);
+
+    data.put(sil_data);
+
+    data.put(sig_bytes);
+    data.freeze()
+}
+
 pub fn sign_tx_by_input_group(
     dummy: &mut DummyDataLoader,
     tx: TransactionView,
@@ -624,6 +954,12 @@ pub fn sign_tx_by_input_group(
                 });
                 blake2b.finalize(&mut message);
 
+                let (message, sil_data) = if config.opentx_sig_input.is_some() {
+                    get_opentx_message(dummy, &tx, i, config)
+                } else {
+                    (message, Bytes::new())
+                };
+
                 let message = if config.id.flags == IDENTITY_FLAGS_ETHEREUM {
                     convert_keccak256_hash(&message)
                 } else {
@@ -651,6 +987,12 @@ pub fn sign_tx_by_input_group(
                     preimage_hash = blake160(preimage.as_ref());
 
                     let sig_bytes = Bytes::from(sig);
+
+                    let sig_bytes = if config.opentx_sig_input.is_some() {
+                        get_opentx_sig(&config, sil_data, sig_bytes)
+                    } else {
+                        sig_bytes
+                    };
                     gen_witness_lock(
                         sig_bytes,
                         config.use_rc,
@@ -661,8 +1003,14 @@ pub fn sign_tx_by_input_group(
                     )
                 } else if config.id.flags == IDENTITY_FLAGS_MULTISIG {
                     let sig = config.multisig.sign(&message.into());
+
+                    let sig_bytes = if config.opentx_sig_input.is_some() {
+                        get_opentx_sig(&config, sil_data, sig)
+                    } else {
+                        sig
+                    };
                     gen_witness_lock(
-                        sig,
+                        sig_bytes,
                         config.use_rc,
                         config.use_rc_identity,
                         &proof_vec,
@@ -672,6 +1020,12 @@ pub fn sign_tx_by_input_group(
                 } else {
                     let sig = config.private_key.sign_recoverable(&message).expect("sign");
                     let sig_bytes = Bytes::from(sig.serialize());
+
+                    let sig_bytes = if config.opentx_sig_input.is_some() {
+                        get_opentx_sig(&config, sil_data, sig_bytes)
+                    } else {
+                        sig_bytes
+                    };
                     gen_witness_lock(
                         sig_bytes,
                         config.use_rc,
@@ -864,10 +1218,17 @@ pub fn gen_tx_with_grouped_args(
                 .hash_type(ScriptHashType::Data.into())
                 .build();
             config.running_script = script.clone();
-            let previous_output_cell = CellOutput::new_builder()
+            let mut previous_output_cell = CellOutput::new_builder()
                 .capacity(dummy_capacity.pack())
-                .lock(script)
-                .build();
+                .lock(script);
+
+            if config.opentx_sig_input.is_some() {
+                previous_output_cell =
+                    previous_output_cell.type_(Some(build_always_success_script()).pack());
+            }
+
+            let previous_output_cell = previous_output_cell.build();
+
             dummy.cells.insert(
                 previous_out_point.clone(),
                 (previous_output_cell.clone(), Bytes::new()),
@@ -878,6 +1239,12 @@ pub fn gen_tx_with_grouped_args(
             } else {
                 32
             };
+            let witness_len = if config.opentx_sig_input.is_some() {
+                witness_len
+            } else {
+                witness_len
+            };
+
             random_extra_witness.resize(witness_len, 0);
             rng.fill(&mut random_extra_witness[..]);
 
@@ -1125,6 +1492,8 @@ pub struct TestConfig {
 
     pub running_script: Script,
     pub leading_witness_count: usize,
+
+    pub opentx_sig_input: Option<OpentxWitness>,
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -1158,6 +1527,7 @@ const RC_ROOT_MASK: u8 = 1;
 const ACP_MASK: u8 = 2;
 const SINCE_MASK: u8 = 4;
 const SUPPLY_MASK: u8 = 8;
+const OPENTX_MASK: u8 = 16;
 
 impl TestConfig {
     pub fn new(flags: u8, use_rc: bool) -> TestConfig {
@@ -1223,6 +1593,7 @@ impl TestConfig {
             info_cell: Default::default(),
             running_script: Default::default(),
             leading_witness_count: 0,
+            opentx_sig_input: Option::None,
         }
     }
 
@@ -1267,6 +1638,10 @@ impl TestConfig {
     pub fn gen_args(&self) -> Bytes {
         let mut bytes = BytesMut::with_capacity(128);
         let mut omni_lock_flags: u8 = 0;
+
+        if self.opentx_sig_input.is_some() {
+            omni_lock_flags |= OPENTX_MASK;
+        }
 
         if self.use_rc {
             if self.use_rc_identity {
@@ -1330,6 +1705,11 @@ impl TestConfig {
     }
     pub fn is_acp(&self) -> bool {
         self.acp_config.is_some()
+    }
+
+    pub fn get_opentx_sig_len(&self) -> usize {
+        assert!(self.opentx_sig_input.is_some());
+        4 + 4 + 4 * self.opentx_sig_input.clone().unwrap().input.len()
     }
 }
 

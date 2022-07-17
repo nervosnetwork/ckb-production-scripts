@@ -20,6 +20,7 @@ use ckb_types::{
 use lazy_static::lazy_static;
 use misc::*;
 use omni_lock_test::debug_utils::debug;
+use omni_lock_test::dummy_data_loader::DummyDataLoader;
 use std::fs;
 
 // Script args validation errors

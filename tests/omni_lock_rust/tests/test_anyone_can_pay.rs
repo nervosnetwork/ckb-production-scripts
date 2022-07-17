@@ -17,11 +17,12 @@ use rand::{thread_rng, Rng, SeedableRng};
 use misc::{
     assert_script_error, blake160, build_always_success_script, build_omni_lock_script,
     build_resolved_tx, debug_printer, gen_tx, gen_tx_with_grouped_args, gen_witness_lock, sign_tx,
-    sign_tx_by_input_group, sign_tx_hash, DummyDataLoader, TestConfig, TestScheme, ALWAYS_SUCCESS,
+    sign_tx_by_input_group, sign_tx_hash, TestConfig, TestScheme, ALWAYS_SUCCESS,
     ERROR_DUPLICATED_INPUTS, ERROR_DUPLICATED_OUTPUTS, ERROR_ENCODING, ERROR_NO_PAIR,
     ERROR_OUTPUT_AMOUNT_NOT_ENOUGH, ERROR_PUBKEY_BLAKE160_HASH, ERROR_WITNESS_SIZE,
     IDENTITY_FLAGS_PUBKEY_HASH, MAX_CYCLES, OMNI_LOCK,
 };
+use omni_lock_test::dummy_data_loader::DummyDataLoader;
 
 mod misc;
 
