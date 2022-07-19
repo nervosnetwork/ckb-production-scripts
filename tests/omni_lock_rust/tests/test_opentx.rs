@@ -73,7 +73,7 @@ fn gen_opentx_si_all() -> OpentxWitness {
             },
             OpentxSigInput {
                 cmd: OpentxCommand::OffsetOutput,
-                arg1: 1,
+                arg1: 0,
                 arg2: CELL_MASK_CAPACITY
                     | CELL_MASK_LOCK_CODE_HASH
                     | CELL_MASK_LOCK_HASH_TYPE
@@ -191,6 +191,51 @@ fn test_opentx_multisig() {
     config.opentx_sig_input = Option::Some(gen_opentx_si_all());
 
     config.scheme = TestScheme::OnWhiteList;
+
+    let verify_result = run_opentx_case(config);
+    verify_result.expect("pass verification");
+}
+
+#[test]
+fn test_opentx_no_type() {
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, true);
+    config.scheme = TestScheme::OnWhiteList;
+    let mut opentx_witness = gen_opentx_si_all();
+    opentx_witness.has_output_type_script = false;
+    config.opentx_sig_input = Option::Some(opentx_witness);
+
+    let verify_result = run_opentx_case(config);
+    verify_result.expect("pass verification");
+}
+
+#[test]
+fn test_opentx_type_cell_mask() {
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, true);
+    config.scheme = TestScheme::OnWhiteList;
+    config.opentx_sig_input = Option::Some(OpentxWitness::new(
+        0,
+        0,
+        vec![
+            OpentxSigInput {
+                cmd: OpentxCommand::IndexOutput,
+                arg1: 0,
+                arg2: CELL_MASK_CAPACITY
+                    | CELL_MASK_LOCK_CODE_HASH
+                    | CELL_MASK_LOCK_HASH_TYPE
+                    | CELL_MASK_LOCK_ARGS
+                    | CELL_MASK_TYPE_CODE_HASH
+                    | CELL_MASK_CELL_DATA
+                    | CELL_MASK_TYPE_SCRIPT_HASH
+                    | CELL_MASK_LOCK_SCRIPT_HASH
+                    | CELL_MASK_WHOLE_CELL,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::End,
+                arg1: 0,
+                arg2: 0,
+            },
+        ],
+    ));
 
     let verify_result = run_opentx_case(config);
     verify_result.expect("pass verification");
@@ -341,4 +386,40 @@ fn test_opentx_err_si_cmd() {
 
     let verify_result = run_opentx_case(config);
     check_res_val(verify_result, Vec::<i64>::new());
+}
+
+#[test]
+fn test_opentx_err_index_out_of_bound() {
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, true);
+    config.scheme = TestScheme::OnWhiteList;
+    let opentx_witness = OpentxWitness::new(
+        0,
+        0,
+        vec![
+            OpentxSigInput {
+                cmd: OpentxCommand::IndexOutput,
+                arg1: 100,
+                arg2: CELL_MASK_CAPACITY
+                    | CELL_MASK_LOCK_CODE_HASH
+                    | CELL_MASK_LOCK_HASH_TYPE
+                    | CELL_MASK_LOCK_ARGS
+                    | CELL_MASK_TYPE_CODE_HASH
+                    | CELL_MASK_TYPE_HASH_TYPE
+                    | CELL_MASK_TYPE_ARGS
+                    | CELL_MASK_CELL_DATA
+                    | CELL_MASK_TYPE_SCRIPT_HASH
+                    | CELL_MASK_LOCK_SCRIPT_HASH
+                    | CELL_MASK_WHOLE_CELL,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::End,
+                arg1: 0,
+                arg2: 0,
+            },
+        ],
+    );
+    config.opentx_sig_input = Option::Some(opentx_witness);
+
+    let verify_result = run_opentx_case(config);
+    check_res_val(verify_result, vec![1]);
 }

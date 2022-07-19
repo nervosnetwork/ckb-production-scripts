@@ -774,6 +774,16 @@ pub fn gen_tx_with_grouped_args(
     );
     // setup default tx builder
     let dummy_capacity = Capacity::shannons(42);
+    let mut output_cell = { CellOutput::new_builder().capacity(dummy_capacity.pack()) };
+    if config.opentx_sig_input.is_some()
+        && config
+            .opentx_sig_input
+            .clone()
+            .unwrap()
+            .has_output_type_script
+    {
+        output_cell = output_cell.type_(Some(build_always_success_script()).pack());
+    }
     let mut tx_builder = TransactionBuilder::default()
         .cell_dep(
             CellDep::new_builder()
@@ -793,13 +803,8 @@ pub fn gen_tx_with_grouped_args(
                 .dep_type(DepType::Code.into())
                 .build(),
         )
-        .output(
-            CellOutput::new_builder()
-                .capacity(dummy_capacity.pack())
-                .build(),
-        )
+        .output(output_cell.build())
         .output_data(Bytes::new().pack());
-
     // validate_signature_rsa will be referenced by preimage in witness
     let (b0, rsa_script) = build_script(
         dummy,
@@ -863,12 +868,9 @@ pub fn gen_tx_with_grouped_args(
                 previous_output_cell =
                     previous_output_cell.type_(Some(build_always_success_script()).pack());
             }
-
-            let previous_output_cell = previous_output_cell.build();
-
             dummy.cells.insert(
                 previous_out_point.clone(),
-                (previous_output_cell.clone(), Bytes::new()),
+                (previous_output_cell.build(), Bytes::new()),
             );
             let mut random_extra_witness = Vec::<u8>::new();
             let witness_len = if config.scheme == TestScheme::LongWitness {

@@ -1,6 +1,7 @@
 // Open Transaction
 // si: signature input
 // sil: signature input list
+// #define CKB_C_STDLIB_PRINTF
 
 #ifndef __OPEN_TX_H__
 #define __OPEN_TX_H__
@@ -168,6 +169,9 @@ int hash_cell_script(HashCache *cache, size_t index, size_t source,
   uint64_t len = OPENTX_SCRIPT_SIZE;
   int err =
       ckb_checked_load_cell_by_field(script, &len, 0, index, source, field);
+  if (err == CKB_ITEM_MISSING && field == CKB_CELL_FIELD_TYPE) {
+    return 0;
+  }
   CHECK(err);
 
   mol_seg_t script_seg;
@@ -178,19 +182,22 @@ int hash_cell_script(HashCache *cache, size_t index, size_t source,
   CHECK2(mol_err == MOL_OK, OPENTX_ERROR_ENCODING);
 
   // lock\type.code_hash
-  if (cell_mask & 0x2 || cell_mask & 0x10) {
+  if ((cell_mask & 0x2 && field == CKB_CELL_FIELD_LOCK) ||
+      (cell_mask & 0x10 && field == CKB_CELL_FIELD_TYPE)) {
     mol_seg_t code_hash_seg = MolReader_Script_get_code_hash(&script_seg);
     CHECK2(code_hash_seg.size == 32, OPENTX_ERROR_ENCODING);
     hash_cache_append2(cache, code_hash_seg.ptr, code_hash_seg.size);
   }
   // lock\type.hash_type
-  if (cell_mask & 0x4 || cell_mask & 0x20) {
+  if ((cell_mask & 0x4 && field == CKB_CELL_FIELD_LOCK) ||
+      (cell_mask & 0x20 && field == CKB_CELL_FIELD_TYPE)) {
     mol_seg_t hash_type_seg = MolReader_Script_get_hash_type(&script_seg);
     CHECK2(hash_type_seg.size == 1, OPENTX_ERROR_ENCODING);
     hash_cache_append2(cache, hash_type_seg.ptr, hash_type_seg.size);
   }
   // lock\type.args
-  if (cell_mask & 0x8 || cell_mask & 0x40) {
+  if ((cell_mask & 0x8 && field == CKB_CELL_FIELD_LOCK) ||
+      (cell_mask & 0x40 && field == CKB_CELL_FIELD_TYPE)) {
     mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
     mol_seg_t seg = MolReader_Bytes_raw_bytes(&args_seg);
     hash_cache_append2(cache, seg.ptr, seg.size);
@@ -227,14 +234,16 @@ int hash_cell(HashCache *cache, bool is_input, bool with_offset,
   // lock.hash_type
   // lock.args
   if (si->arg2 & (0x2 | 0x4 | 0x8)) {
-    hash_cell_script(cache, index, source, CKB_CELL_FIELD_LOCK, si->arg2);
+    err = hash_cell_script(cache, index, source, CKB_CELL_FIELD_LOCK, si->arg2);
+    CHECK(err);
   }
 
   // type.code_hash
   // type.hash_type
   // type.args
   if (si->arg2 & (0x10 | 0x20 | 0x40)) {
-    hash_cell_script(cache, index, source, CKB_CELL_FIELD_TYPE, si->arg2);
+    err = hash_cell_script(cache, index, source, CKB_CELL_FIELD_TYPE, si->arg2);
+    CHECK(err);
   }
 
   // cell data

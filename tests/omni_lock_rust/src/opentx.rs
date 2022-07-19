@@ -62,6 +62,7 @@ pub struct OpentxWitness {
     pub err_witness_short: bool,
     pub err_witness_rand: bool,
     pub err_sign: bool,
+    pub has_output_type_script: bool,
 }
 
 impl OpentxWitness {
@@ -73,6 +74,7 @@ impl OpentxWitness {
             err_witness_short: false,
             err_witness_rand: false,
             err_sign: false,
+            has_output_type_script: true,
         }
     }
 
@@ -94,7 +96,7 @@ impl OpentxCache {
 
     pub fn update(&mut self, data: &[u8]) {
         self.blake2b.update(data);
-        //dbg_print_bytes(&data.to_vec(), -1, "update blake2b");
+        // dbg_print_bytes(&data.to_vec(), -1, "== update hash");
     }
 
     pub fn finalize(self) -> [u8; 32] {
