@@ -168,36 +168,32 @@ int hash_cell_script(HashCache *cache, size_t index, size_t source,
   uint64_t len = OPENTX_SCRIPT_SIZE;
   int err =
       ckb_checked_load_cell_by_field(script, &len, 0, index, source, field);
-  if (err != CKB_SUCCESS) {
-    if (err == CKB_INDEX_OUT_OF_BOUND || err == CKB_ITEM_MISSING)
-      return CKB_SUCCESS;
-    else
-      return err;
-  }
+  CHECK(err);
+
   mol_seg_t script_seg;
   script_seg.ptr = script;
   script_seg.size = (mol_num_t)len;
 
   mol_errno mol_err = MolReader_Script_verify(&script_seg, false);
-  if (mol_err == MOL_OK) {
-    // lock\type.code_hash
-    if (cell_mask & 0x2 || cell_mask & 0x10) {
-      mol_seg_t code_hash_seg = MolReader_Script_get_code_hash(&script_seg);
-      CHECK2(code_hash_seg.size == 32, OPENTX_ERROR_ENCODING);
-      hash_cache_append2(cache, code_hash_seg.ptr, code_hash_seg.size);
-    }
-    // lock\type.hash_type
-    if (cell_mask & 0x4 || cell_mask & 0x20) {
-      mol_seg_t hash_type_seg = MolReader_Script_get_hash_type(&script_seg);
-      CHECK2(hash_type_seg.size == 1, OPENTX_ERROR_ENCODING);
-      hash_cache_append2(cache, hash_type_seg.ptr, hash_type_seg.size);
-    }
-    // lock\type.args
-    if (cell_mask & 0x8 || cell_mask & 0x40) {
-      mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
-      mol_seg_t seg = MolReader_Bytes_raw_bytes(&args_seg);
-      hash_cache_append2(cache, seg.ptr, seg.size);
-    }
+  CHECK2(mol_err == MOL_OK, OPENTX_ERROR_ENCODING);
+
+  // lock\type.code_hash
+  if (cell_mask & 0x2 || cell_mask & 0x10) {
+    mol_seg_t code_hash_seg = MolReader_Script_get_code_hash(&script_seg);
+    CHECK2(code_hash_seg.size == 32, OPENTX_ERROR_ENCODING);
+    hash_cache_append2(cache, code_hash_seg.ptr, code_hash_seg.size);
+  }
+  // lock\type.hash_type
+  if (cell_mask & 0x4 || cell_mask & 0x20) {
+    mol_seg_t hash_type_seg = MolReader_Script_get_hash_type(&script_seg);
+    CHECK2(hash_type_seg.size == 1, OPENTX_ERROR_ENCODING);
+    hash_cache_append2(cache, hash_type_seg.ptr, hash_type_seg.size);
+  }
+  // lock\type.args
+  if (cell_mask & 0x8 || cell_mask & 0x40) {
+    mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
+    mol_seg_t seg = MolReader_Bytes_raw_bytes(&args_seg);
+    hash_cache_append2(cache, seg.ptr, seg.size);
   }
 
 exit:
@@ -305,23 +301,23 @@ int hash_input(HashCache *cache, bool with_offset, size_t base_index,
     uint64_t len = MAX_INPUT_SIZE;
     err = ckb_checked_load_input_by_field(
         input, &len, 0, index, CKB_SOURCE_INPUT, CKB_INPUT_FIELD_OUT_POINT);
-    if (err == CKB_SUCCESS) {
-      mol_seg_t input_seg;
-      input_seg.ptr = input;
-      input_seg.size = (mol_num_t)len;
-      err = MolReader_OutPoint_verify(&input_seg, false);
-      CHECK2(err == MOL_OK, OPENTX_ERROR_ENCODING);
+    CHECK(err);
 
-      if (si->arg2 & 0x1) {
-        mol_seg_t tx_hash = MolReader_OutPoint_get_tx_hash(&input_seg);
-        CHECK2(tx_hash.size == 32, OPENTX_ERROR_ENCODING);
-        hash_cache_append2(cache, tx_hash.ptr, tx_hash.size);
-      }
-      if (si->arg2 & 0x2) {
-        mol_seg_t index = MolReader_OutPoint_get_index(&input_seg);
-        CHECK2(index.size == 4, OPENTX_ERROR_ENCODING);
-        hash_cache_append2(cache, index.ptr, index.size);
-      }
+    mol_seg_t input_seg;
+    input_seg.ptr = input;
+    input_seg.size = (mol_num_t)len;
+    err = MolReader_OutPoint_verify(&input_seg, false);
+    CHECK2(err == MOL_OK, OPENTX_ERROR_ENCODING);
+
+    if (si->arg2 & 0x1) {
+      mol_seg_t tx_hash = MolReader_OutPoint_get_tx_hash(&input_seg);
+      CHECK2(tx_hash.size == 32, OPENTX_ERROR_ENCODING);
+      hash_cache_append2(cache, tx_hash.ptr, tx_hash.size);
+    }
+    if (si->arg2 & 0x2) {
+      mol_seg_t index = MolReader_OutPoint_get_index(&input_seg);
+      CHECK2(index.size == 4, OPENTX_ERROR_ENCODING);
+      hash_cache_append2(cache, index.ptr, index.size);
     }
   }
 

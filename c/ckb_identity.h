@@ -664,13 +664,13 @@ int ckb_verify_identity(CkbAuthType *id, uint8_t *sig, uint32_t sig_len,
                         uint8_t *preimage, uint32_t preimage_size,
                         bool enable_opentx) {
   if (id->flags == IdentityFlagsCkb) {
-    if (sig == NULL || (enable_opentx == false && sig_len != SECP256K1_SIGNATURE_SIZE)) {
+    if (sig == NULL || (!enable_opentx && sig_len != SECP256K1_SIGNATURE_SIZE)) {
       return ERROR_IDENTITY_WRONG_ARGS;
     }
     return verify_signature(id->id, sig, sig_len, validate_signature_secp256k1,
                             _ckb_convert_copy, enable_opentx);
   } else if (id->flags == IdentityFlagsEthereum) {
-    if (sig == NULL || (enable_opentx == false && sig_len != SECP256K1_SIGNATURE_SIZE)) {
+    if (sig == NULL || (!enable_opentx && sig_len != SECP256K1_SIGNATURE_SIZE)) {
       return ERROR_IDENTITY_WRONG_ARGS;
     }
     return verify_signature(id->id, sig, sig_len,
