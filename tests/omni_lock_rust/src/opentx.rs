@@ -1,13 +1,15 @@
 use ckb_hash::Blake2b;
 use ckb_types::bytes::{BufMut, BytesMut};
+use ckb_types::core::TransactionBuilder;
+use ckb_types::packed::Byte32;
 use ckb_types::{
     bytes::Bytes,
-    core::TransactionView,
-    packed::{CellOutput, Script},
+    core::ScriptHashType,
+    packed::{CellInput, CellOutput, OutPoint, Script},
     prelude::*,
 };
 use rand::prelude::thread_rng;
-use rand::Rng;
+use rand::{rngs::ThreadRng, Rng};
 
 use super::ckb_sys_call::*;
 use super::dummy_data_loader::DummyDataLoader;
@@ -63,6 +65,10 @@ pub struct OpentxWitness {
     pub err_witness_rand: bool,
     pub err_sign: bool,
     pub has_output_type_script: bool,
+
+    pub add_alway_suc_input_cell: usize,
+    pub add_alway_suc_output_cell: usize,
+    pub rand_append_type_script: bool,
 }
 
 impl OpentxWitness {
@@ -75,11 +81,83 @@ impl OpentxWitness {
             err_witness_rand: false,
             err_sign: false,
             has_output_type_script: true,
+
+            add_alway_suc_input_cell: 4,
+            add_alway_suc_output_cell: 4,
+            rand_append_type_script: true,
         }
     }
 
     pub fn get_opentx_sig_len(&self) -> usize {
         4 + 4 + 4 * self.input.len()
+    }
+
+    fn gen_script(rng: &mut ThreadRng, alway_suc_hash: &Byte32) -> Script {
+        let args = {
+            let mut data = Vec::<u8>::new();
+            data.resize(rng.gen_range(1, 64), 0);
+            rng.fill(data.as_mut_slice());
+            data
+        };
+        Script::new_builder()
+            .args(args.pack())
+            .code_hash(alway_suc_hash.clone())
+            .hash_type(ScriptHashType::Data.into())
+            .build()
+    }
+
+    pub fn add_cell(
+        &self,
+        tx_builder: TransactionBuilder,
+        dummy: &mut DummyDataLoader,
+        alway_suc_hash: Byte32,
+    ) -> TransactionBuilder {
+        let mut tx_builder = tx_builder;
+        let mut rng = thread_rng();
+        let mut total_capacity: usize = 0;
+        for _ in 0..self.add_alway_suc_input_cell {
+            let capacity = rng.gen_range(1, 64) as u64;
+            total_capacity += capacity as usize;
+            let mut output = CellOutput::new_builder()
+                .capacity((capacity + 1).pack())
+                .lock(Self::gen_script(&mut rng, &alway_suc_hash));
+            if self.rand_append_type_script && rng.gen_range(0, 2) == 1 {
+                output = output.type_(Some(Self::gen_script(&mut rng, &alway_suc_hash)).pack());
+            }
+
+            let previous_tx_hash = {
+                let mut buf = [0u8; 32];
+                rng.fill(&mut buf);
+                buf.pack()
+            };
+            let previous_out_point = OutPoint::new(previous_tx_hash, 0);
+            dummy
+                .cells
+                .insert(previous_out_point.clone(), (output.build(), Bytes::new()));
+
+            tx_builder = tx_builder.input(CellInput::new(previous_out_point, rng.gen_range(0, 32)));
+        }
+
+        for _ in 0..self.add_alway_suc_output_cell {
+            let capacity = if total_capacity <= 1 {
+                1
+            } else {
+                let ret = rng.gen_range(1, total_capacity) as u64;
+                total_capacity -= ret as usize;
+                ret
+            };
+            let mut output = CellOutput::new_builder()
+                .capacity(capacity.pack())
+                .lock(Self::gen_script(&mut rng, &alway_suc_hash));
+            if self.rand_append_type_script && rng.gen_range(0, 2) == 1 {
+                output = output.type_(Some(Self::gen_script(&mut rng, &alway_suc_hash)).pack());
+            }
+            tx_builder = tx_builder
+                .output(output.build())
+                .output_data(Bytes::new().pack());
+        }
+
+        tx_builder
     }
 }
 
@@ -301,6 +379,7 @@ fn hash_input(
 }
 
 fn calc_group_len(is_input: bool, ckb_sys_call: &CkbSysCall) -> u64 {
+    // omin lock hash?
     let mut index = 0;
     loop {
         let source = if is_input {
@@ -319,32 +398,29 @@ fn calc_group_len(is_input: bool, ckb_sys_call: &CkbSysCall) -> u64 {
 }
 
 pub fn get_opentx_message(
-    dummy: &mut DummyDataLoader,
-    tx: &TransactionView,
+    ckb_syscall: &CkbSysCall,
     _: usize, // index
     opentx_sig_input: &OpentxWitness,
 ) -> ([u8; 32], Bytes) {
-    let ckb_sys_call = CkbSysCall::new(tx, &dummy);
-
     let mut cache = OpentxCache::new();
     let mut s_data = BytesMut::with_capacity(opentx_sig_input.input.len() * 4);
     for si in &opentx_sig_input.input {
         match si.cmd {
             OpentxCommand::TxHash => {
-                let tx_hash = ckb_sys_call.sys_load_tx_hash();
+                let tx_hash = ckb_syscall.sys_load_tx_hash();
                 cache.update(tx_hash.as_slice());
             }
             OpentxCommand::GroupInputOutputLen => {
-                cache.update(&calc_group_len(true, &ckb_sys_call).to_le_bytes());
-                cache.update(&calc_group_len(false, &ckb_sys_call).to_le_bytes());
+                cache.update(&calc_group_len(true, &ckb_syscall).to_le_bytes());
+                cache.update(&calc_group_len(false, &ckb_syscall).to_le_bytes());
             }
             OpentxCommand::IndexOutput => {
-                hash_cell(&mut cache, &ckb_sys_call, &si, false, false, 0);
+                hash_cell(&mut cache, &ckb_syscall, &si, false, false, 0);
             }
             OpentxCommand::OffsetOutput => {
                 hash_cell(
                     &mut cache,
-                    &ckb_sys_call,
+                    &ckb_syscall,
                     &si,
                     false,
                     true,
@@ -352,12 +428,12 @@ pub fn get_opentx_message(
                 );
             }
             OpentxCommand::IndexInput => {
-                hash_cell(&mut cache, &ckb_sys_call, &si, true, false, 0);
+                hash_cell(&mut cache, &ckb_syscall, &si, true, false, 0);
             }
             OpentxCommand::OffsetInput => {
                 hash_cell(
                     &mut cache,
-                    &ckb_sys_call,
+                    &ckb_syscall,
                     &si,
                     true,
                     true,
@@ -365,12 +441,12 @@ pub fn get_opentx_message(
                 );
             }
             OpentxCommand::CellInputIndex => {
-                hash_input(&mut cache, &ckb_sys_call, &si, false, 0);
+                hash_input(&mut cache, &ckb_syscall, &si, false, 0);
             }
             OpentxCommand::CellInputOffset => {
                 hash_input(
                     &mut cache,
-                    &ckb_sys_call,
+                    &ckb_syscall,
                     &si,
                     true,
                     opentx_sig_input.base_input_index,

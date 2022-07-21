@@ -128,6 +128,14 @@ uint64_t calculate_group_len(bool is_input) {
       hi = i;
     }
   }
+
+  if (ret != CKB_SUCCESS && hi == 1) {
+    ret = ckb_load_cell_by_field(NULL, &len, 0, 0, source, field);
+    if (ret != CKB_SUCCESS) {
+      hi = 0;
+    }
+  }
+
   /* now lo is last index and hi is length of inputs or outputs */
   return hi;
 }

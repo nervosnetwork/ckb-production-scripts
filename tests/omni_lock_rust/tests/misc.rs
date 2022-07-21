@@ -30,11 +30,13 @@ use lazy_static::lazy_static;
 use rand::prelude::{thread_rng, ThreadRng};
 use rand::seq::SliceRandom;
 use rand::Rng;
+use std::cmp::Ordering;
 
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::traits::Hasher;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 
+use omni_lock_test::ckb_sys_call::CkbSysCall;
 use omni_lock_test::dummy_data_loader::DummyDataLoader;
 use omni_lock_test::omni_lock;
 use omni_lock_test::omni_lock::OmniLockWitnessLock;
@@ -535,6 +537,19 @@ pub fn write_back_preimage_hash(dummy: &mut DummyDataLoader, flags: u8, hash: By
         .collect();
 }
 
+fn gen_ckb_syscall(dummy: &mut DummyDataLoader, tx: TransactionView) -> CkbSysCall {
+    let omni_lock_hash = CellOutput::calc_data_hash(&OMNI_LOCK);
+
+    let mut lock_script_hash: Option<Byte32> = Option::None;
+    for (_, (output, _)) in &dummy.cells {
+        if output.lock().code_hash().cmp(&omni_lock_hash) == Ordering::Equal {
+            lock_script_hash = Option::Some(output.lock().calc_script_hash());
+        }
+    }
+
+    CkbSysCall::new(&tx, dummy, lock_script_hash.unwrap(), false)
+}
+
 pub fn sign_tx_by_input_group(
     dummy: &mut DummyDataLoader,
     tx: TransactionView,
@@ -546,6 +561,8 @@ pub fn sign_tx_by_input_group(
     let identity = config.id.to_identity();
     let tx_hash = tx.hash();
     let mut preimage_hash: Bytes = Default::default();
+
+    let ckb_syscall = gen_ckb_syscall(dummy, tx.clone());
 
     let mut signed_witnesses: Vec<packed::Bytes> = tx
         .inputs()
@@ -584,7 +601,7 @@ pub fn sign_tx_by_input_group(
                 blake2b.finalize(&mut message);
 
                 let (message, sil_data) = if config.opentx_sig_input.is_some() {
-                    get_opentx_message(dummy, &tx, i, &config.opentx_sig_input.clone().unwrap())
+                    get_opentx_message(&ckb_syscall, i, &config.opentx_sig_input.clone().unwrap())
                 } else {
                     (message, Bytes::new())
                 };
@@ -750,7 +767,7 @@ pub fn gen_tx_with_grouped_args(
         .build();
     dummy.cells.insert(
         always_success_out_point.clone(),
-        (always_success_cell, ALWAYS_SUCCESS.clone()),
+        (always_success_cell.clone(), ALWAYS_SUCCESS.clone()),
     );
     // setup secp256k1_data dep
     let secp256k1_data_out_point = {
@@ -775,6 +792,7 @@ pub fn gen_tx_with_grouped_args(
     // setup default tx builder
     let dummy_capacity = Capacity::shannons(42);
     let mut output_cell = { CellOutput::new_builder().capacity(dummy_capacity.pack()) };
+    output_cell = output_cell.lock(build_always_success_script());
     if config.opentx_sig_input.is_some()
         && config
             .opentx_sig_input
@@ -793,7 +811,7 @@ pub fn gen_tx_with_grouped_args(
         )
         .cell_dep(
             CellDep::new_builder()
-                .out_point(always_success_out_point)
+                .out_point(always_success_out_point.clone())
                 .dep_type(DepType::Code.into())
                 .build(),
         )
@@ -899,6 +917,14 @@ pub fn gen_tx_with_grouped_args(
                 .input(CellInput::new(previous_out_point, since))
                 .witness(witness_args.as_bytes().pack());
         }
+    }
+
+    if config.opentx_sig_input.is_some() {
+        tx_builder = config.opentx_sig_input.clone().unwrap().add_cell(
+            tx_builder,
+            dummy,
+            CellOutput::calc_data_hash(&ALWAYS_SUCCESS),
+        );
     }
 
     tx_builder.build()
