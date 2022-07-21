@@ -19,6 +19,7 @@ use ckb_types::{
 };
 use lazy_static::lazy_static;
 use misc::*;
+use omni_lock_test::dummy_data_loader::DummyDataLoader;
 
 //
 // owner lock section

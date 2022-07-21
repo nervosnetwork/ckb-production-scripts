@@ -1,6 +1,7 @@
 // Open Transaction
 // si: signature input
 // sil: signature input list
+// #define CKB_C_STDLIB_PRINTF
 
 #ifndef __OPEN_TX_H__
 #define __OPEN_TX_H__
@@ -127,6 +128,14 @@ uint64_t calculate_group_len(bool is_input) {
       hi = i;
     }
   }
+
+  if (ret != CKB_SUCCESS && hi == 1) {
+    ret = ckb_load_cell_by_field(NULL, &len, 0, 0, source, field);
+    if (ret != CKB_SUCCESS) {
+      hi = 0;
+    }
+  }
+
   /* now lo is last index and hi is length of inputs or outputs */
   return hi;
 }
@@ -162,6 +171,50 @@ void hash_cache_append2(HashCache *cache, uint8_t *buf, size_t len) {
   blake2b_update(&cache->state, buf, len);
 }
 
+int hash_cell_script(HashCache *cache, size_t index, size_t source,
+                     size_t field, uint16_t cell_mask) {
+  uint8_t script[OPENTX_SCRIPT_SIZE];
+  uint64_t len = OPENTX_SCRIPT_SIZE;
+  int err =
+      ckb_checked_load_cell_by_field(script, &len, 0, index, source, field);
+  if (err == CKB_ITEM_MISSING && field == CKB_CELL_FIELD_TYPE) {
+    return 0;
+  }
+  CHECK(err);
+
+  mol_seg_t script_seg;
+  script_seg.ptr = script;
+  script_seg.size = (mol_num_t)len;
+
+  mol_errno mol_err = MolReader_Script_verify(&script_seg, false);
+  CHECK2(mol_err == MOL_OK, OPENTX_ERROR_ENCODING);
+
+  // lock\type.code_hash
+  if ((cell_mask & 0x2 && field == CKB_CELL_FIELD_LOCK) ||
+      (cell_mask & 0x10 && field == CKB_CELL_FIELD_TYPE)) {
+    mol_seg_t code_hash_seg = MolReader_Script_get_code_hash(&script_seg);
+    CHECK2(code_hash_seg.size == 32, OPENTX_ERROR_ENCODING);
+    hash_cache_append2(cache, code_hash_seg.ptr, code_hash_seg.size);
+  }
+  // lock\type.hash_type
+  if ((cell_mask & 0x4 && field == CKB_CELL_FIELD_LOCK) ||
+      (cell_mask & 0x20 && field == CKB_CELL_FIELD_TYPE)) {
+    mol_seg_t hash_type_seg = MolReader_Script_get_hash_type(&script_seg);
+    CHECK2(hash_type_seg.size == 1, OPENTX_ERROR_ENCODING);
+    hash_cache_append2(cache, hash_type_seg.ptr, hash_type_seg.size);
+  }
+  // lock\type.args
+  if ((cell_mask & 0x8 && field == CKB_CELL_FIELD_LOCK) ||
+      (cell_mask & 0x40 && field == CKB_CELL_FIELD_TYPE)) {
+    mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
+    mol_seg_t seg = MolReader_Bytes_raw_bytes(&args_seg);
+    hash_cache_append2(cache, seg.ptr, seg.size);
+  }
+
+exit:
+  return err;
+}
+
 // hash part or the whole cell, including input/output, index or offset
 int hash_cell(HashCache *cache, bool is_input, bool with_offset,
               size_t base_index, SignatureInput *si) {
@@ -188,46 +241,17 @@ int hash_cell(HashCache *cache, bool is_input, bool with_offset,
   // lock.code_hash
   // lock.hash_type
   // lock.args
+  if (si->arg2 & (0x2 | 0x4 | 0x8)) {
+    err = hash_cell_script(cache, index, source, CKB_CELL_FIELD_LOCK, si->arg2);
+    CHECK(err);
+  }
+
   // type.code_hash
   // type.hash_type
   // type.args
-  if ((si->arg2 & (0x2 | 0x4 | 0x8)) || (si->arg2 & (0x10 | 0x20 | 0x40))) {
-    size_t field = CKB_CELL_FIELD_TYPE;
-    if ((si->arg2 & (0x2 | 0x4 | 0x8))) {
-      field = CKB_CELL_FIELD_LOCK;
-    }
-
-    uint8_t script[OPENTX_SCRIPT_SIZE];
-    uint64_t len = OPENTX_SCRIPT_SIZE;
-    err = ckb_checked_load_cell_by_field(script, &len, 0, si->arg1, source,
-                                         field);
+  if (si->arg2 & (0x10 | 0x20 | 0x40)) {
+    err = hash_cell_script(cache, index, source, CKB_CELL_FIELD_TYPE, si->arg2);
     CHECK(err);
-
-    mol_seg_t script_seg;
-    script_seg.ptr = script;
-    script_seg.size = (mol_num_t)len;
-
-    mol_errno mol_err = MolReader_Script_verify(&script_seg, false);
-    CHECK2(mol_err == MOL_OK, OPENTX_ERROR_ENCODING);
-
-    // lock.code_hash
-    if (si->arg2 & 0x2 || si->arg2 & 0x10) {
-      mol_seg_t code_hash_seg = MolReader_Script_get_code_hash(&script_seg);
-      CHECK2(code_hash_seg.size == 32, OPENTX_ERROR_ENCODING);
-      hash_cache_append2(cache, code_hash_seg.ptr, code_hash_seg.size);
-    }
-    // lock.hash_type
-    if (si->arg2 & 0x4 || si->arg2 & 0x20) {
-      mol_seg_t hash_type_seg = MolReader_Script_get_hash_type(&script_seg);
-      CHECK2(hash_type_seg.size == 1, OPENTX_ERROR_ENCODING);
-      hash_cache_append2(cache, hash_type_seg.ptr, hash_type_seg.size);
-    }
-    // lock.args
-    if (si->arg2 & 0x8 || si->arg2 & 0x40) {
-      mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
-      mol_seg_t seg = MolReader_Bytes_raw_bytes(&args_seg);
-      hash_cache_append2(cache, seg.ptr, seg.size);
-    }
   }
 
   // cell data
@@ -244,10 +268,10 @@ int hash_cell(HashCache *cache, bool is_input, bool with_offset,
   // type script hash
   if (si->arg2 & 0x100) {
     SyscallConfig config = {
-        .id = SYS_ckb_load_cell_data,
+        .id = SYS_ckb_load_cell_by_field,
         .index = index,
         .source = source,
-        .field = 0,
+        .field = CKB_CELL_FIELD_TYPE_HASH,
     };
     err = hash_cache_append(cache, &config);
     CHECK(err);
@@ -295,6 +319,7 @@ int hash_input(HashCache *cache, bool with_offset, size_t base_index,
     err = ckb_checked_load_input_by_field(
         input, &len, 0, index, CKB_SOURCE_INPUT, CKB_INPUT_FIELD_OUT_POINT);
     CHECK(err);
+
     mol_seg_t input_seg;
     input_seg.ptr = input;
     input_seg.size = (mol_num_t)len;

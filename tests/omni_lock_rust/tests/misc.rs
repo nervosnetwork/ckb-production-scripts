@@ -3,19 +3,17 @@ use openssl::pkey::{PKey, Private, Public};
 use openssl::rsa::Rsa;
 use openssl::sign::Signer;
 use sha3::{Digest, Keccak256};
-use std::collections::HashMap;
 
 use ckb_chain_spec::consensus::{Consensus, ConsensusBuilder};
 use ckb_crypto::secp::{Generator, Privkey, Pubkey};
 use ckb_error::Error;
 use ckb_hash::{Blake2b, Blake2bBuilder};
 use ckb_script::TxVerifyEnv;
-use ckb_traits::{CellDataProvider, HeaderProvider};
 use ckb_types::bytes::{BufMut, BytesMut};
 use ckb_types::{
     bytes::Bytes,
     core::{
-        cell::{CellMeta, CellMetaBuilder, ResolvedTransaction},
+        cell::{CellMetaBuilder, ResolvedTransaction},
         hardfork::HardForkSwitch,
         Capacity, DepType, EpochNumberWithFraction, HeaderView, ScriptHashType, TransactionBuilder,
         TransactionView,
@@ -32,13 +30,17 @@ use lazy_static::lazy_static;
 use rand::prelude::{thread_rng, ThreadRng};
 use rand::seq::SliceRandom;
 use rand::Rng;
+use std::cmp::Ordering;
 
 use sparse_merkle_tree::default_store::DefaultStore;
 use sparse_merkle_tree::traits::Hasher;
 use sparse_merkle_tree::{SparseMerkleTree, H256};
 
+use omni_lock_test::ckb_sys_call::CkbSysCall;
+use omni_lock_test::dummy_data_loader::DummyDataLoader;
 use omni_lock_test::omni_lock;
 use omni_lock_test::omni_lock::OmniLockWitnessLock;
+use omni_lock_test::opentx::*;
 use omni_lock_test::xudt_rce_mol::{
     RCCellVecBuilder, RCDataBuilder, RCDataUnion, RCRuleBuilder, SmtProofBuilder,
     SmtProofEntryBuilder, SmtProofEntryVec, SmtProofEntryVecBuilder,
@@ -353,47 +355,6 @@ fn build_rc_rule(smt_root: &[u8; 32], is_black: bool, is_emergency: bool) -> Byt
     res.as_bytes()
 }
 
-#[derive(Default)]
-pub struct DummyDataLoader {
-    pub cells: HashMap<OutPoint, (CellOutput, ckb_types::bytes::Bytes)>,
-}
-
-impl DummyDataLoader {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-impl CellDataProvider for DummyDataLoader {
-    // load Cell Data
-    fn load_cell_data(&self, cell: &CellMeta) -> Option<ckb_types::bytes::Bytes> {
-        cell.mem_cell_data.clone().or_else(|| {
-            self.cells
-                .get(&cell.out_point)
-                .map(|(_, data)| data.clone())
-        })
-    }
-
-    fn load_cell_data_hash(&self, cell: &CellMeta) -> Option<Byte32> {
-        self.load_cell_data(cell)
-            .map(|e| CellOutput::calc_data_hash(&e))
-    }
-
-    fn get_cell_data(&self, _out_point: &OutPoint) -> Option<ckb_types::bytes::Bytes> {
-        None
-    }
-
-    fn get_cell_data_hash(&self, _out_point: &OutPoint) -> Option<Byte32> {
-        None
-    }
-}
-
-impl HeaderProvider for DummyDataLoader {
-    fn get_header(&self, _hash: &Byte32) -> Option<HeaderView> {
-        None
-    }
-}
-
 pub fn blake160(message: &[u8]) -> Bytes {
     let r = ckb_hash::blake2b_256(message);
     Bytes::copy_from_slice(&r[..20])
@@ -576,6 +537,19 @@ pub fn write_back_preimage_hash(dummy: &mut DummyDataLoader, flags: u8, hash: By
         .collect();
 }
 
+fn gen_ckb_syscall(dummy: &mut DummyDataLoader, tx: TransactionView) -> CkbSysCall {
+    let omni_lock_hash = CellOutput::calc_data_hash(&OMNI_LOCK);
+
+    let mut lock_script_hash: Option<Byte32> = Option::None;
+    for (_, (output, _)) in &dummy.cells {
+        if output.lock().code_hash().cmp(&omni_lock_hash) == Ordering::Equal {
+            lock_script_hash = Option::Some(output.lock().calc_script_hash());
+        }
+    }
+
+    CkbSysCall::new(&tx, dummy, lock_script_hash.unwrap(), false)
+}
+
 pub fn sign_tx_by_input_group(
     dummy: &mut DummyDataLoader,
     tx: TransactionView,
@@ -587,6 +561,8 @@ pub fn sign_tx_by_input_group(
     let identity = config.id.to_identity();
     let tx_hash = tx.hash();
     let mut preimage_hash: Bytes = Default::default();
+
+    let ckb_syscall = gen_ckb_syscall(dummy, tx.clone());
 
     let mut signed_witnesses: Vec<packed::Bytes> = tx
         .inputs()
@@ -624,6 +600,12 @@ pub fn sign_tx_by_input_group(
                 });
                 blake2b.finalize(&mut message);
 
+                let (message, sil_data) = if config.opentx_sig_input.is_some() {
+                    get_opentx_message(&ckb_syscall, i, &config.opentx_sig_input.clone().unwrap())
+                } else {
+                    (message, Bytes::new())
+                };
+
                 let message = if config.id.flags == IDENTITY_FLAGS_ETHEREUM {
                     convert_keccak256_hash(&message)
                 } else {
@@ -651,6 +633,16 @@ pub fn sign_tx_by_input_group(
                     preimage_hash = blake160(preimage.as_ref());
 
                     let sig_bytes = Bytes::from(sig);
+
+                    let sig_bytes = if config.opentx_sig_input.is_some() {
+                        get_opentx_sig(
+                            &config.opentx_sig_input.clone().unwrap(),
+                            sil_data,
+                            sig_bytes,
+                        )
+                    } else {
+                        sig_bytes
+                    };
                     gen_witness_lock(
                         sig_bytes,
                         config.use_rc,
@@ -661,8 +653,14 @@ pub fn sign_tx_by_input_group(
                     )
                 } else if config.id.flags == IDENTITY_FLAGS_MULTISIG {
                     let sig = config.multisig.sign(&message.into());
+
+                    let sig_bytes = if config.opentx_sig_input.is_some() {
+                        get_opentx_sig(&config.opentx_sig_input.clone().unwrap(), sil_data, sig)
+                    } else {
+                        sig
+                    };
                     gen_witness_lock(
-                        sig,
+                        sig_bytes,
                         config.use_rc,
                         config.use_rc_identity,
                         &proof_vec,
@@ -672,6 +670,16 @@ pub fn sign_tx_by_input_group(
                 } else {
                     let sig = config.private_key.sign_recoverable(&message).expect("sign");
                     let sig_bytes = Bytes::from(sig.serialize());
+
+                    let sig_bytes = if config.opentx_sig_input.is_some() {
+                        get_opentx_sig(
+                            &config.opentx_sig_input.clone().unwrap(),
+                            sil_data,
+                            sig_bytes,
+                        )
+                    } else {
+                        sig_bytes
+                    };
                     gen_witness_lock(
                         sig_bytes,
                         config.use_rc,
@@ -759,7 +767,7 @@ pub fn gen_tx_with_grouped_args(
         .build();
     dummy.cells.insert(
         always_success_out_point.clone(),
-        (always_success_cell, ALWAYS_SUCCESS.clone()),
+        (always_success_cell.clone(), ALWAYS_SUCCESS.clone()),
     );
     // setup secp256k1_data dep
     let secp256k1_data_out_point = {
@@ -783,6 +791,17 @@ pub fn gen_tx_with_grouped_args(
     );
     // setup default tx builder
     let dummy_capacity = Capacity::shannons(42);
+    let mut output_cell = { CellOutput::new_builder().capacity(dummy_capacity.pack()) };
+    output_cell = output_cell.lock(build_always_success_script());
+    if config.opentx_sig_input.is_some()
+        && config
+            .opentx_sig_input
+            .clone()
+            .unwrap()
+            .has_output_type_script
+    {
+        output_cell = output_cell.type_(Some(build_always_success_script()).pack());
+    }
     let mut tx_builder = TransactionBuilder::default()
         .cell_dep(
             CellDep::new_builder()
@@ -792,7 +811,7 @@ pub fn gen_tx_with_grouped_args(
         )
         .cell_dep(
             CellDep::new_builder()
-                .out_point(always_success_out_point)
+                .out_point(always_success_out_point.clone())
                 .dep_type(DepType::Code.into())
                 .build(),
         )
@@ -802,13 +821,8 @@ pub fn gen_tx_with_grouped_args(
                 .dep_type(DepType::Code.into())
                 .build(),
         )
-        .output(
-            CellOutput::new_builder()
-                .capacity(dummy_capacity.pack())
-                .build(),
-        )
+        .output(output_cell.build())
         .output_data(Bytes::new().pack());
-
     // validate_signature_rsa will be referenced by preimage in witness
     let (b0, rsa_script) = build_script(
         dummy,
@@ -864,13 +878,17 @@ pub fn gen_tx_with_grouped_args(
                 .hash_type(ScriptHashType::Data.into())
                 .build();
             config.running_script = script.clone();
-            let previous_output_cell = CellOutput::new_builder()
+            let mut previous_output_cell = CellOutput::new_builder()
                 .capacity(dummy_capacity.pack())
-                .lock(script)
-                .build();
+                .lock(script);
+
+            if config.opentx_sig_input.is_some() {
+                previous_output_cell =
+                    previous_output_cell.type_(Some(build_always_success_script()).pack());
+            }
             dummy.cells.insert(
                 previous_out_point.clone(),
-                (previous_output_cell.clone(), Bytes::new()),
+                (previous_output_cell.build(), Bytes::new()),
             );
             let mut random_extra_witness = Vec::<u8>::new();
             let witness_len = if config.scheme == TestScheme::LongWitness {
@@ -878,6 +896,12 @@ pub fn gen_tx_with_grouped_args(
             } else {
                 32
             };
+            let witness_len = if config.opentx_sig_input.is_some() {
+                witness_len
+            } else {
+                witness_len
+            };
+
             random_extra_witness.resize(witness_len, 0);
             rng.fill(&mut random_extra_witness[..]);
 
@@ -893,6 +917,14 @@ pub fn gen_tx_with_grouped_args(
                 .input(CellInput::new(previous_out_point, since))
                 .witness(witness_args.as_bytes().pack());
         }
+    }
+
+    if config.opentx_sig_input.is_some() {
+        tx_builder = config.opentx_sig_input.clone().unwrap().add_cell(
+            tx_builder,
+            dummy,
+            CellOutput::calc_data_hash(&ALWAYS_SUCCESS),
+        );
     }
 
     tx_builder.build()
@@ -1125,6 +1157,8 @@ pub struct TestConfig {
 
     pub running_script: Script,
     pub leading_witness_count: usize,
+
+    pub opentx_sig_input: Option<OpentxWitness>,
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -1158,6 +1192,7 @@ const RC_ROOT_MASK: u8 = 1;
 const ACP_MASK: u8 = 2;
 const SINCE_MASK: u8 = 4;
 const SUPPLY_MASK: u8 = 8;
+const OPENTX_MASK: u8 = 16;
 
 impl TestConfig {
     pub fn new(flags: u8, use_rc: bool) -> TestConfig {
@@ -1223,6 +1258,7 @@ impl TestConfig {
             info_cell: Default::default(),
             running_script: Default::default(),
             leading_witness_count: 0,
+            opentx_sig_input: Option::None,
         }
     }
 
@@ -1267,6 +1303,10 @@ impl TestConfig {
     pub fn gen_args(&self) -> Bytes {
         let mut bytes = BytesMut::with_capacity(128);
         let mut omni_lock_flags: u8 = 0;
+
+        if self.opentx_sig_input.is_some() {
+            omni_lock_flags |= OPENTX_MASK;
+        }
 
         if self.use_rc {
             if self.use_rc_identity {

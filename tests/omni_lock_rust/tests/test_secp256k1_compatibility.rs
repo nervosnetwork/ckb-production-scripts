@@ -21,9 +21,10 @@ use rand::{thread_rng, Rng, SeedableRng};
 use misc::{
     assert_script_error, blake160, build_resolved_tx, debug_printer, gen_tx,
     gen_tx_with_grouped_args, gen_witness_lock, sign_tx, sign_tx_by_input_group, sign_tx_hash,
-    DummyDataLoader, TestConfig, TestScheme, ERROR_ENCODING, ERROR_PUBKEY_BLAKE160_HASH,
+    TestConfig, TestScheme, ERROR_ENCODING, ERROR_PUBKEY_BLAKE160_HASH,
     ERROR_WITNESS_SIZE, IDENTITY_FLAGS_PUBKEY_HASH, MAX_CYCLES,
 };
+use omni_lock_test::dummy_data_loader::DummyDataLoader;
 
 mod misc;
 

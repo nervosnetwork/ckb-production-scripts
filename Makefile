@@ -153,7 +153,7 @@ build/rce_validator: c/rce_validator.c c/rce.h
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
 
-build/omni_lock: c/omni_lock.c c/omni_lock_supply.h c/omni_lock_acp.h c/rce.h c/secp256k1_lock.h build/secp256k1_data_info_20210801.h $(SECP256K1_SRC_20210801) c/ckb_identity.h
+build/omni_lock: c/omni_lock.c c/omni_lock_supply.h c/omni_lock_acp.h c/rce.h c/secp256k1_lock.h build/secp256k1_data_info_20210801.h $(SECP256K1_SRC_20210801) c/ckb_identity.h c/opentx.h
 	$(CC) $(OMNI_LOCK_CFLAGS) $(LDFLAGS) -o $@ $<
 	cp $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
