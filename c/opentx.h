@@ -265,24 +265,24 @@ int hash_cell(HashCache *cache, bool is_input, bool with_offset,
     err = hash_cache_append(cache, &config);
     CHECK(err);
   }
-  // type script hash
+  // lock script hash
   if (si->arg2 & 0x100) {
     SyscallConfig config = {
         .id = SYS_ckb_load_cell_by_field,
         .index = index,
         .source = source,
-        .field = CKB_CELL_FIELD_TYPE_HASH,
+        .field = CKB_CELL_FIELD_LOCK_HASH,
     };
     err = hash_cache_append(cache, &config);
     CHECK(err);
   }
-  // lock script hash
+  // type script hash
   if (si->arg2 & 0x200) {
     SyscallConfig config = {
         .id = SYS_ckb_load_cell_by_field,
         .index = index,
         .source = source,
-        .field = CKB_CELL_FIELD_LOCK_HASH,
+        .field = CKB_CELL_FIELD_TYPE_HASH,
     };
     err = hash_cache_append(cache, &config);
     CHECK(err);
