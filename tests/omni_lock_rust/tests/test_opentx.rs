@@ -423,6 +423,26 @@ fn test_opentx_no_end() {
 }
 
 #[test]
+fn test_opentx_only_end() {
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, true);
+    config.scheme = TestScheme::OnWhiteList;
+    config.opentx_sig_input = Option::Some(OpentxWitness::new(
+        1,
+        4,
+        vec![
+            OpentxSigInput {
+                cmd: OpentxCommand::End,
+                arg1: 0,
+                arg2: 0,
+            },
+        ],
+    ));
+
+    let verify_result = run_opentx_case(config);
+    verify_result.expect("pass verification");
+}
+
+#[test]
 fn test_opentx_zero_witness() {
     let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, true);
     config.scheme = TestScheme::OnWhiteList;
@@ -452,6 +472,18 @@ fn test_opentx_rng_sign() {
     config.scheme = TestScheme::OnWhiteList;
     let mut opentx_witness = gen_opentx_si_all();
     opentx_witness.err_sign = true;
+    config.opentx_sig_input = Option::Some(opentx_witness);
+
+    let verify_result = run_opentx_case(config);
+    check_res_val(verify_result, Vec::<i64>::new());
+}
+
+#[test]
+fn test_opentx_zero_sign() {
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, true);
+    config.scheme = TestScheme::OnWhiteList;
+    let mut opentx_witness = gen_opentx_si_all();
+    opentx_witness.zero_sign = true;
     config.opentx_sig_input = Option::Some(opentx_witness);
 
     let verify_result = run_opentx_case(config);

@@ -64,6 +64,7 @@ pub struct OpentxWitness {
     pub err_witness_short: bool,
     pub err_witness_rand: bool,
     pub err_sign: bool,
+    pub zero_sign: bool,
     pub has_output_type_script: bool,
 
     pub add_alway_suc_input_cell: usize,
@@ -80,6 +81,7 @@ impl OpentxWitness {
             err_witness_short: false,
             err_witness_rand: false,
             err_sign: false,
+            zero_sign: false,
             has_output_type_script: true,
 
             add_alway_suc_input_cell: 4,
@@ -502,6 +504,7 @@ pub fn get_opentx_sig(
             rng.fill(sign.as_mut_slice());
 
             data.put(Bytes::from(sign))
+        } else if opentx_sig_input.zero_sign {
         } else {
             data.put(sig_bytes);
         }
