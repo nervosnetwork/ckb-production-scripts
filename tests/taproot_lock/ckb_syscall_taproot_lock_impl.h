@@ -216,7 +216,7 @@ void convert_setting_to_states(void) {
     free(g_states.script_path.ptr);
   }
   g_states.setting = g_setting;
-  ASSERT(g_setting.flags == 0x6);
+  ASSERT(g_setting.flags == 0x7);
 
   for (size_t i = 0; i < 32; i++) {
     g_states.seckey[i] = (uint8_t)i;

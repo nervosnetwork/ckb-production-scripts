@@ -78,7 +78,7 @@ enum TaprootLockErrorCode {
 };
 
 enum IdentityFlagsType2 {
-  IdentityFlagsSchnorr = 0x6,
+  IdentityFlagsSchnorr = 0x7,
 };
 
 // parsed from lock in witness

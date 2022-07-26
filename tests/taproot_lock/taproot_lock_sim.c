@@ -41,7 +41,7 @@ int hex2bin(uint8_t* buf, const char* src) {
 
 UTEST(key_path_spending, success) {
   init_input();
-  g_setting.flags = 6;
+  g_setting.flags = 7;
   g_setting.key_path_spending = true;
   convert_setting_to_states();
 
@@ -51,7 +51,7 @@ UTEST(key_path_spending, success) {
 
 UTEST(key_path_spending, wrong_signature) {
   init_input();
-  g_setting.flags = 6;
+  g_setting.flags = 7;
   g_setting.key_path_spending = true;
   g_setting.wrong_signature = true;
   convert_setting_to_states();
@@ -62,7 +62,7 @@ UTEST(key_path_spending, wrong_signature) {
 
 UTEST(key_path_spending, wrong_pubkey_hash) {
   init_input();
-  g_setting.flags = 6;
+  g_setting.flags = 7;
   g_setting.key_path_spending = true;
   g_setting.wrong_pubkey_hash = true;
   convert_setting_to_states();
@@ -73,7 +73,7 @@ UTEST(key_path_spending, wrong_pubkey_hash) {
 
 UTEST(script_path_spending, success) {
   init_input();
-  g_setting.flags = 6;
+  g_setting.flags = 7;
   g_setting.script_path_spending = true;
   convert_setting_to_states();
 
@@ -83,7 +83,7 @@ UTEST(script_path_spending, success) {
 
 UTEST(script_path_spending, wrong_pubkey) {
   init_input();
-  g_setting.flags = 6;
+  g_setting.flags = 7;
   g_setting.script_path_spending = true;
   g_setting.wrong_pubkey_hash = true;
   convert_setting_to_states();
