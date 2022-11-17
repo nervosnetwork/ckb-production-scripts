@@ -31,9 +31,11 @@ MOLECULE_API_DECORATOR  mol_errno       MolReader_ScriptVecOpt_verify           
 #define                                 MolReader_ScriptVecOpt_is_none(s)               mol_option_is_none(s)
 MOLECULE_API_DECORATOR  mol_errno       MolReader_XudtWitnessInput_verify               (const mol_seg_t*, bool);
 #define                                 MolReader_XudtWitnessInput_actual_field_count(s) mol_table_actual_field_count(s)
-#define                                 MolReader_XudtWitnessInput_has_extra_fields(s)  mol_table_has_extra_fields(s, 2)
-#define                                 MolReader_XudtWitnessInput_get_raw_extension_data(s) mol_table_slice_by_index(s, 0)
-#define                                 MolReader_XudtWitnessInput_get_extension_data(s) mol_table_slice_by_index(s, 1)
+#define                                 MolReader_XudtWitnessInput_has_extra_fields(s)  mol_table_has_extra_fields(s, 4)
+#define                                 MolReader_XudtWitnessInput_get_owner_script(s)  mol_table_slice_by_index(s, 0)
+#define                                 MolReader_XudtWitnessInput_get_owner_signature(s) mol_table_slice_by_index(s, 1)
+#define                                 MolReader_XudtWitnessInput_get_raw_extension_data(s) mol_table_slice_by_index(s, 2)
+#define                                 MolReader_XudtWitnessInput_get_extension_data(s) mol_table_slice_by_index(s, 3)
 #define                                 MolReader_RCRule_verify(s, c)                   mol_verify_fixed_size(s, 33)
 #define                                 MolReader_RCRule_get_smt_root(s)                mol_slice_by_offset(s, 0, 32)
 #define                                 MolReader_RCRule_get_flags(s)                   mol_slice_by_offset(s, 32, 1)
@@ -83,9 +85,11 @@ MOLECULE_API_DECORATOR  mol_errno       MolReader_XudtData_verify               
 #define                                 MolBuilder_ScriptVecOpt_set(b, p, l)            mol_option_builder_set(b, p, l)
 #define                                 MolBuilder_ScriptVecOpt_build(b)                mol_builder_finalize_simple(b)
 #define                                 MolBuilder_ScriptVecOpt_clear(b)                mol_builder_discard(b)
-#define                                 MolBuilder_XudtWitnessInput_init(b)             mol_table_builder_initialize(b, 64, 2)
-#define                                 MolBuilder_XudtWitnessInput_set_raw_extension_data(b, p, l) mol_table_builder_add(b, 0, p, l)
-#define                                 MolBuilder_XudtWitnessInput_set_extension_data(b, p, l) mol_table_builder_add(b, 1, p, l)
+#define                                 MolBuilder_XudtWitnessInput_init(b)             mol_table_builder_initialize(b, 128, 4)
+#define                                 MolBuilder_XudtWitnessInput_set_owner_script(b, p, l) mol_table_builder_add(b, 0, p, l)
+#define                                 MolBuilder_XudtWitnessInput_set_owner_signature(b, p, l) mol_table_builder_add(b, 1, p, l)
+#define                                 MolBuilder_XudtWitnessInput_set_raw_extension_data(b, p, l) mol_table_builder_add(b, 2, p, l)
+#define                                 MolBuilder_XudtWitnessInput_set_extension_data(b, p, l) mol_table_builder_add(b, 3, p, l)
 MOLECULE_API_DECORATOR  mol_seg_res_t   MolBuilder_XudtWitnessInput_build               (mol_builder_t);
 #define                                 MolBuilder_XudtWitnessInput_clear(b)            mol_builder_discard(b)
 #define                                 MolBuilder_RCRule_init(b)                       mol_builder_initialize_fixed_size(b, 33)
@@ -143,9 +147,9 @@ MOLECULE_API_DECORATOR  mol_seg_res_t   MolBuilder_XudtData_build               
 
 MOLECULE_API_DECORATOR const uint8_t MolDefault_ScriptVec[4]     =  {0x04, ____, ____, ____};
 MOLECULE_API_DECORATOR const uint8_t MolDefault_ScriptVecOpt[0]  =  {};
-MOLECULE_API_DECORATOR const uint8_t MolDefault_XudtWitnessInput[16] =  {
-    0x10, ____, ____, ____, 0x0c, ____, ____, ____, 0x0c, ____, ____, ____,
-    0x04, ____, ____, ____,
+MOLECULE_API_DECORATOR const uint8_t MolDefault_XudtWitnessInput[24] =  {
+    0x18, ____, ____, ____, 0x14, ____, ____, ____, 0x14, ____, ____, ____,
+    0x14, ____, ____, ____, 0x14, ____, ____, ____, 0x04, ____, ____, ____,
 };
 MOLECULE_API_DECORATOR const uint8_t MolDefault_RCRule[33]       =  {
     ____, ____, ____, ____, ____, ____, ____, ____, ____, ____, ____, ____,
@@ -259,9 +263,9 @@ MOLECULE_API_DECORATOR mol_errno MolReader_XudtWitnessInput_verify (const mol_se
         return MOL_ERR_OFFSET;
     }
     mol_num_t field_count = offset / 4 - 1;
-    if (field_count < 2) {
+    if (field_count < 4) {
         return MOL_ERR_FIELD_COUNT;
-    } else if (!compatible && field_count > 2) {
+    } else if (!compatible && field_count > 4) {
         return MOL_ERR_FIELD_COUNT;
     }
     if (input->size < MOL_NUM_T_SIZE*(field_count+1)){
@@ -284,12 +288,24 @@ MOLECULE_API_DECORATOR mol_errno MolReader_XudtWitnessInput_verify (const mol_se
         mol_errno errno;
         inner.ptr = input->ptr + offsets[0];
         inner.size = offsets[1] - offsets[0];
-        errno = MolReader_ScriptVecOpt_verify(&inner, compatible);
+        errno = MolReader_ScriptOpt_verify(&inner, compatible);
         if (errno != MOL_OK) {
             return MOL_ERR_DATA;
         }
         inner.ptr = input->ptr + offsets[1];
         inner.size = offsets[2] - offsets[1];
+        errno = MolReader_BytesOpt_verify(&inner, compatible);
+        if (errno != MOL_OK) {
+            return MOL_ERR_DATA;
+        }
+        inner.ptr = input->ptr + offsets[2];
+        inner.size = offsets[3] - offsets[2];
+        errno = MolReader_ScriptVecOpt_verify(&inner, compatible);
+        if (errno != MOL_OK) {
+            return MOL_ERR_DATA;
+        }
+        inner.ptr = input->ptr + offsets[3];
+        inner.size = offsets[4] - offsets[3];
         errno = MolReader_BytesVec_verify(&inner, compatible);
         if (errno != MOL_OK) {
             return MOL_ERR_DATA;
@@ -531,12 +547,16 @@ MOLECULE_API_DECORATOR mol_errno MolReader_XudtData_verify (const mol_seg_t *inp
 MOLECULE_API_DECORATOR mol_seg_res_t MolBuilder_XudtWitnessInput_build (mol_builder_t builder) {
     mol_seg_res_t res;
     res.errno = MOL_OK;
-    mol_num_t offset = 12;
+    mol_num_t offset = 20;
     mol_num_t len;
     res.seg.size = offset;
     len = builder.number_ptr[1];
     res.seg.size += len == 0 ? 0 : len;
     len = builder.number_ptr[3];
+    res.seg.size += len == 0 ? 0 : len;
+    len = builder.number_ptr[5];
+    res.seg.size += len == 0 ? 0 : len;
+    len = builder.number_ptr[7];
     res.seg.size += len == 0 ? 4 : len;
     res.seg.ptr = (uint8_t*)malloc(res.seg.size);
     uint8_t *dst = res.seg.ptr;
@@ -549,12 +569,20 @@ MOLECULE_API_DECORATOR mol_seg_res_t MolBuilder_XudtWitnessInput_build (mol_buil
     mol_pack_number(dst, &offset);
     dst += MOL_NUM_T_SIZE;
     len = builder.number_ptr[3];
+    offset += len == 0 ? 0 : len;
+    mol_pack_number(dst, &offset);
+    dst += MOL_NUM_T_SIZE;
+    len = builder.number_ptr[5];
+    offset += len == 0 ? 0 : len;
+    mol_pack_number(dst, &offset);
+    dst += MOL_NUM_T_SIZE;
+    len = builder.number_ptr[7];
     offset += len == 0 ? 4 : len;
     uint8_t *src = builder.data_ptr;
     len = builder.number_ptr[1];
     if (len == 0) {
         len = 0;
-        memcpy(dst, &MolDefault_ScriptVecOpt, len);
+        memcpy(dst, &MolDefault_ScriptOpt, len);
     } else {
         mol_num_t of = builder.number_ptr[0];
         memcpy(dst, src+of, len);
@@ -562,10 +590,28 @@ MOLECULE_API_DECORATOR mol_seg_res_t MolBuilder_XudtWitnessInput_build (mol_buil
     dst += len;
     len = builder.number_ptr[3];
     if (len == 0) {
+        len = 0;
+        memcpy(dst, &MolDefault_BytesOpt, len);
+    } else {
+        mol_num_t of = builder.number_ptr[2];
+        memcpy(dst, src+of, len);
+    }
+    dst += len;
+    len = builder.number_ptr[5];
+    if (len == 0) {
+        len = 0;
+        memcpy(dst, &MolDefault_ScriptVecOpt, len);
+    } else {
+        mol_num_t of = builder.number_ptr[4];
+        memcpy(dst, src+of, len);
+    }
+    dst += len;
+    len = builder.number_ptr[7];
+    if (len == 0) {
         len = 4;
         memcpy(dst, &MolDefault_BytesVec, len);
     } else {
-        mol_num_t of = builder.number_ptr[2];
+        mol_num_t of = builder.number_ptr[6];
         memcpy(dst, src+of, len);
     }
     dst += len;

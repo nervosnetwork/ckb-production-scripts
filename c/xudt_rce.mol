@@ -4,6 +4,8 @@ vector ScriptVec <Script>;
 option ScriptVecOpt (ScriptVec);
 
 table XudtWitnessInput {
+    owner_script: ScriptOpt,
+		owner_signature: BytesOpt,
     raw_extension_data: ScriptVecOpt,
     extension_data: BytesVec,
 }
