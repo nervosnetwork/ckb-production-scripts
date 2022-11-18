@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use ckb_error::Error;
 use ckb_hash::{Blake2b, Blake2bBuilder};
 use ckb_traits::{CellDataProvider, HeaderProvider};
 use ckb_types::core::cell::{CellMeta, CellMetaBuilder, ResolvedTransaction};
@@ -214,4 +215,22 @@ pub fn debug_printer(script: &Byte32, msg: &str) {
         slice[0], slice[1], slice[2], slice[3], slice[4]
     );
     println!("{:?}: {}", str, msg);
+}
+
+pub fn assert_script_error(err: Error, err_code: i8) {
+    // For ckb 0.40.0
+    // use ckb_error::assert_error_eq;
+    // use ckb_script::ScriptError;
+    // assert_error_eq!(
+    //     err,
+    //     ScriptError::ValidationFailure(err_code).input_lock_script(1)
+    // );
+
+    let error_string = err.to_string();
+    assert!(
+        error_string.contains(format!("error code {}", err_code).as_str()),
+        "error_string: {}, expected_error_code: {}",
+        error_string,
+        err_code
+    );
 }

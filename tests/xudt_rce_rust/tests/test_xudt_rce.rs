@@ -1,9 +1,7 @@
 #![allow(dead_code)]
 
-use ckb_error;
-use ckb_error::assert_error_eq;
 use ckb_hash::blake2b_256;
-use ckb_script::{ScriptError, TransactionScriptsVerifier};
+use ckb_script::TransactionScriptsVerifier;
 use ckb_types;
 use ckb_types::bytes::BufMut;
 use ckb_types::core::{Capacity, DepType, ScriptHashType, TransactionBuilder, TransactionView};
@@ -843,10 +841,7 @@ fn test_simple_udt_failed() {
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
     let verify_result =
         TransactionScriptsVerifier::new(&resolved_tx, &data_loader).verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(-52).input_type_script(0),
-    );
+    assert_script_error(verify_result.unwrap_err(), -52);
 }
 
 #[test]
@@ -925,10 +920,7 @@ fn test_xudt_extension_returns_failed() {
     let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(1).input_type_script(0)
-    );
+    assert_script_error(verify_result.unwrap_err(), 1);
 }
 
 #[test]
@@ -959,10 +951,7 @@ fn test_xudt_extension_multi_return_failed() {
     let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(1).input_type_script(0)
-    );
+    assert_script_error(verify_result.unwrap_err(), 1);
 }
 
 #[test]
@@ -1070,10 +1059,7 @@ fn test_rce_only_input_on_wl() {
     let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(59).input_type_script(0)
-    );
+    assert_script_error(verify_result.unwrap_err(), 59);
 }
 
 #[test]
@@ -1100,10 +1086,7 @@ fn test_rce_only_output_on_wl() {
     let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(59).input_type_script(0), // ERROR_NOT_ON_WHITE_LIST
-    );
+    assert_script_error(verify_result.unwrap_err(), 59);
 }
 
 #[test]
@@ -1157,10 +1140,7 @@ fn test_rce_not_on_wl() {
     let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(59).input_type_script(0), // ERROR_NOT_ON_WHITE_LIST
-    );
+    assert_script_error(verify_result.unwrap_err(), 59);
 }
 
 #[test]
@@ -1241,10 +1221,7 @@ fn test_rce_on_bl() {
     let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(57).input_type_script(0), // ERROR_ON_BLACK_LIST
-    );
+    assert_script_error(verify_result.unwrap_err(), 57);
 }
 
 #[test]
@@ -1271,10 +1248,7 @@ fn test_rce_emergency_halt_mode() {
     let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(54).input_type_script(0), // ERROR_RCE_EMERGENCY_HATL
-    );
+    assert_script_error(verify_result.unwrap_err(), 54);
 }
 
 #[test]
@@ -1301,8 +1275,5 @@ fn test_rce_both_on_wl_bl() {
     let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        verify_result.unwrap_err(),
-        ScriptError::ValidationFailure(57).input_type_script(0), // ERROR_ON_BLACK_LIST
-    );
+    assert_script_error(verify_result.unwrap_err(), 57);
 }

@@ -34,15 +34,18 @@ int ckb_exit(signed char);
 #define SCRIPT_SIZE 32768
 #define RAW_EXTENSION_SIZE 65536
 #define EXPORTED_FUNC_NAME "validate"
-#define MAX_CODE_SIZE (1024 * 1024)
+// here we reserve a lot of memory for dynamic libraries. The enhanced owner
+// mode may also checked via dynamic library. It might consume much memory, e.g.
+// precomputed table (about 1 M) in secp256k1
+#define MAX_CODE_SIZE (1024 * 1800)
 #define FLAGS_SIZE 4
 #define MAX_LOCK_SCRIPT_HASH_COUNT 2048
 
 #define OWNER_MODE_INPUT_TYPE_MASK 0x80000000
 #define OWNER_MODE_OUTPUT_TYPE_MASK 0x40000000
 #define OWNER_MODE_INPUT_LOCK_NOT_MASK 0x20000000
-#define OWNER_MODE_MASK                                       \
-  (OWNER_MODE_INPUT_TYPE_MASK | OWNER_MODE_OUTPUT_TYPE_MASK | \
+#define OWNER_MODE_MASK                                                        \
+  (OWNER_MODE_INPUT_TYPE_MASK | OWNER_MODE_OUTPUT_TYPE_MASK |                  \
    OWNER_MODE_INPUT_LOCK_NOT_MASK)
 
 #include "rce.h"
@@ -56,6 +59,9 @@ uint8_t g_script[SCRIPT_SIZE] = {0};
 uint8_t g_raw_extension_data[RAW_EXTENSION_SIZE] = {0};
 WitnessArgsType g_witness_args;
 
+uint8_t g_code_buff[MAX_CODE_SIZE] __attribute__((aligned(RISCV_PGSIZE)));
+uint32_t g_code_used = 0;
+
 /*
 is_owner_mode indicates if current xUDT is unlocked via owner mode(as
 described by sUDT), extension_index refers to the index of current extension in
@@ -66,7 +72,7 @@ If this function returns 0, the validation for current extension script is
 consider successful.
  */
 typedef int (*ValidateFuncType)(int is_owner_mode, size_t extension_index,
-                                const uint8_t* args, size_t args_len);
+                                const uint8_t *args, size_t args_len);
 
 typedef enum XUDTFlags {
   XUDTFlagsPlain = 0,
@@ -75,18 +81,18 @@ typedef enum XUDTFlags {
 } XUDTFlags;
 
 typedef enum XUDTValidateFuncCategory {
-  CateNormal = 0,  // normal extension script
-  CateRce = 1,     // Regulation Compliance Extension
+  CateNormal = 0, // normal extension script
+  CateRce = 1,    // Regulation Compliance Extension
 } XUDTValidateFuncCategory;
 
 uint8_t RCE_HASH[32] = {1};
 
 // functions
-int load_validate_func(uint8_t* code_buff, uint32_t* code_used,
-                       const uint8_t* hash, uint8_t hash_type,
-                       ValidateFuncType* func, XUDTValidateFuncCategory* cat) {
+int load_validate_func(uint8_t *g_code_buff, uint32_t *g_code_used,
+                       const uint8_t *hash, uint8_t hash_type,
+                       ValidateFuncType *func, XUDTValidateFuncCategory *cat) {
   int err = 0;
-  void* handle = NULL;
+  void *handle = NULL;
   size_t consumed_size = 0;
 
   if (memcmp(RCE_HASH, hash, 32) == 0 && hash_type == 1) {
@@ -95,13 +101,13 @@ int load_validate_func(uint8_t* code_buff, uint32_t* code_used,
     return 0;
   }
 
-  CHECK2(MAX_CODE_SIZE > *code_used, ERROR_NOT_ENOUGH_BUFF);
-  err = ckb_dlopen2(hash, hash_type, &code_buff[*code_used],
-                    MAX_CODE_SIZE - *code_used, &handle, &consumed_size);
+  CHECK2(MAX_CODE_SIZE > *g_code_used, ERROR_NOT_ENOUGH_BUFF);
+  err = ckb_dlopen2(hash, hash_type, &g_code_buff[*g_code_used],
+                    MAX_CODE_SIZE - *g_code_used, &handle, &consumed_size);
   CHECK(err);
   CHECK2(handle != NULL, ERROR_CANT_LOAD_LIB);
   ASSERT(consumed_size % RISCV_PGSIZE == 0);
-  *code_used += consumed_size;
+  *g_code_used += consumed_size;
 
   *func = (ValidateFuncType)ckb_dlsym(handle, EXPORTED_FUNC_NAME);
   CHECK2(*func != NULL, ERROR_CANT_FIND_SYMBOL);
@@ -112,7 +118,7 @@ exit:
   return err;
 }
 
-int verify_script_vec(uint8_t* ptr, uint32_t size, uint32_t* real_size) {
+int verify_script_vec(uint8_t *ptr, uint32_t size, uint32_t *real_size) {
   int err = 0;
 
   CHECK2(size >= MOL_NUM_T_SIZE, ERROR_INVALID_MOL_FORMAT);
@@ -124,7 +130,7 @@ exit:
   return err;
 }
 
-static uint32_t read_from_witness(uintptr_t arg[], uint8_t* ptr, uint32_t len,
+static uint32_t read_from_witness(uintptr_t arg[], uint8_t *ptr, uint32_t len,
                                   uint32_t offset) {
   int err;
   uint64_t output_len = len;
@@ -143,7 +149,7 @@ uint8_t g_witness_data_source[DEFAULT_DATA_SOURCE_LENGTH];
 // due to the "static" data (s_witness_data_source), the "WitnessArgsType" is a
 // singleton. note: mol2_data_source_t consumes a lot of memory due to the
 // "cache" field (default 2K)
-int make_cursor_from_witness(WitnessArgsType* witness, bool* use_input_type) {
+int make_cursor_from_witness(WitnessArgsType *witness, bool *use_input_type) {
   int err = 0;
   uint64_t witness_len = 0;
   // at the beginning of the transactions including RCE,
@@ -167,7 +173,7 @@ int make_cursor_from_witness(WitnessArgsType* witness, bool* use_input_type) {
   cur.offset = 0;
   cur.size = witness_len;
 
-  mol2_data_source_t* ptr = (mol2_data_source_t*)g_witness_data_source;
+  mol2_data_source_t *ptr = (mol2_data_source_t *)g_witness_data_source;
 
   ptr->read = read_from_witness;
   ptr->total_size = witness_len;
@@ -187,8 +193,8 @@ exit:
   return err;
 }
 
-int get_extension_data(uint32_t index, uint8_t* buff, uint32_t buff_len,
-                       uint32_t* out_len) {
+int get_extension_data(uint32_t index, uint8_t *buff, uint32_t buff_len,
+                       uint32_t *out_len) {
   int err = 0;
   bool use_input_type = true;
   err = make_cursor_from_witness(&g_witness_args, &use_input_type);
@@ -222,8 +228,31 @@ exit:
   return err;
 }
 
+int get_owner_script(uint8_t *buff, uint32_t buff_len, uint32_t *out_len) {
+  int err = 0;
+  bool use_input_type = true;
+  err = make_cursor_from_witness(&g_witness_args, &use_input_type);
+  CHECK(err);
+  CHECK2(use_input_type, ERROR_INVALID_MOL_FORMAT);
+  BytesOptType input = g_witness_args.t->input_type(&g_witness_args);
+  CHECK2(!input.t->is_none(&input), ERROR_INVALID_MOL_FORMAT);
+
+  mol2_cursor_t bytes = input.t->unwrap(&input);
+  // convert Bytes to XudtWitnessInputType
+  XudtWitnessInputType witness_input = make_XudtWitnessInput(&bytes);
+  ScriptOptType owner_script = witness_input.t->owner_script(&witness_input);
+  CHECK2(!owner_script.t->is_none(&owner_script), ERROR_INVALID_MOL_FORMAT);
+  ScriptType owner_script2 = owner_script.t->unwrap(&owner_script);
+  *out_len = mol2_read_at(&owner_script2.cur, buff, buff_len);
+  CHECK2(*out_len == owner_script2.cur.size, ERROR_INVALID_MOL_FORMAT);
+
+  err = 0;
+exit:
+  return err;
+}
+
 // the *var_len may be bigger than real length of raw extension data
-int load_raw_extension_data(uint8_t** var_data, uint32_t* var_len) {
+int load_raw_extension_data(uint8_t **var_data, uint32_t *var_len) {
   int err = 0;
   bool use_input_type = true;
   err = make_cursor_from_witness(&g_witness_args, &use_input_type);
@@ -257,7 +286,7 @@ exit:
 }
 
 int check_owner_mode(size_t source, size_t field, mol_seg_t args_bytes_seg,
-                     int* owner_mode) {
+                     int *owner_mode) {
   int err = 0;
   size_t i = 0;
   uint8_t buffer[BLAKE2B_BLOCK_SIZE];
@@ -287,10 +316,71 @@ exit:
   return err;
 }
 
+int check_enhanced_owner_mode(int *owner_mode) {
+  int err = 0;
+  uint8_t owner_script[SCRIPT_SIZE];
+  uint32_t owner_script_len = 0;
+  uint8_t owner_script_hash[BLAKE2B_BLOCK_SIZE] = {0};
+
+  err = get_owner_script(owner_script, SCRIPT_SIZE, &owner_script_len);
+  CHECK(err);
+
+  err = blake2b(owner_script_hash, BLAKE2B_BLOCK_SIZE, owner_script,
+                owner_script_len, NULL, 0);
+  CHECK2(err == 0, ERROR_BLAKE2B_ERROR);
+
+  // get 32 bytes hash from args and compare it to owner script hash
+  {
+    uint64_t len = SCRIPT_SIZE;
+    int ret = ckb_checked_load_script(g_script, &len, 0);
+    CHECK(ret);
+    CHECK2(len <= SCRIPT_SIZE, ERROR_SCRIPT_TOO_LONG);
+
+    mol_seg_t script_seg;
+    script_seg.ptr = g_script;
+    script_seg.size = len;
+
+    mol_errno mol_err = MolReader_Script_verify(&script_seg, false);
+    CHECK2(mol_err == MOL_OK, ERROR_ENCODING);
+
+    mol_seg_t args_seg = MolReader_Script_get_args(&script_seg);
+    mol_seg_t args_bytes_seg = MolReader_Bytes_raw_bytes(&args_seg);
+    CHECK2(args_bytes_seg.size >= BLAKE2B_BLOCK_SIZE, ERROR_ARGUMENTS_LEN);
+
+    if (memcmp(owner_script_hash, args_bytes_seg.ptr, BLAKE2B_BLOCK_SIZE) !=
+        0) {
+      CHECK2(false, ERROR_HASH_MISMATCHED);
+    }
+  }
+
+  // execute owner script
+  mol_seg_t owner_script_seg = {.ptr = owner_script, .size = owner_script_len};
+  mol_errno mol_err = MolReader_Script_verify(&owner_script_seg, false);
+  CHECK2(mol_err == MOL_OK, ERROR_ENCODING);
+  mol_seg_t code_hash = MolReader_Script_get_code_hash(&owner_script_seg);
+  mol_seg_t hash_type = MolReader_Script_get_hash_type(&owner_script_seg);
+
+  mol_seg_t owner_args_seg = MolReader_Script_get_args(&owner_script_seg);
+  mol_seg_t owner_args_bytes_seg = MolReader_Bytes_raw_bytes(&owner_args_seg);
+
+  ValidateFuncType func = NULL;
+  XUDTValidateFuncCategory cat = CateNormal;
+  err = load_validate_func(g_code_buff, &g_code_used, code_hash.ptr,
+                           *(uint8_t *)hash_type.ptr, &func, &cat);
+  CHECK(err);
+
+  err = func(0, 0, owner_args_bytes_seg.ptr, owner_args_bytes_seg.size);
+  CHECK(err);
+  *owner_mode = 1;
+
+exit:
+  return err;
+}
+
 // *var_data will point to "Raw Extension Data", which can be in args or witness
 // *var_data will refer to a memory location of g_script or g_raw_extension_data
-int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
-               uint32_t* var_len, uint8_t* hashes, uint32_t* hashes_count) {
+int parse_args(int *owner_mode, XUDTFlags *flags, uint8_t **var_data,
+               uint32_t *var_len, uint8_t *hashes, uint32_t *hashes_count) {
   int err = 0;
   bool owner_mode_for_input_type = false;
   bool owner_mode_for_output_type = false;
@@ -314,7 +404,7 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
   CHECK2(args_bytes_seg.size >= BLAKE2B_BLOCK_SIZE, ERROR_ARGUMENTS_LEN);
 
   if (args_bytes_seg.size >= (FLAGS_SIZE + BLAKE2B_BLOCK_SIZE)) {
-    uint32_t val = *(uint32_t*)(args_bytes_seg.ptr + BLAKE2B_BLOCK_SIZE);
+    uint32_t val = *(uint32_t *)(args_bytes_seg.ptr + BLAKE2B_BLOCK_SIZE);
     if (val & OWNER_MODE_INPUT_TYPE_MASK) {
       owner_mode_for_input_type = true;
     }
@@ -373,7 +463,7 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
     *flags = XUDTFlagsPlain;
   } else {
     uint32_t temp_flags =
-        (*(uint32_t*)(args_bytes_seg.ptr + BLAKE2B_BLOCK_SIZE)) &
+        (*(uint32_t *)(args_bytes_seg.ptr + BLAKE2B_BLOCK_SIZE)) &
         ~OWNER_MODE_MASK;
     if (temp_flags == XUDTFlagsPlain) {
       *flags = XUDTFlagsPlain;
@@ -398,7 +488,7 @@ int parse_args(int* owner_mode, XUDTFlags* flags, uint8_t** var_data,
       CHECK2(var_len > 0, ERROR_INVALID_MOL_FORMAT);
       // verify the hash
       uint8_t hash[BLAKE2B_BLOCK_SIZE] = {0};
-      uint8_t* blake160_hash =
+      uint8_t *blake160_hash =
           args_bytes_seg.ptr + BLAKE2B_BLOCK_SIZE + FLAGS_SIZE;
       err = blake2b(hash, BLAKE2B_BLOCK_SIZE, *var_data, *var_len, NULL, 0);
       CHECK2(err == 0, ERROR_BLAKE2B_ERROR);
@@ -415,7 +505,8 @@ exit:
 
 // copied from simple_udt.c
 int simple_udt(int owner_mode) {
-  if (owner_mode) return CKB_SUCCESS;
+  if (owner_mode)
+    return CKB_SUCCESS;
 
   int ret = 0;
   // When the owner mode is not enabled, however, we will then need to ensure
@@ -451,8 +542,8 @@ int simple_udt(int owner_mode) {
     // endian format, we can just read the first 16 bytes of cell data into
     // `current_amount`, which is just an unsigned 128-bit integer in C. The
     // memory layout of a C program will ensure that the value is set correctly.
-    ret = ckb_checked_load_cell_data((uint8_t*)&current_amount, &len, 0, i,
-                                     CKB_SOURCE_GROUP_INPUT);
+    ret = ckb_load_cell_data((uint8_t *)&current_amount, &len, 0, i,
+                             CKB_SOURCE_GROUP_INPUT);
     // When `CKB_INDEX_OUT_OF_BOUND` is reached, we know we have iterated
     // through all cells of current type.
     if (ret == CKB_INDEX_OUT_OF_BOUND) {
@@ -483,8 +574,8 @@ int simple_udt(int owner_mode) {
     // Similar to the above code piece, we are also looping through output cells
     // with the same script as current running script here by using
     // `CKB_SOURCE_GROUP_OUTPUT`.
-    ret = ckb_checked_load_cell_data((uint8_t*)&current_amount, &len, 0, i,
-                                     CKB_SOURCE_GROUP_OUTPUT);
+    ret = ckb_load_cell_data((uint8_t *)&current_amount, &len, 0, i,
+                             CKB_SOURCE_GROUP_OUTPUT);
     if (ret == CKB_INDEX_OUT_OF_BOUND) {
       break;
     }
@@ -504,7 +595,7 @@ int simple_udt(int owner_mode) {
   }
 
   // When both value are gathered, we can perform the final check here to
-  // prevent non-authorized token issurance.
+  // prevent non-authorized token issuance.
   if (input_amount < output_amount) {
     return ERROR_AMOUNT;
   }
@@ -515,7 +606,7 @@ int simple_udt(int owner_mode) {
 // current transaction, we consider the extension script to be already
 // validated, no additional check is needed for current extension
 int is_extension_script_validated(mol_seg_t extension_script,
-                                  uint8_t* input_lock_script_hash,
+                                  uint8_t *input_lock_script_hash,
                                   uint32_t input_lock_script_hash_count) {
   int err = 0;
   uint8_t hash[BLAKE2B_BLOCK_SIZE];
@@ -539,16 +630,9 @@ int simulator_main() {
 #else
 int main() {
 #endif
-  // don't move code_buff into global variable. It doesn't work.
-  // it's a ckb-vm bug: the global variable will be freezed:
-  // https://github.com/nervosnetwork/ckb-vm/blob/d43f58d6bf8cc6210721fdcdb6e5ecba513ade0c/src/machine/elf_adaptor.rs#L28-L32
-  // The code can't be loaded into freezed memory.
-  uint8_t code_buff[MAX_CODE_SIZE] __attribute__((aligned(RISCV_PGSIZE)));
-  uint32_t code_used = 0;
-
   int err = 0;
   int owner_mode = 0;
-  uint8_t* raw_extension_data = NULL;
+  uint8_t *raw_extension_data = NULL;
   uint32_t raw_extension_len = 0;
   XUDTFlags flags = XUDTFlagsPlain;
   uint8_t
@@ -558,6 +642,12 @@ int main() {
                    input_lock_script_hashes, &input_lock_script_hash_count);
   CHECK(err);
   CHECK2(owner_mode == 1 || owner_mode == 0, ERROR_INVALID_ARGS_FORMAT);
+  // check enhanced mode here
+  if (!owner_mode) {
+    check_enhanced_owner_mode(&owner_mode);
+    // don't need to check the return result from this function
+    // if failed, owner mode is still false
+  }
 
   if (flags != XUDTFlagsPlain) {
     CHECK2(raw_extension_data != NULL, ERROR_INVALID_ARGS_FORMAT);
@@ -590,10 +680,10 @@ int main() {
     mol_seg_t hash_type = MolReader_Script_get_hash_type(&res.seg);
     mol_seg_t args = MolReader_Script_get_args(&res.seg);
 
-    uint8_t hash_type2 = *((uint8_t*)hash_type.ptr);
+    uint8_t hash_type2 = *((uint8_t *)hash_type.ptr);
     XUDTValidateFuncCategory cat = CateNormal;
-    err = load_validate_func(code_buff, &code_used, code_hash.ptr, hash_type2,
-                             &func, &cat);
+    err = load_validate_func(g_code_buff, &g_code_used, code_hash.ptr,
+                             hash_type2, &func, &cat);
     CHECK(err);
     // RCE is with high priority, must be checked
     if (cat != CateRce) {

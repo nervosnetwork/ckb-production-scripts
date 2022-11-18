@@ -31,15 +31,15 @@ const BINARIES: &[(&str, &str)] = &[
     ),
     (
         "xudt_rce",
-        "1c2fcf0a9ac9c5c80db1147aaab129858907cee2666311662d816ff39e935b50",
+        "eb2c889f5bfc46e7f5d3cdc6f850b512d3c4ee1b09dda7eba1bb79eb39fd3305",
     ),
     (
         "rce_validator",
-        "fe951ccda3ada53ccb65e29fa4577d41030fa2b76cce7f24c5f114743bbcd66a"
+        "d9476d96e0f5d41eca88bbc5e8c819ac38592a33285a4828a58d17873f278b3c"
     ),
     (
         "omni_lock",
-        "635f78eba450cb2f73f113022ff62e4bbfb5a39b7368c375c6a731ba4c85c59e"
+        "86ea7ee58a0ecacfb1f7f2675a06d96223e0597dfe06a2474f9c06a72a7ccabc"
     )
 ];
 
