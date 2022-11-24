@@ -121,19 +121,19 @@ int extract_owner_signature_from_witness(uint8_t *witness, uint64_t len,
   return CKB_SUCCESS;
 }
 
-int get_owner_signature() {
-
-  int ret;
-
+int get_owner_signature(uint8_t signature[SIGNATURE_SIZE]) {
+  int ret = 0;
   unsigned char witness_bytes[MAX_WITNESS_SIZE];
   uint64_t witness_len = MAX_WITNESS_SIZE;
   ret = ckb_load_witness(witness_bytes, &witness_len, 0, 0,
                          CKB_SOURCE_GROUP_INPUT);
   if (ret != CKB_SUCCESS) {
+    printf("Error while load witness: %d\n", ret);
     return ERROR_SYSCALL;
   }
 
   if (witness_len > MAX_WITNESS_SIZE) {
+    printf("Error witness too large\n");
     return ERROR_ENCODING;
   }
 
@@ -142,12 +142,16 @@ int get_owner_signature() {
   ret = extract_owner_signature_from_witness(witness_bytes, witness_len,
                                              &witness_signature_seg);
   if (ret != 0) {
+    printf("Error while extracting owner signature: %d\n", ret);
     return ERROR_ENCODING;
   }
 
   if (witness_signature_seg.size != SIGNATURE_SIZE) {
-    return ERROR_ARGUMENTS_LEN;
+    printf("Error wrong signature size: got %d, expecting %d\n",
+           witness_signature_seg.size, SIGNATURE_SIZE);
+    return ERROR_ENCODING;
   }
+  memcpy(signature, witness_signature_seg.ptr, witness_signature_seg.size);
   return CKB_SUCCESS;
 }
 
@@ -155,6 +159,7 @@ __attribute__((visibility("default"))) int validate(int _is_owner_mode,
                                                     size_t _extension_index,
                                                     const uint8_t *args,
                                                     size_t args_len) {
+  uint8_t signature[SIGNATURE_SIZE];
   printf("hello world\n");
   int ret = 0;
   // Read owner pk hash from args.
@@ -165,6 +170,11 @@ __attribute__((visibility("default"))) int validate(int _is_owner_mode,
   hex_dump("args", (const void *)args, args_len, 0);
 
   // Read signature from witness.
+  ret = get_owner_signature(signature);
+  if (ret != 0) {
+    printf("Error while fetching owner signature\n", ret);
+    return ret;
+  }
 
   const size_t sig_size = 16;
   uint8_t sig[sig_size];
