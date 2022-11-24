@@ -19,7 +19,7 @@ int ckb_exit(signed char);
 #include "blockchain.h"
 #include "ckb_consts.h"
 #include "ckb_identity.h"
-// #include "xudt_rce_mol.h"
+#include "xudt_rce_mol.h"
 
 #define MAX_WITNESS_SIZE 32768
 
