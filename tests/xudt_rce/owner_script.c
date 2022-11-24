@@ -1,6 +1,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// in secp256k1_ctz64_var: we don't have __builtin_ctzl in gcc for RISC-V
+#define __builtin_ctzl secp256k1_ctz64_var_debruijn
+
 #include "blockchain.h"
 #include "ckb_consts.h"
 
