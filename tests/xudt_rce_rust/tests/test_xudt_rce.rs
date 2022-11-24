@@ -884,6 +884,7 @@ fn test_simple_udt_enhanced_owner_mode() {
     let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
+    dbg!(&verify_result);
     verify_result.expect("pass verification");
 }
 

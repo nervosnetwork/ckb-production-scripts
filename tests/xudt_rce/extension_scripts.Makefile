@@ -8,7 +8,7 @@ LD := $(TARGET)-gcc
 OBJCOPY := $(TARGET)-objcopy
 
 CFLAGS := -fPIC -Os -fno-builtin-printf -nostdinc -nostdlib -nostartfiles -fvisibility=hidden -fdata-sections -ffunction-sections -I deps/ckb-c-std-lib -I deps/ckb-c-std-lib/molecule -I deps/ckb-c-std-lib/libc -Wall -Werror -Wno-nonnull -Wno-nonnull-compare -Wno-unused-function
-OWNER_SCRIPT_CFLAGS := $(subst ckb-c-std-lib,ckb-c-stdlib-20210801,$(CFLAGS)) -I c -I deps/secp256k1-20210801 -I deps/secp256k1-20210801/src -I build
+OWNER_SCRIPT_CFLAGS := $(subst ckb-c-std-lib,ckb-c-stdlib-20210801,$(CFLAGS)) -I c -I deps/secp256k1-20210801 -I deps/secp256k1-20210801/src -I build -I deps/sparse-merkle-tree/c
 LDFLAGS := -Wl,-static -Wl,--gc-sections
 MOLC := moleculec
 MOLC_VERSION := 0.7.0
