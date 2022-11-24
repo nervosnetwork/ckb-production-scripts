@@ -349,7 +349,7 @@ fn build_extension_data(
     if owner_script.is_some() {
         wi_builder = wi_builder.owner_script(owner_script.pack());
         // TODO: get real signature here
-        let sig = vec![0u8; 32];
+        let sig = vec![42u8; 65];
         wi_builder = wi_builder.owner_signature(Some(Bytes::copy_from_slice(&sig[..])).pack());
     }
 
