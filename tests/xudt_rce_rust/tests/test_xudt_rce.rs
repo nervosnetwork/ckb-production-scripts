@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use ckb_crypto::secp::{Generator, Privkey, Pubkey};
 use ckb_hash::blake2b_256;
 use ckb_script::TransactionScriptsVerifier;
 use ckb_types;
@@ -310,6 +311,7 @@ fn build_extension_data(
     proofs: Vec<Vec<u8>>,
     proof_masks: Vec<u8>,
     extension_script_vec: ScriptVec,
+    owner_script: Option<Script>,
 ) -> Bytes {
     assert_eq!(proofs.len(), proof_masks.len());
 
@@ -344,6 +346,12 @@ fn build_extension_data(
         .build();
     wi_builder = wi_builder.raw_extension_data(b);
     wi_builder = wi_builder.extension_data(bytes_vec_builder.build());
+    if owner_script.is_some() {
+        wi_builder = wi_builder.owner_script(owner_script.pack());
+        // TODO: get real signature here
+        let sig = vec![0u8; 32];
+        wi_builder = wi_builder.owner_signature(Some(Bytes::copy_from_slice(&sig[..])).pack());
+    }
 
     wi_builder.build().as_bytes()
 }
@@ -360,6 +368,7 @@ pub enum TestScheme {
     NotOnBlackList,
     BothOn,
     EmergencyHaltMode,
+    EnhancedOwnerMode,
     OwnerModeForInputType,
     OwnerModeForOutputType,
 }
@@ -369,6 +378,19 @@ pub enum XudtFlags {
     Plain = 0,
     InArgs = 1,
     InWitness = 2,
+}
+
+pub fn blake160(message: &[u8]) -> Bytes {
+    let r = ckb_hash::blake2b_256(message);
+    Bytes::copy_from_slice(&r[..20])
+}
+
+pub fn get_owner_information() -> (Privkey, Pubkey, Bytes) {
+    let mut generator = Generator::non_crypto_safe_prng(42);
+    let private_key = generator.gen_privkey();
+    let pubkey = private_key.pubkey().expect("pubkey");
+    let pubkey_hash = blake160(&pubkey.serialize());
+    (private_key, pubkey, pubkey_hash)
 }
 
 pub fn gen_tx(
@@ -413,6 +435,17 @@ pub fn gen_tx(
             1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         ]),
+    );
+    tx_builder = tx0;
+
+    let (owner_sk, owner_pk, owner_pk_hash) = get_owner_information();
+    let (tx0, test_owner_script) = build_script(
+        dummy,
+        tx_builder,
+        true,
+        &OWNER_SCRIPT_BIN,
+        owner_pk_hash,
+        None,
     );
     tx_builder = tx0;
 
@@ -461,9 +494,12 @@ pub fn gen_tx(
     let xudt_rce_script = if no_input_witness
         || scheme == TestScheme::OwnerModeForInputType
         || scheme == TestScheme::OwnerModeForOutputType
+        || scheme == TestScheme::EnhancedOwnerMode
     {
         let hash = if no_input_witness {
             blake2b_256(always_success_script.as_slice())
+        } else if scheme == TestScheme::EnhancedOwnerMode {
+            blake2b_256(test_owner_script.as_slice())
         } else {
             blake2b_256(always_type_script.as_slice())
         };
@@ -480,12 +516,18 @@ pub fn gen_tx(
         xudt_rce_script
     };
 
+    let owner_script = if scheme == TestScheme::EnhancedOwnerMode {
+        Some(test_owner_script)
+    } else {
+        None
+    };
     let witness = build_extension_data(
         total_count,
         rce_index,
         proofs.clone(),
         proof_masks.clone(),
         extension_script_vec,
+        owner_script,
     );
 
     for i in 0..output_count {
@@ -810,6 +852,30 @@ fn test_simple_udt_owner_mode_for_output_type() {
         vec![200],
         vec![&EXTENSION_SCRIPT_0],
         TestScheme::OwnerModeForOutputType,
+        false,
+        XudtFlags::InArgs,
+        &mut rng,
+    );
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    verify_result.expect("pass verification");
+}
+
+#[test]
+fn test_simple_udt_enhanced_owner_mode() {
+    let mut rng = thread_rng();
+    let mut data_loader = DummyDataLoader::new();
+    let tx = gen_tx(
+        &mut data_loader,
+        Bytes::from(vec![0u8; 32]),
+        1,
+        1,
+        vec![100],
+        vec![200],
+        vec![&OWNER_SCRIPT_BIN],
+        TestScheme::EnhancedOwnerMode,
         false,
         XudtFlags::InArgs,
         &mut rng,
