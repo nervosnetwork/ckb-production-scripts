@@ -102,25 +102,6 @@ int ckb_exit(signed char);
 //   return err;
 // }
 
-/* Extract lock from WitnessArgs */
-int extract_owner_signature_from_witness(uint8_t *witness, uint64_t len,
-                                         mol_seg_t *signature_bytes_seg) {
-  mol_seg_t witness_seg;
-  witness_seg.ptr = witness;
-  witness_seg.size = len;
-
-  if (MolReader_WitnessArgs_verify(&witness_seg, false) != MOL_OK) {
-    return ERROR_ENCODING;
-  }
-  mol_seg_t lock_seg = MolReader_WitnessArgs_get_lock(&witness_seg);
-
-  if (MolReader_BytesOpt_is_none(&lock_seg)) {
-    return ERROR_ENCODING;
-  }
-  *signature_bytes_seg = MolReader_Bytes_raw_bytes(&lock_seg);
-  return CKB_SUCCESS;
-}
-
 int get_owner_signature(uint8_t signature[SIGNATURE_SIZE]) {
   int ret = 0;
   unsigned char witness_bytes[MAX_WITNESS_SIZE];
@@ -137,18 +118,31 @@ int get_owner_signature(uint8_t signature[SIGNATURE_SIZE]) {
     return ERROR_ENCODING;
   }
 
-  /* load signature */
-  mol_seg_t witness_signature_seg;
-  ret = extract_owner_signature_from_witness(witness_bytes, witness_len,
-                                             &witness_signature_seg);
-  if (ret != 0) {
-    printf("Error while extracting owner signature: %d\n", ret);
+  mol_seg_t witness_seg;
+  witness_seg.ptr = witness_bytes;
+  witness_seg.size = witness_len;
+
+  if (MolReader_WitnessArgs_verify(&witness_seg, false) != MOL_OK) {
+    printf("Error while verifying WitnessArgs\n");
     return ERROR_ENCODING;
   }
+
+  mol_seg_t witness_input_type_seg =
+      MolReader_WitnessArgs_get_input_type(&witness_seg);
+
+  if (MolReader_BytesOpt_is_none(&witness_input_type_seg)) {
+    printf("Error input_type in witness is empty\n");
+    return ERROR_ENCODING;
+  }
+
+  mol_seg_t witness_signature_seg =
+      MolReader_Bytes_raw_bytes(&witness_input_type_seg);
 
   if (witness_signature_seg.size != SIGNATURE_SIZE) {
     printf("Error wrong signature size: got %d, expecting %d\n",
            witness_signature_seg.size, SIGNATURE_SIZE);
+    hex_dump("witness input type", witness_signature_seg.ptr,
+             witness_signature_seg.size, 0);
     return ERROR_ENCODING;
   }
   memcpy(signature, witness_signature_seg.ptr, witness_signature_seg.size);
