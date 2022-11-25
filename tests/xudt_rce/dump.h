@@ -16,8 +16,7 @@
 void hex_dump(const char *desc, const void *addr, const int len, int perLine) {
   // Silently ignore silly per-line values.
 
-  if (perLine < 4 || perLine > 64)
-    perLine = 16;
+  if (perLine < 4 || perLine > 64) perLine = 16;
 
   int i;
   unsigned char buff[perLine + 1];
@@ -25,8 +24,7 @@ void hex_dump(const char *desc, const void *addr, const int len, int perLine) {
 
   // Output description if given.
 
-  if (desc != NULL)
-    printf("%s:\n", desc);
+  if (desc != NULL) printf("%s:\n", desc);
 
   // Length checks.
 
@@ -47,8 +45,7 @@ void hex_dump(const char *desc, const void *addr, const int len, int perLine) {
     if ((i % perLine) == 0) {
       // Only print previous-line ASCII buffer for lines beyond first.
 
-      if (i != 0)
-        printf("  %s\n", buff);
+      if (i != 0) printf("  %s\n", buff);
 
       // Output the offset of current line.
 
@@ -61,7 +58,7 @@ void hex_dump(const char *desc, const void *addr, const int len, int perLine) {
 
     // And buffer a printable ASCII character for later.
 
-    if ((pc[i] < 0x20) || (pc[i] > 0x7e)) // isprint() may be better.
+    if ((pc[i] < 0x20) || (pc[i] > 0x7e))  // isprint() may be better.
       buff[i % perLine] = '.';
     else
       buff[i % perLine] = pc[i];
