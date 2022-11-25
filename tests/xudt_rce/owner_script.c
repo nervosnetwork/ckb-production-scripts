@@ -95,6 +95,8 @@ int get_owner_signature(uint8_t signature[SIGNATURE_SIZE]) {
 int verify_signature(uint8_t *pk_hash, uint64_t pk_hash_len, uint8_t *sig,
                      uint64_t sig_len) {
   if (pk_hash_len != BLAKE160_SIZE) {
+    printf("Error wrong pk hash length: got %d, expecting %d\n",
+           pk_hash_len, BLAKE160_SIZE);
     return ERROR_ILLEGAL_ARGUMENTS;
   }
 
@@ -110,11 +112,13 @@ int verify_signature(uint8_t *pk_hash, uint64_t pk_hash_len, uint8_t *sig,
 
   uint8_t output_pk_hash[BLAKE160_SIZE];
   uint64_t output_pk_hash_len = BLAKE160_SIZE;
+  hex_dump("tx_hash", tx_hash, sizeof(tx_hash), 0);
   ret =
       validate_signature_secp256k1(NULL, sig, sig_len, tx_hash, sizeof(tx_hash),
                                    output_pk_hash, &output_pk_hash_len);
 
   if (ret != 0) {
+    printf("Error validating secp256k1 %d\n", ret);
     return ret;
   }
   if (output_pk_hash_len != BLAKE2B_BLOCK_SIZE) {

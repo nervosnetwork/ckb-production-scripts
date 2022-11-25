@@ -642,19 +642,19 @@ pub fn sign_tx_by_input_group(
                 if witnessinput.owner_script().is_none() {
                     return tx.witnesses().get(i).unwrap();
                 }
-                let mut blake2b = ckb_hash::new_blake2b();
-                let mut message = [0u8; 32];
-                blake2b.update(&tx_hash.raw_data());
-                blake2b.finalize(&mut message);
-                let message = ckb_types::H256::from(message);
+                let tx_hash = &tx_hash.as_slice()[..];
+                use  std::convert::TryInto;
+                let tx_hash: [u8; 32] = tx_hash.try_into().unwrap();
+                let message = ckb_types::H256::from(tx_hash);
                 let sig = key.sign_recoverable(&message).expect("sign");
+                dbg!(&sig, &message);
                 let witnessinput = witnessinput
                     .as_builder()
-                    .owner_signature(Some(Bytes::from(sig.serialize())).pack())
-                    .build();
+                    .owner_signature(Some(Bytes::from(sig.serialize())).pack());
+                dbg!(&witnessinput);
                 witness
                     .as_builder()
-                    .input_type(Some(witnessinput.as_bytes()).pack())
+                    .input_type(Some(witnessinput.build().as_bytes()).pack())
                     .build()
                     .as_bytes()
                     .pack()
