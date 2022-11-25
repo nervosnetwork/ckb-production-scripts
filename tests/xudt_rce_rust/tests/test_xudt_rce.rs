@@ -11,8 +11,10 @@ use ckb_types::molecule;
 use ckb_types::molecule::bytes::Bytes;
 use ckb_types::molecule::bytes::BytesMut;
 use ckb_types::packed::{
-    Byte32, BytesVecBuilder, CellDep, CellInput, CellOutput, Script, WitnessArgsBuilder,
+    Byte32, BytesVecBuilder, CellDep, CellInput, CellOutput, Script, WitnessArgs,
+    WitnessArgsBuilder,
 };
+use ckb_types::prelude::Unpack;
 use ckb_types::prelude::{Builder, Entity, Pack};
 use lazy_static::lazy_static;
 use rand::prelude::{thread_rng, ThreadRng};
@@ -24,7 +26,7 @@ use misc::*;
 use xudt_test::xudt_rce_mol::{
     RCCellVecBuilder, RCDataBuilder, RCDataUnion, RCRuleBuilder, ScriptVec, ScriptVecBuilder,
     ScriptVecOptBuilder, SmtProofBuilder, SmtProofEntryBuilder, SmtProofEntryVec,
-    SmtProofEntryVecBuilder, XudtWitnessInputBuilder,
+    SmtProofEntryVecBuilder, XudtWitnessInput, XudtWitnessInputBuilder,
 };
 
 mod misc;
@@ -604,8 +606,63 @@ pub fn gen_tx(
     );
     tx_builder = tx_builder.input(CellInput::new(previous_out_point, 0));
 
-    tx_builder.build()
+    let tx = tx_builder.build();
+    if scheme == TestScheme::EnhancedOwnerMode {
+        sign_tx(tx, &owner_sk)
+    } else {
+        tx
+    }
 }
+
+pub fn sign_tx(tx: TransactionView, key: &Privkey) -> TransactionView {
+    let witnesses_len = tx.witnesses().len();
+    sign_tx_by_input_group(tx, key, 0, witnesses_len)
+}
+
+pub fn sign_tx_by_input_group(
+    tx: TransactionView,
+    key: &Privkey,
+    begin_index: usize,
+    _len: usize,
+) -> TransactionView {
+    let tx_hash = tx.hash();
+    let mut signed_witnesses: Vec<ckb_types::packed::Bytes> = tx
+        .inputs()
+        .into_iter()
+        .enumerate()
+        .map(|(i, _)| {
+            if i == begin_index {
+                let witness = WitnessArgs::new_unchecked(tx.witnesses().get(i).unwrap().unpack());
+                let mut witnessinput = XudtWitnessInput::new_unchecked(
+                    witness.input_type().to_opt().unwrap().unpack(),
+                );
+                if witnessinput.owner_script().is_some() {
+                    let mut blake2b = ckb_hash::new_blake2b();
+                    let mut message = [0u8; 32];
+                    blake2b.update(&tx_hash.raw_data());
+                    blake2b.finalize(&mut message);
+                    let message = ckb_types::H256::from(message);
+                    let sig = key.sign_recoverable(&message).expect("sign");
+                    witnessinput = witnessinput
+                        .as_builder()
+                        .owner_signature(Some(Bytes::from(sig.serialize())).pack())
+                        .build();
+                }
+                witnessinput.as_bytes().pack()
+            } else {
+                tx.witnesses().get(i).unwrap_or_default()
+            }
+        })
+        .collect();
+    for i in signed_witnesses.len()..tx.witnesses().len() {
+        signed_witnesses.push(tx.witnesses().get(i).unwrap());
+    }
+    // calculate message
+    tx.as_advanced_builder()
+        .set_witnesses(signed_witnesses)
+        .build()
+}
+
 //
 // fn build_rce_cell_vec(hash_set: Vec<Byte32>) {
 // }
@@ -881,6 +938,7 @@ fn test_simple_udt_enhanced_owner_mode() {
         &mut rng,
     );
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    dbg!(&resolved_tx, &tx);
     let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
     verifier.set_debug_printer(debug_printer);
     let verify_result = verifier.verify(MAX_CYCLES);
