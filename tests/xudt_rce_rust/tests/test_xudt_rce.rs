@@ -633,22 +633,31 @@ pub fn sign_tx_by_input_group(
         .map(|(i, _)| {
             if i == begin_index {
                 let witness = WitnessArgs::new_unchecked(tx.witnesses().get(i).unwrap().unpack());
-                let mut witnessinput = XudtWitnessInput::new_unchecked(
+                if witness.input_type().is_none() {
+                    return tx.witnesses().get(i).unwrap();
+                }
+                let witnessinput = XudtWitnessInput::new_unchecked(
                     witness.input_type().to_opt().unwrap().unpack(),
                 );
-                if witnessinput.owner_script().is_some() {
-                    let mut blake2b = ckb_hash::new_blake2b();
-                    let mut message = [0u8; 32];
-                    blake2b.update(&tx_hash.raw_data());
-                    blake2b.finalize(&mut message);
-                    let message = ckb_types::H256::from(message);
-                    let sig = key.sign_recoverable(&message).expect("sign");
-                    witnessinput = witnessinput
-                        .as_builder()
-                        .owner_signature(Some(Bytes::from(sig.serialize())).pack())
-                        .build();
+                if witnessinput.owner_script().is_none() {
+                    return tx.witnesses().get(i).unwrap();
                 }
-                witnessinput.as_bytes().pack()
+                let mut blake2b = ckb_hash::new_blake2b();
+                let mut message = [0u8; 32];
+                blake2b.update(&tx_hash.raw_data());
+                blake2b.finalize(&mut message);
+                let message = ckb_types::H256::from(message);
+                let sig = key.sign_recoverable(&message).expect("sign");
+                let witnessinput = witnessinput
+                    .as_builder()
+                    .owner_signature(Some(Bytes::from(sig.serialize())).pack())
+                    .build();
+                witness
+                    .as_builder()
+                    .input_type(Some(witnessinput.as_bytes()).pack())
+                    .build()
+                    .as_bytes()
+                    .pack()
             } else {
                 tx.witnesses().get(i).unwrap_or_default()
             }
