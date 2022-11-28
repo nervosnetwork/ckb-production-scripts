@@ -358,9 +358,7 @@ fn build_extension_data(
     wi_builder = wi_builder.extension_data(bytes_vec_builder.build());
     if owner_script.is_some() {
         wi_builder = wi_builder.owner_script(owner_script.pack());
-        // TODO: get real signature here
-        let sig = vec![42u8; 65];
-        wi_builder = wi_builder.owner_signature(Some(Bytes::copy_from_slice(&sig[..])).pack());
+        // Signature is generated later in the function create_owner_signature
     }
 
     wi_builder.build().as_bytes()
@@ -644,18 +642,18 @@ pub fn gen_tx(
 
     let tx = tx_builder.build();
     if scheme == TestScheme::EnhancedOwnerMode {
-        sign_tx(tx, &owner_sk)
+        create_owner_signature(tx, &owner_sk)
     } else {
         tx
     }
 }
 
-pub fn sign_tx(tx: TransactionView, key: &Privkey) -> TransactionView {
+pub fn create_owner_signature(tx: TransactionView, key: &Privkey) -> TransactionView {
     let witnesses_len = tx.witnesses().len();
-    sign_tx_by_input_group(tx, key, 0, witnesses_len)
+    create_owner_signature_by_input_group(tx, key, 0, witnesses_len)
 }
 
-pub fn sign_tx_by_input_group(
+pub fn create_owner_signature_by_input_group(
     tx: TransactionView,
     key: &Privkey,
     begin_index: usize,
