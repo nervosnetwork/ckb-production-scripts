@@ -376,9 +376,18 @@ pub enum TestScheme {
     NotOnBlackList,
     BothOn,
     EmergencyHaltMode,
-    EnhancedOwnerMode,
+    // Ideally we should use EnhancedOwnerMode(Privkey, Bytes) here to represent to private key to
+    // sign transaction and the public key hash for owner verification. But they do not implement
+    // Copy and PartialEq, so we use a custom enum `EnhancedOwnerModeConfig` instead.
+    EnhancedOwnerMode(EnhancedOwnerModeConfig),
     OwnerModeForInputType,
     OwnerModeForOutputType,
+}
+
+#[derive(Copy, Clone, PartialEq)]
+pub enum EnhancedOwnerModeConfig {
+    Normal = 0,
+    WrongPKHash = 1,
 }
 
 #[derive(Copy, Clone)]
@@ -393,7 +402,7 @@ pub fn blake160(message: &[u8]) -> Bytes {
     Bytes::copy_from_slice(&r[..20])
 }
 
-pub fn get_owner_information() -> (Privkey, Pubkey, Bytes) {
+pub fn get_owner_information(_config: EnhancedOwnerModeConfig) -> (Privkey, Pubkey, Bytes) {
     let mut generator = Generator::non_crypto_safe_prng(42);
     let private_key = generator.gen_privkey();
     let pubkey = private_key.pubkey().expect("pubkey");
@@ -446,17 +455,6 @@ pub fn gen_tx(
     );
     tx_builder = tx0;
 
-    let (owner_sk, owner_pk, owner_pk_hash) = get_owner_information();
-    let (tx0, test_owner_script) = build_script(
-        dummy,
-        tx_builder,
-        true,
-        &OWNER_SCRIPT_BIN,
-        owner_pk_hash,
-        None,
-    );
-    tx_builder = tx0;
-
     let (proofs, rc_datas, proof_masks) =
         generate_proofs(scheme, &vec![always_success_script_hash]);
 
@@ -498,19 +496,36 @@ pub fn gen_tx(
     let (mut tx_builder, xudt_rce_script) =
         build_script(dummy, tx_builder, true, &XUDT_RCE_BIN, args, None);
 
-    // use owner mode
-    let xudt_rce_script = if no_input_witness
-        || scheme == TestScheme::OwnerModeForInputType
+    let enhanced_mode_owner_info = if let TestScheme::EnhancedOwnerMode(config) = scheme {
+        let (owner_sk, _owner_pk, owner_pk_hash) = get_owner_information(config);
+        let (tx0, test_owner_script) = build_script(
+            dummy,
+            tx_builder,
+            true,
+            &OWNER_SCRIPT_BIN,
+            owner_pk_hash,
+            None,
+        );
+        tx_builder = tx0;
+
+        Some((test_owner_script, owner_sk))
+    } else {
+        None
+    };
+
+    let script_hash = if no_input_witness {
+        Some(blake2b_256(always_success_script.as_slice()))
+    } else if let Some((owner_script, _)) = enhanced_mode_owner_info.as_ref() {
+        Some(blake2b_256(owner_script.as_slice()))
+    } else if scheme == TestScheme::OwnerModeForInputType
         || scheme == TestScheme::OwnerModeForOutputType
-        || scheme == TestScheme::EnhancedOwnerMode
     {
-        let hash = if no_input_witness {
-            blake2b_256(always_success_script.as_slice())
-        } else if scheme == TestScheme::EnhancedOwnerMode {
-            blake2b_256(test_owner_script.as_slice())
-        } else {
-            blake2b_256(always_type_script.as_slice())
-        };
+        Some(blake2b_256(always_type_script.as_slice()))
+    } else {
+        None
+    };
+    // use owner mode
+    let xudt_rce_script = if let Some(hash) = script_hash {
         let hash_slice = &hash[..];
 
         let args0 = xudt_rce_script.args().raw_data();
@@ -524,18 +539,13 @@ pub fn gen_tx(
         xudt_rce_script
     };
 
-    let owner_script = if scheme == TestScheme::EnhancedOwnerMode {
-        Some(test_owner_script)
-    } else {
-        None
-    };
     let witness = build_extension_data(
         total_count,
         rce_index,
         proofs.clone(),
         proof_masks.clone(),
         extension_script_vec,
-        owner_script,
+        enhanced_mode_owner_info.as_ref().map(|x| x.0.clone()),
     );
 
     for i in 0..output_count {
@@ -611,7 +621,7 @@ pub fn gen_tx(
         (previous_output_cell.clone(), Bytes::default()),
     );
     // setup secp256k1_data dep which is needed for signature verification in enhanced owner mode
-    if scheme == TestScheme::EnhancedOwnerMode {
+    if let Some(_) = enhanced_mode_owner_info {
         let secp256k1_data_out_point = {
             let tx_hash = {
                 let mut buf = [0u8; 32];
@@ -641,10 +651,9 @@ pub fn gen_tx(
     tx_builder = tx_builder.input(CellInput::new(previous_out_point, 0));
 
     let tx = tx_builder.build();
-    if scheme == TestScheme::EnhancedOwnerMode {
-        create_owner_signature(tx, &owner_sk)
-    } else {
-        tx
+    match enhanced_mode_owner_info.as_ref() {
+        Some((_, ref owner_sk)) => create_owner_signature(tx, owner_sk),
+        None => tx,
     }
 }
 
@@ -975,7 +984,7 @@ fn test_simple_udt_enhanced_owner_mode() {
         vec![100],
         vec![200],
         vec![&EXTENSION_SCRIPT_0],
-        TestScheme::EnhancedOwnerMode,
+        TestScheme::EnhancedOwnerMode(EnhancedOwnerModeConfig::Normal),
         false,
         XudtFlags::InArgs,
         &mut rng,
