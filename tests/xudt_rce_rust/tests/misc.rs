@@ -36,6 +36,9 @@ lazy_static! {
         ckb_types::bytes::Bytes::from(include_bytes!("../../../build/rce_validator").as_ref());
     pub static ref ALWAYS_SUCCESS_BIN: ckb_types::bytes::Bytes =
         ckb_types::bytes::Bytes::from(include_bytes!("../../../build/always_success").as_ref());
+    pub static ref SECP256K1_DATA_BIN: ckb_types::bytes::Bytes = ckb_types::bytes::Bytes::from(
+        include_bytes!("../../../build/secp256k1_data_20210801").as_ref()
+    );
     pub static ref OWNER_SCRIPT_BIN: ckb_types::bytes::Bytes =
         ckb_types::bytes::Bytes::from(include_bytes!("../../../build/owner_script").as_ref());
     pub static ref SMT_EXISTING: H256 = H256::from([

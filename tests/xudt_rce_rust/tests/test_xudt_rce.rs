@@ -604,6 +604,34 @@ pub fn gen_tx(
         previous_out_point.clone(),
         (previous_output_cell.clone(), Bytes::default()),
     );
+    // setup secp256k1_data dep which is needed for signature verification in enhanced owner mode
+    if scheme == TestScheme::EnhancedOwnerMode {
+        let secp256k1_data_out_point = {
+            let tx_hash = {
+                let mut buf = [0u8; 32];
+                rng.fill(&mut buf);
+                buf.pack()
+            };
+            ckb_types::packed::OutPoint::new(tx_hash, 0)
+        };
+        let secp256k1_data_cell = CellOutput::new_builder()
+            .capacity(
+                Capacity::bytes(SECP256K1_DATA_BIN.len())
+                    .expect("data capacity")
+                    .pack(),
+            )
+            .build();
+        dummy.cells.insert(
+            secp256k1_data_out_point.clone(),
+            (secp256k1_data_cell, SECP256K1_DATA_BIN.clone()),
+        );
+        tx_builder = tx_builder.cell_dep(
+            CellDep::new_builder()
+                .out_point(secp256k1_data_out_point)
+                .dep_type(DepType::Code.into())
+                .build(),
+        );
+    }
     tx_builder = tx_builder.input(CellInput::new(previous_out_point, 0));
 
     let tx = tx_builder.build();
@@ -643,7 +671,7 @@ pub fn sign_tx_by_input_group(
                     return tx.witnesses().get(i).unwrap();
                 }
                 let tx_hash = &tx_hash.as_slice()[..];
-                use  std::convert::TryInto;
+                use std::convert::TryInto;
                 let tx_hash: [u8; 32] = tx_hash.try_into().unwrap();
                 let message = ckb_types::H256::from(tx_hash);
                 let sig = key.sign_recoverable(&message).expect("sign");

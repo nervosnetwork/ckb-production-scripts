@@ -112,6 +112,7 @@ int verify_signature(uint8_t *pk_hash, uint64_t pk_hash_len, uint8_t *sig,
 
   uint8_t output_pk_hash[BLAKE160_SIZE];
   uint64_t output_pk_hash_len = BLAKE160_SIZE;
+  hex_dump("sig", sig, sig_len, 0);
   hex_dump("tx_hash", tx_hash, sizeof(tx_hash), 0);
   ret =
       validate_signature_secp256k1(NULL, sig, sig_len, tx_hash, sizeof(tx_hash),
