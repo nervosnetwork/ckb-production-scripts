@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use ckb_crypto::secp::{Generator, Privkey, Pubkey};
+use ckb_crypto::secp::{Generator, Privkey};
 use ckb_hash::blake2b_256;
 use ckb_script::TransactionScriptsVerifier;
 use ckb_types;
@@ -402,12 +402,22 @@ pub fn blake160(message: &[u8]) -> Bytes {
     Bytes::copy_from_slice(&r[..20])
 }
 
-pub fn get_owner_information(_config: EnhancedOwnerModeConfig) -> (Privkey, Pubkey, Bytes) {
-    let mut generator = Generator::non_crypto_safe_prng(42);
-    let private_key = generator.gen_privkey();
-    let pubkey = private_key.pubkey().expect("pubkey");
-    let pubkey_hash = blake160(&pubkey.serialize());
-    (private_key, pubkey, pubkey_hash)
+pub fn get_owner_information(config: EnhancedOwnerModeConfig) -> (Privkey, Bytes) {
+    let key_gen = |seed| {
+        let mut generator = Generator::non_crypto_safe_prng(seed);
+        let private_key = generator.gen_privkey();
+        let pubkey = private_key.pubkey().expect("pubkey");
+        let pubkey_hash = blake160(&pubkey.serialize());
+        (private_key, pubkey_hash)
+    };
+    match config {
+        EnhancedOwnerModeConfig::Normal => key_gen(42),
+        EnhancedOwnerModeConfig::WrongPKHash => {
+            let (private_key, _pubkey_hash) = key_gen(42);
+            let (_wrong_private_key, wrong_pubkey_hash) = key_gen(43);
+            (private_key, wrong_pubkey_hash)
+        }
+    }
 }
 
 pub fn gen_tx(
@@ -497,7 +507,7 @@ pub fn gen_tx(
         build_script(dummy, tx_builder, true, &XUDT_RCE_BIN, args, None);
 
     let enhanced_mode_owner_info = if let TestScheme::EnhancedOwnerMode(config) = scheme {
-        let (owner_sk, _owner_pk, owner_pk_hash) = get_owner_information(config);
+        let (owner_sk, owner_pk_hash) = get_owner_information(config);
         let (tx0, test_owner_script) = build_script(
             dummy,
             tx_builder,
@@ -996,6 +1006,32 @@ fn test_simple_udt_enhanced_owner_mode() {
     let verify_result = verifier.verify(MAX_CYCLES);
     dbg!(&verify_result);
     verify_result.expect("pass verification");
+}
+
+#[test]
+fn test_simple_udt_enhanced_owner_mode_failed() {
+    let mut rng = thread_rng();
+    let mut data_loader = DummyDataLoader::new();
+    let tx = gen_tx(
+        &mut data_loader,
+        Bytes::from(vec![0u8; 32]),
+        1,
+        1,
+        vec![100],
+        vec![200],
+        vec![&EXTENSION_SCRIPT_0],
+        TestScheme::EnhancedOwnerMode(EnhancedOwnerModeConfig::WrongPKHash),
+        false,
+        XudtFlags::InArgs,
+        &mut rng,
+    );
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    dbg!(&resolved_tx, &tx);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    dbg!(&verify_result);
+    assert_script_error(verify_result.unwrap_err(), -52);
 }
 
 #[test]
