@@ -316,6 +316,14 @@ fn build_extension_data(
     owner_script: Option<Script>,
 ) -> Bytes {
     assert_eq!(proofs.len(), proof_masks.len());
+    dbg!(
+        count,
+        rce_index,
+        &proofs,
+        &proof_masks,
+        &extension_script_vec,
+        &owner_script,
+    );
 
     let mut builder = SmtProofEntryVecBuilder::default();
     let iter = proofs.iter().zip(proof_masks.iter());
@@ -968,7 +976,7 @@ fn test_simple_udt_enhanced_owner_mode() {
         1,
         vec![100],
         vec![200],
-        vec![&OWNER_SCRIPT_BIN],
+        vec![&EXTENSION_SCRIPT_0],
         TestScheme::EnhancedOwnerMode,
         false,
         XudtFlags::InArgs,
