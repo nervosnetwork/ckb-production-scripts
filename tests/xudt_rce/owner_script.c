@@ -20,6 +20,10 @@ int ckb_exit(signed char);
 #include "secp256k1_helper_20210801.h"
 #include "ckb_identity.h"
 #include "validate_signature_rsa.h"
+// The MOLECULEC_VERSION defined in blockchain.h is incompatible with
+// that defined in xudt_rce_mol.h
+#undef MOLECULEC_VERSION
+
 #include "xudt_rce_mol.h"
 
 #define MAX_WITNESS_SIZE 32768
