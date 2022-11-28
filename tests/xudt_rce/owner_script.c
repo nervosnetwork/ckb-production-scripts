@@ -122,7 +122,7 @@ int verify_signature(uint8_t *pk_hash, uint64_t pk_hash_len, uint8_t *sig,
     printf("Error validating secp256k1 %d\n", ret);
     return ret;
   }
-  if (output_pk_hash_len != BLAKE2B_BLOCK_SIZE) {
+  if (output_pk_hash_len != BLAKE160_SIZE) {
     return ERROR_UNREACHABLE;
   }
 
