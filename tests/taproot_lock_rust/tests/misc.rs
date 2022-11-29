@@ -121,7 +121,7 @@ pub fn new_smt(pairs: Vec<(H256, H256)>) -> SMT {
     smt
 }
 
-pub const IDENTITY_FLAGS_SCHNORR: u8 = 6;
+pub const IDENTITY_FLAGS_SCHNORR: u8 = 7;
 
 #[derive(Clone)]
 pub struct Identity {
