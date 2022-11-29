@@ -429,13 +429,11 @@ fn test_opentx_only_end() {
     config.opentx_sig_input = Option::Some(OpentxWitness::new(
         1,
         4,
-        vec![
-            OpentxSigInput {
-                cmd: OpentxCommand::End,
-                arg1: 0,
-                arg2: 0,
-            },
-        ],
+        vec![OpentxSigInput {
+            cmd: OpentxCommand::End,
+            arg1: 0,
+            arg2: 0,
+        }],
     ));
 
     let verify_result = run_opentx_case(config);
@@ -598,4 +596,33 @@ fn test_opentx_range_cell() {
         let verify_result = run_opentx_case(config);
         verify_result.expect("pass verification");
     }
+}
+
+#[test]
+fn test_opentx_item_missing() {
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, true);
+    config.scheme = TestScheme::OnWhiteList;
+    let mut opentx_witness = OpentxWitness::new(
+        4,
+        4,
+        vec![
+            OpentxSigInput {
+                cmd: OpentxCommand::IndexInput,
+                arg1: 8,
+                arg2: CELL_MASK_TYPE_CODE_HASH,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::End,
+                arg1: 0,
+                arg2: 0,
+            },
+        ],
+    );
+    opentx_witness.has_output_type_script = false;
+    opentx_witness.rand_append_type_script = false;
+
+    config.opentx_sig_input = Option::Some(opentx_witness);
+
+    let verify_result = run_opentx_case(config);
+    check_res_val(verify_result, vec![1]);
 }

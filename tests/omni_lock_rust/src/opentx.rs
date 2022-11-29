@@ -38,8 +38,8 @@ pub const CELL_MASK_TYPE_CODE_HASH: u32 = 0x10;
 pub const CELL_MASK_TYPE_HASH_TYPE: u32 = 0x20;
 pub const CELL_MASK_TYPE_ARGS: u32 = 0x40;
 pub const CELL_MASK_CELL_DATA: u32 = 0x80;
-pub const CELL_MASK_TYPE_SCRIPT_HASH: u32 = 0x100;
-pub const CELL_MASK_LOCK_SCRIPT_HASH: u32 = 0x200;
+pub const CELL_MASK_LOCK_SCRIPT_HASH: u32 = 0x100;
+pub const CELL_MASK_TYPE_SCRIPT_HASH: u32 = 0x200;
 pub const CELL_MASK_WHOLE_CELL: u32 = 0x400;
 
 pub const INPUT_MASK_TX_HASH: u32 = 0x1;
@@ -288,20 +288,20 @@ fn hash_cell(
         }
     }
 
+    if si.arg2 & CELL_MASK_LOCK_SCRIPT_HASH != 0 {
+        let cell = get_cell(&ckb_sys_call, index, is_input);
+        if cell.is_some() {
+            let hash = cell.unwrap().lock().calc_script_hash();
+            cache.update(hash.as_slice());
+        }
+    }
+    
     if si.arg2 & CELL_MASK_TYPE_SCRIPT_HASH != 0 {
         let cell = get_cell(&ckb_sys_call, index, is_input);
         if cell.is_some() && cell.clone().unwrap().type_().is_some() {
             let cell = cell.unwrap();
             let cell_type = Script::from_slice(cell.type_().as_slice()).unwrap();
             let hash = cell_type.calc_script_hash();
-            cache.update(hash.as_slice());
-        }
-    }
-
-    if si.arg2 & CELL_MASK_LOCK_SCRIPT_HASH != 0 {
-        let cell = get_cell(&ckb_sys_call, index, is_input);
-        if cell.is_some() {
-            let hash = cell.unwrap().lock().calc_script_hash();
             cache.update(hash.as_slice());
         }
     }
