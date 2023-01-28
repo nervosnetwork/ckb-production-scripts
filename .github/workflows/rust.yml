@@ -9,6 +9,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
+    - name: Install depend
+      run: apt-get install libssl-dev
     - name: Update submodules
       run: git submodule update --init
     - name: Build contract
