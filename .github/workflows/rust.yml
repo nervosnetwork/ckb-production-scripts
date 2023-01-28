@@ -8,9 +8,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v1
-    - name: Install depend
-      run: sudo apt-get install libssl-dev
+    - uses: actions/checkout@v3
     - name: Update submodules
       run: git submodule update --init
     - name: Build contract
