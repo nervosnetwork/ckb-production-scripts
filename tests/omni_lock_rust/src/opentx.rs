@@ -17,7 +17,7 @@ use super::dummy_data_loader::DummyDataLoader;
 #[derive(Copy, Clone)]
 pub enum OpentxCommand {
     TxHash = 0x00,
-    GroupInputOutputLen = 0x01,
+    CellInputOutputLen = 0x01,
     IndexOutput = 0x11,
     OffsetOutput = 0x12,
     IndexInput = 0x13,
@@ -295,7 +295,6 @@ fn hash_cell(
             cache.update(hash.as_slice());
         }
     }
-    
     if si.arg2 & CELL_MASK_TYPE_SCRIPT_HASH != 0 {
         let cell = get_cell(&ckb_sys_call, index, is_input);
         if cell.is_some() && cell.clone().unwrap().type_().is_some() {
@@ -380,14 +379,22 @@ fn hash_input(
     }
 }
 
-fn calc_group_len(is_input: bool, ckb_sys_call: &CkbSysCall) -> u64 {
+fn calc_cell_len(is_input: bool, is_group: bool, ckb_sys_call: &CkbSysCall) -> u64 {
     // omin lock hash?
     let mut index = 0;
     loop {
         let source = if is_input {
-            CkbSysCallSource::GroupInput
+            if is_group {
+                CkbSysCallSource::GroupInput
+            } else {
+                CkbSysCallSource::Input
+            }
         } else {
-            CkbSysCallSource::GroupOutpout
+            if is_group {
+                CkbSysCallSource::GroupOutpout
+            } else {
+                CkbSysCallSource::Outpout
+            }
         };
         let ret = ckb_sys_call.sys_load_cell_by_field(index, source, CkbSysCallCellField::Capacity);
         if ret.is_err() {
@@ -412,10 +419,18 @@ pub fn get_opentx_message(
                 let tx_hash = ckb_syscall.sys_load_tx_hash();
                 cache.update(tx_hash.as_slice());
             }
-            OpentxCommand::GroupInputOutputLen => {
-                cache.update(&calc_group_len(true, &ckb_syscall).to_le_bytes());
-                cache.update(&calc_group_len(false, &ckb_syscall).to_le_bytes());
-            }
+            OpentxCommand::CellInputOutputLen => cache.update(
+                &{
+                    match si.arg1 {
+                        0 => calc_cell_len(true, true, &ckb_syscall),
+                        1 => calc_cell_len(false, true, &ckb_syscall),
+                        2 => calc_cell_len(true, false, &ckb_syscall),
+                        3 => calc_cell_len(false, false, &ckb_syscall),
+                        _ => 0,
+                    }
+                }
+                .to_le_bytes(),
+            ),
             OpentxCommand::IndexOutput => {
                 hash_cell(&mut cache, &ckb_syscall, &si, false, false, 0);
             }
