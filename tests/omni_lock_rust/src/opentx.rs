@@ -70,6 +70,8 @@ pub struct OpentxWitness {
     pub add_alway_suc_input_cell: usize,
     pub add_alway_suc_output_cell: usize,
     pub rand_append_type_script: bool,
+
+    pub cell_count_is_zero: bool,
 }
 
 impl OpentxWitness {
@@ -87,6 +89,7 @@ impl OpentxWitness {
             add_alway_suc_input_cell: 4,
             add_alway_suc_output_cell: 4,
             rand_append_type_script: true,
+            cell_count_is_zero: false,
         }
     }
 
@@ -419,18 +422,24 @@ pub fn get_opentx_message(
                 let tx_hash = ckb_syscall.sys_load_tx_hash();
                 cache.update(tx_hash.as_slice());
             }
-            OpentxCommand::CellInputOutputLen => cache.update(
-                &{
-                    match si.arg1 {
-                        0 => calc_cell_len(true, true, &ckb_syscall),
-                        1 => calc_cell_len(false, true, &ckb_syscall),
-                        2 => calc_cell_len(true, false, &ckb_syscall),
-                        3 => calc_cell_len(false, false, &ckb_syscall),
-                        _ => 0,
-                    }
+            OpentxCommand::CellInputOutputLen => {
+                if opentx_sig_input.cell_count_is_zero {
+                    cache.update(&0u64.to_le_bytes())
+                } else {
+                    cache.update(
+                        &{
+                            match si.arg1 {
+                                0 => calc_cell_len(true, true, &ckb_syscall),
+                                1 => calc_cell_len(false, true, &ckb_syscall),
+                                2 => calc_cell_len(true, false, &ckb_syscall),
+                                3 => calc_cell_len(false, false, &ckb_syscall),
+                                _ => 0,
+                            }
+                        }
+                        .to_le_bytes(),
+                    )
                 }
-                .to_le_bytes(),
-            ),
+            }
             OpentxCommand::IndexOutput => {
                 hash_cell(&mut cache, &ckb_syscall, &si, false, false, 0);
             }
