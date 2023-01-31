@@ -91,19 +91,41 @@ int hash_cache_init(HashCache *cache) {
   return 0;
 }
 
+enum CKB_SOURCE_TYPE {
+  CKBSourceTypeGroupInput = 0,
+  CKBSourceTypeGroupOutput = 1,
+  CKBSourceTypeInput = 2,
+  CKBSourceTypeOutput = 3,
+};
+
 /* calculate group inputs/outputs length in current lock script group */
-uint64_t calculate_group_len(bool is_input) {
+int calculate_cell_len(enum CKB_SOURCE_TYPE source_type, uint64_t *out_len) {
   uint64_t len = 0;
   /* lower bound, at least tx has one input */
   uint64_t lo = 0;
   /* higher bound */
   uint64_t hi = 4;
   int ret;
+  int err = CKB_SUCCESS;
 
-  size_t source = CKB_SOURCE_GROUP_OUTPUT;
-  if (is_input) {
-    source = CKB_SOURCE_GROUP_INPUT;
+  size_t source = 0;
+  switch (source_type) {
+    case CKBSourceTypeGroupInput:
+      source = CKB_SOURCE_GROUP_INPUT;
+      break;
+    case CKBSourceTypeGroupOutput:
+      source = CKB_SOURCE_GROUP_OUTPUT;
+      break;
+    case CKBSourceTypeInput:
+      source = CKB_SOURCE_INPUT;
+      break;
+    case CKBSourceTypeOutput:
+      source = CKB_SOURCE_OUTPUT;
+      break;
+    default:
+      CHECK(OPENTX_ERROR_INVALID_ARGUMENT);
   }
+
   size_t field = CKB_CELL_FIELD_CAPACITY;
   /* try to load until failing to increase lo and hi */
   while (1) {
@@ -137,7 +159,9 @@ uint64_t calculate_group_len(bool is_input) {
   }
 
   /* now lo is last index and hi is length of inputs or outputs */
-  return hi;
+  *out_len = hi;
+exit:
+  return err;
 }
 
 int hash_cache_append(HashCache *cache, SyscallConfig *config) {
@@ -440,11 +464,9 @@ int process_si(HashCache *cache, SignatureInput *si, size_t base_input_index,
       break;
     }
     case 0x01: {
-      // Hash length of input & output cells in current script group
-      uint64_t input_len = calculate_group_len(true);
-      uint64_t output_len = calculate_group_len(false);
-      hash_cache_append2(cache, (uint8_t *)&input_len, 8);
-      hash_cache_append2(cache, (uint8_t *)&output_len, 8);
+      uint64_t len = 0;
+      CHECK(calculate_cell_len(si->arg1, &len));
+      hash_cache_append2(cache, (uint8_t *)&len, 8);
       break;
     }
     case 0x11:

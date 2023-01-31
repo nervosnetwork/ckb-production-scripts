@@ -56,8 +56,23 @@ fn gen_opentx_si_all() -> OpentxWitness {
                 arg2: 0,
             },
             OpentxSigInput {
-                cmd: OpentxCommand::GroupInputOutputLen,
+                cmd: OpentxCommand::CellInputOutputLen,
                 arg1: 0,
+                arg2: 0,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::CellInputOutputLen,
+                arg1: 1,
+                arg2: 0,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::CellInputOutputLen,
+                arg1: 2,
+                arg2: 0,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::CellInputOutputLen,
+                arg1: 3,
                 arg2: 0,
             },
             OpentxSigInput {
@@ -167,8 +182,23 @@ fn gen_opentx_range_si() -> OpentxWitness {
                 arg2: 0,
             },
             OpentxSigInput {
-                cmd: OpentxCommand::GroupInputOutputLen,
+                cmd: OpentxCommand::CellInputOutputLen,
                 arg1: 0,
+                arg2: 0,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::CellInputOutputLen,
+                arg1: 1,
+                arg2: 0,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::CellInputOutputLen,
+                arg1: 2,
+                arg2: 0,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::CellInputOutputLen,
+                arg1: 3,
                 arg2: 0,
             },
             OpentxSigInput {
@@ -411,8 +441,23 @@ fn test_opentx_no_end() {
                 arg2: 0,
             },
             OpentxSigInput {
-                cmd: OpentxCommand::GroupInputOutputLen,
+                cmd: OpentxCommand::CellInputOutputLen,
                 arg1: 0,
+                arg2: 0,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::CellInputOutputLen,
+                arg1: 1,
+                arg2: 0,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::CellInputOutputLen,
+                arg1: 2,
+                arg2: 0,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::CellInputOutputLen,
+                arg1: 3,
                 arg2: 0,
             },
         ],
@@ -461,7 +506,7 @@ fn test_opentx_rng_witness() {
     config.opentx_sig_input = Option::Some(opentx_witness);
 
     let verify_result = run_opentx_case(config);
-    check_res_val(verify_result, vec![102]);
+    check_res_val(verify_result, Vec::new());
 }
 
 #[test]
@@ -625,4 +670,95 @@ fn test_opentx_item_missing() {
 
     let verify_result = run_opentx_case(config);
     check_res_val(verify_result, vec![1]);
+}
+
+#[test]
+fn test_opentx_len() {
+    for i in 0..3 {
+        let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, true);
+        config.scheme = TestScheme::OnWhiteList;
+        let opentx_witness = OpentxWitness::new(
+            0,
+            0,
+            vec![
+                OpentxSigInput {
+                    cmd: OpentxCommand::CellInputOutputLen,
+                    arg1: i,
+                    arg2: 0,
+                },
+                OpentxSigInput {
+                    cmd: OpentxCommand::End,
+                    arg1: 0,
+                    arg2: 0,
+                },
+            ],
+        );
+        config.opentx_sig_input = Option::Some(opentx_witness);
+
+        let verify_result = run_opentx_case(config);
+        verify_result.expect("pass verification");
+    }
+}
+
+#[test]
+fn test_opentx_err_len() {
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, true);
+    config.scheme = TestScheme::OnWhiteList;
+    let opentx_witness = OpentxWitness::new(
+        0,
+        0,
+        vec![
+            OpentxSigInput {
+                cmd: OpentxCommand::TxHash,
+                arg1: 0,
+                arg2: 0,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::CellInputOutputLen,
+                arg1: 4,
+                arg2: 0,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::End,
+                arg1: 0,
+                arg2: 0,
+            },
+        ],
+    );
+    config.opentx_sig_input = Option::Some(opentx_witness);
+
+    let verify_result = run_opentx_case(config);
+    check_res_val(verify_result, vec![101]);
+}
+
+#[test]
+fn test_opentx_cell_count_zero() {
+    let mut config = TestConfig::new(IDENTITY_FLAGS_PUBKEY_HASH, true);
+    config.scheme = TestScheme::OnWhiteList;
+    let mut opentx_witness = OpentxWitness::new(
+        0,
+        0,
+        vec![
+            OpentxSigInput {
+                cmd: OpentxCommand::TxHash,
+                arg1: 0,
+                arg2: 0,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::CellInputOutputLen,
+                arg1: 2,
+                arg2: 0,
+            },
+            OpentxSigInput {
+                cmd: OpentxCommand::End,
+                arg1: 0,
+                arg2: 0,
+            },
+        ],
+    );
+    opentx_witness.cell_count_is_zero = true;
+    config.opentx_sig_input = Option::Some(opentx_witness);
+
+    let verify_result = run_opentx_case(config);
+    check_res_val(verify_result, vec![-31]); // ERROR_IDENTITY_PUBKEY_BLAKE160_HASH
 }
