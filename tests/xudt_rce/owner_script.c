@@ -38,10 +38,16 @@ int get_owner_signature(uint8_t signature[SIGNATURE_SIZE]) {
   int ret = 0;
   unsigned char witness_bytes[MAX_WITNESS_SIZE];
   uint64_t witness_len = MAX_WITNESS_SIZE;
+  int use_input_type = 1;
   ret = ckb_load_witness(witness_bytes, &witness_len, 0, 0,
                          CKB_SOURCE_GROUP_INPUT);
+  if (ret == CKB_INDEX_OUT_OF_BOUND) {
+    use_input_type = 0;
+    ret = ckb_load_witness(witness_bytes, &witness_len, 0, 0,
+                         CKB_SOURCE_GROUP_OUTPUT);
+  } 
   if (ret != CKB_SUCCESS) {
-    printf("Error while load witness: %d\n", ret);
+    printf("Error while loading witness: %d\n", ret);
     return ERROR_SYSCALL;
   }
 
@@ -59,8 +65,8 @@ int get_owner_signature(uint8_t signature[SIGNATURE_SIZE]) {
     return ERROR_ENCODING;
   }
 
-  mol_seg_t witness_input_type_seg =
-      MolReader_WitnessArgs_get_input_type(&witness_seg);
+  mol_seg_t witness_input_type_seg = use_input_type ?
+      MolReader_WitnessArgs_get_input_type(&witness_seg) : MolReader_WitnessArgs_get_output_type(&witness_seg);
 
   if (MolReader_BytesOpt_is_none(&witness_input_type_seg)) {
     printf("Error input_type in witness is empty\n");
@@ -162,3 +168,4 @@ __attribute__((visibility("default"))) int validate(int _is_owner_mode,
   printf("verify sighash all result %d\n", ret);
   return ret;
 }
+
