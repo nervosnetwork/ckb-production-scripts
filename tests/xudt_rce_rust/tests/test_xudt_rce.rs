@@ -527,8 +527,6 @@ pub fn gen_tx(
         Some(blake2b_256(owner_script.as_slice()))
     } else if no_input_witness {
         Some(blake2b_256(always_success_script.as_slice()))
-    } else if let Some((owner_script, _)) = enhanced_mode_owner_info.as_ref() {
-        Some(blake2b_256(owner_script.as_slice()))
     } else if scheme == TestScheme::OwnerModeForInputType
         || scheme == TestScheme::OwnerModeForOutputType
     {
