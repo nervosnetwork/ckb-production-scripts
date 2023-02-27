@@ -621,6 +621,20 @@ pub fn gen_tx(
             tx_builder = tx_builder.witness(witness_args.as_bytes().pack());
         }
     }
+    // We may have extra outputs. Add witness here.
+    for _i in input_count..output_count {
+        if !no_input_witness {
+            let witness_args = WitnessArgsBuilder::default()
+                .input_type(Some(witness.clone()).pack())
+                .build();
+            tx_builder = tx_builder.witness(witness_args.as_bytes().pack());
+        } else {
+            let witness_args = WitnessArgsBuilder::default()
+                .output_type(Some(witness.clone()).pack())
+                .build();
+            tx_builder = tx_builder.witness(witness_args.as_bytes().pack());
+        }
+    }
     // extra input type script
     let previous_out_point = gen_random_out_point(rng);
     let previous_output_cell = CellOutput::new_builder()
@@ -632,6 +646,7 @@ pub fn gen_tx(
         previous_out_point.clone(),
         (previous_output_cell.clone(), Bytes::default()),
     );
+    tx_builder = tx_builder.input(CellInput::new(previous_out_point, 0));
     // setup secp256k1_data dep which is needed for signature verification in enhanced owner mode
     if let Some(_) = enhanced_mode_owner_info {
         let secp256k1_data_out_point = {
@@ -660,7 +675,6 @@ pub fn gen_tx(
                 .build(),
         );
     }
-    tx_builder = tx_builder.input(CellInput::new(previous_out_point, 0));
 
     let tx = tx_builder.build();
     match enhanced_mode_owner_info.as_ref() {
@@ -1080,6 +1094,32 @@ fn test_simple_udt_enhanced_owner_mode_failed() {
     let verify_result = verifier.verify(MAX_CYCLES);
     dbg!(&verify_result);
     assert_script_error(verify_result.unwrap_err(), -52);
+}
+
+#[test]
+fn test_simple_udt_enhanced_owner_mode_output_type_mint() {
+    let mut rng = thread_rng();
+    let mut data_loader = DummyDataLoader::new();
+    let tx = gen_tx(
+        &mut data_loader,
+        Bytes::from(vec![0u8; 32]),
+        0,
+        1,
+        vec![],
+        vec![200],
+        vec![&EXTENSION_SCRIPT_0],
+        TestScheme::EnhancedOwnerMode(EnhancedOwnerModeConfig::Normal),
+        true,
+        XudtFlags::InArgs,
+        &mut rng,
+    );
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    dbg!(&resolved_tx, &tx);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    dbg!(&verify_result);
+    verify_result.expect("pass verification");
 }
 
 #[test]
