@@ -233,8 +233,9 @@ int get_owner_script(uint8_t *buff, uint32_t buff_len, uint32_t *out_len) {
   bool use_input_type = true;
   err = make_cursor_from_witness(&g_witness_args, &use_input_type);
   CHECK(err);
-  CHECK2(use_input_type, ERROR_INVALID_MOL_FORMAT);
-  BytesOptType input = g_witness_args.t->input_type(&g_witness_args);
+  BytesOptType input = use_input_type
+                           ? g_witness_args.t->input_type(&g_witness_args)
+                           : g_witness_args.t->output_type(&g_witness_args);
   CHECK2(!input.t->is_none(&input), ERROR_INVALID_MOL_FORMAT);
 
   mol2_cursor_t bytes = input.t->unwrap(&input);

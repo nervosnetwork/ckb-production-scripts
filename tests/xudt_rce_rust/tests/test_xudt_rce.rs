@@ -523,10 +523,10 @@ pub fn gen_tx(
         None
     };
 
-    let script_hash = if no_input_witness {
-        Some(blake2b_256(always_success_script.as_slice()))
-    } else if let Some((owner_script, _)) = enhanced_mode_owner_info.as_ref() {
+    let script_hash = if let Some((owner_script, _)) = enhanced_mode_owner_info.as_ref() {
         Some(blake2b_256(owner_script.as_slice()))
+    } else if no_input_witness {
+        Some(blake2b_256(always_success_script.as_slice()))
     } else if scheme == TestScheme::OwnerModeForInputType
         || scheme == TestScheme::OwnerModeForOutputType
     {
@@ -619,6 +619,20 @@ pub fn gen_tx(
             tx_builder = tx_builder.witness(witness_args.as_bytes().pack());
         }
     }
+    // We may have extra outputs. Add witness here.
+    for _i in input_count..output_count {
+        if !no_input_witness {
+            let witness_args = WitnessArgsBuilder::default()
+                .input_type(Some(witness.clone()).pack())
+                .build();
+            tx_builder = tx_builder.witness(witness_args.as_bytes().pack());
+        } else {
+            let witness_args = WitnessArgsBuilder::default()
+                .output_type(Some(witness.clone()).pack())
+                .build();
+            tx_builder = tx_builder.witness(witness_args.as_bytes().pack());
+        }
+    }
     // extra input type script
     let previous_out_point = gen_random_out_point(rng);
     let previous_output_cell = CellOutput::new_builder()
@@ -630,6 +644,7 @@ pub fn gen_tx(
         previous_out_point.clone(),
         (previous_output_cell.clone(), Bytes::default()),
     );
+    tx_builder = tx_builder.input(CellInput::new(previous_out_point, 0));
     // setup secp256k1_data dep which is needed for signature verification in enhanced owner mode
     if let Some(_) = enhanced_mode_owner_info {
         let secp256k1_data_out_point = {
@@ -658,67 +673,112 @@ pub fn gen_tx(
                 .build(),
         );
     }
-    tx_builder = tx_builder.input(CellInput::new(previous_out_point, 0));
 
     let tx = tx_builder.build();
     match enhanced_mode_owner_info.as_ref() {
-        Some((_, ref owner_sk)) => create_owner_signature(tx, owner_sk),
+        Some((_, ref owner_sk)) => create_owner_signature(tx, owner_sk, no_input_witness),
         None => tx,
     }
 }
 
-pub fn create_owner_signature(tx: TransactionView, key: &Privkey) -> TransactionView {
+pub fn create_owner_signature(
+    tx: TransactionView,
+    key: &Privkey,
+    is_output_type_script: bool,
+) -> TransactionView {
     let witnesses_len = tx.witnesses().len();
-    create_owner_signature_by_input_group(tx, key, 0, witnesses_len)
+    create_owner_signature_by_group(tx, key, 0, is_output_type_script, witnesses_len)
 }
 
-pub fn create_owner_signature_by_input_group(
+pub fn create_owner_signature_by_group(
     tx: TransactionView,
     key: &Privkey,
     begin_index: usize,
+    is_output_type_script: bool,
     _len: usize,
 ) -> TransactionView {
     let tx_hash = tx.hash();
-    let mut signed_witnesses: Vec<ckb_types::packed::Bytes> = tx
-        .inputs()
-        .into_iter()
-        .enumerate()
-        .map(|(i, _)| {
-            if i == begin_index {
-                let witness = WitnessArgs::new_unchecked(tx.witnesses().get(i).unwrap().unpack());
-                if witness.input_type().is_none() {
-                    return tx.witnesses().get(i).unwrap();
+    let mut signed_witnesses: Vec<ckb_types::packed::Bytes> = if is_output_type_script {
+        tx.outputs()
+            .into_iter()
+            .enumerate()
+            .map(|(i, _)| {
+                if i == begin_index {
+                    let witness =
+                        WitnessArgs::new_unchecked(tx.witnesses().get(i).unwrap().unpack());
+                    if witness.output_type().is_none() {
+                        return tx.witnesses().get(i).unwrap();
+                    }
+                    let witnessoutput = XudtWitnessInput::new_unchecked(
+                        witness.output_type().to_opt().unwrap().unpack(),
+                    );
+                    if witnessoutput.owner_script().is_none() {
+                        return tx.witnesses().get(i).unwrap();
+                    }
+                    let tx_hash = &tx_hash.as_slice()[..];
+                    use std::convert::TryInto;
+                    let tx_hash: [u8; 32] = tx_hash.try_into().unwrap();
+                    let message = ckb_types::H256::from(tx_hash);
+                    let sig = key.sign_recoverable(&message).expect("sign");
+                    dbg!(&sig, &message);
+                    let witnessoutput = witnessoutput
+                        .as_builder()
+                        .owner_signature(Some(Bytes::from(sig.serialize())).pack());
+                    dbg!(&witnessoutput);
+                    witness
+                        .as_builder()
+                        .output_type(Some(witnessoutput.build().as_bytes()).pack())
+                        .build()
+                        .as_bytes()
+                        .pack()
+                } else {
+                    tx.witnesses().get(i).unwrap_or_default()
                 }
-                let witnessinput = XudtWitnessInput::new_unchecked(
-                    witness.input_type().to_opt().unwrap().unpack(),
-                );
-                if witnessinput.owner_script().is_none() {
-                    return tx.witnesses().get(i).unwrap();
+            })
+            .collect()
+    } else {
+        tx.inputs()
+            .into_iter()
+            .enumerate()
+            .map(|(i, _)| {
+                if i == begin_index {
+                    let witness =
+                        WitnessArgs::new_unchecked(tx.witnesses().get(i).unwrap().unpack());
+                    if witness.input_type().is_none() {
+                        return tx.witnesses().get(i).unwrap();
+                    }
+                    let witnessinput = XudtWitnessInput::new_unchecked(
+                        witness.input_type().to_opt().unwrap().unpack(),
+                    );
+                    if witnessinput.owner_script().is_none() {
+                        return tx.witnesses().get(i).unwrap();
+                    }
+                    let tx_hash = &tx_hash.as_slice()[..];
+                    use std::convert::TryInto;
+                    let tx_hash: [u8; 32] = tx_hash.try_into().unwrap();
+                    let message = ckb_types::H256::from(tx_hash);
+                    let sig = key.sign_recoverable(&message).expect("sign");
+                    dbg!(&sig, &message);
+                    let witnessinput = witnessinput
+                        .as_builder()
+                        .owner_signature(Some(Bytes::from(sig.serialize())).pack());
+                    dbg!(&witnessinput);
+                    witness
+                        .as_builder()
+                        .input_type(Some(witnessinput.build().as_bytes()).pack())
+                        .build()
+                        .as_bytes()
+                        .pack()
+                } else {
+                    tx.witnesses().get(i).unwrap_or_default()
                 }
-                let tx_hash = &tx_hash.as_slice()[..];
-                use std::convert::TryInto;
-                let tx_hash: [u8; 32] = tx_hash.try_into().unwrap();
-                let message = ckb_types::H256::from(tx_hash);
-                let sig = key.sign_recoverable(&message).expect("sign");
-                dbg!(&sig, &message);
-                let witnessinput = witnessinput
-                    .as_builder()
-                    .owner_signature(Some(Bytes::from(sig.serialize())).pack());
-                dbg!(&witnessinput);
-                witness
-                    .as_builder()
-                    .input_type(Some(witnessinput.build().as_bytes()).pack())
-                    .build()
-                    .as_bytes()
-                    .pack()
-            } else {
-                tx.witnesses().get(i).unwrap_or_default()
-            }
-        })
-        .collect();
+            })
+            .collect()
+    };
     for i in signed_witnesses.len()..tx.witnesses().len() {
         signed_witnesses.push(tx.witnesses().get(i).unwrap());
     }
+    dbg!(&signed_witnesses);
     // calculate message
     tx.as_advanced_builder()
         .set_witnesses(signed_witnesses)
@@ -1022,6 +1082,84 @@ fn test_simple_udt_enhanced_owner_mode_failed() {
         vec![&EXTENSION_SCRIPT_0],
         TestScheme::EnhancedOwnerMode(EnhancedOwnerModeConfig::WrongPKHash),
         false,
+        XudtFlags::InArgs,
+        &mut rng,
+    );
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    dbg!(&resolved_tx, &tx);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    dbg!(&verify_result);
+    assert_script_error(verify_result.unwrap_err(), -52);
+}
+
+#[test]
+fn test_simple_udt_enhanced_owner_mode_output_type_mint() {
+    let mut rng = thread_rng();
+    let mut data_loader = DummyDataLoader::new();
+    let tx = gen_tx(
+        &mut data_loader,
+        Bytes::from(vec![0u8; 32]),
+        0,
+        1,
+        vec![],
+        vec![200],
+        vec![&EXTENSION_SCRIPT_0],
+        TestScheme::EnhancedOwnerMode(EnhancedOwnerModeConfig::Normal),
+        true,
+        XudtFlags::InArgs,
+        &mut rng,
+    );
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    dbg!(&resolved_tx, &tx);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    dbg!(&verify_result);
+    verify_result.expect("pass verification");
+}
+
+#[test]
+fn test_simple_udt_enhanced_owner_mode_output_type() {
+    let mut rng = thread_rng();
+    let mut data_loader = DummyDataLoader::new();
+    let tx = gen_tx(
+        &mut data_loader,
+        Bytes::from(vec![0u8; 32]),
+        1,
+        1,
+        vec![100],
+        vec![200],
+        vec![&EXTENSION_SCRIPT_0],
+        TestScheme::EnhancedOwnerMode(EnhancedOwnerModeConfig::Normal),
+        true,
+        XudtFlags::InArgs,
+        &mut rng,
+    );
+    let resolved_tx = build_resolved_tx(&data_loader, &tx);
+    dbg!(&resolved_tx, &tx);
+    let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
+    verifier.set_debug_printer(debug_printer);
+    let verify_result = verifier.verify(MAX_CYCLES);
+    dbg!(&verify_result);
+    verify_result.expect("pass verification");
+}
+
+#[test]
+fn test_simple_udt_enhanced_owner_mode_output_type_failed() {
+    let mut rng = thread_rng();
+    let mut data_loader = DummyDataLoader::new();
+    let tx = gen_tx(
+        &mut data_loader,
+        Bytes::from(vec![0u8; 32]),
+        1,
+        1,
+        vec![100],
+        vec![200],
+        vec![&EXTENSION_SCRIPT_0],
+        TestScheme::EnhancedOwnerMode(EnhancedOwnerModeConfig::WrongPKHash),
+        true,
         XudtFlags::InArgs,
         &mut rng,
     );
