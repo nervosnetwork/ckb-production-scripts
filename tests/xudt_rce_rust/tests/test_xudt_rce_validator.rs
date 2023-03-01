@@ -1,8 +1,7 @@
 #![allow(dead_code)]
 
 use blake2b_rs::Blake2bBuilder;
-use ckb_error::assert_error_eq;
-use ckb_script::{ScriptError, TransactionScriptsVerifier};
+use ckb_script::TransactionScriptsVerifier;
 use ckb_types;
 use ckb_types::core::{Capacity, DepType, ScriptHashType, TransactionBuilder};
 use ckb_types::packed::{
@@ -605,10 +604,7 @@ fn test_rce_validator_bl_remove_key_but_append_only() {
     let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
     verifier.set_debug_printer(debug_printer);
     let r = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        r.unwrap_err(),
-        ScriptError::ValidationFailure(61).input_type_script(0),
-    );
+    assert_script_error(r.unwrap_err(), 61);
 }
 
 #[test]
@@ -1061,10 +1057,7 @@ fn test_rce_validator_rccellvec_to_rccell_with_freeze_type() {
     let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
     verifier.set_debug_printer(debug_printer);
     let r = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        r.unwrap_err(),
-        ScriptError::ValidationFailure(60).input_type_script(0),
-    );
+    assert_script_error(r.unwrap_err(), 60);
 }
 
 #[test]
@@ -1167,10 +1160,7 @@ fn test_rce_validator_rccell_to_rccellvec_with_freeze_type() {
     let mut verifier = TransactionScriptsVerifier::new(&resolved_tx, &data_loader);
     verifier.set_debug_printer(debug_printer);
     let r = verifier.verify(MAX_CYCLES);
-    assert_error_eq!(
-        r.unwrap_err(),
-        ScriptError::ValidationFailure(60).input_type_script(0),
-    );
+    assert_script_error(r.unwrap_err(), 60);
 }
 
 #[test]

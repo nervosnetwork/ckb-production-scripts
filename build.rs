@@ -31,16 +31,16 @@ const BINARIES: &[(&str, &str)] = &[
     ),
     (
         "xudt_rce",
-        "022b3f6ad414bb3877d5618a417b06b7e306ce2c4f4bcbf68f617a16fb8ca697",
+        "50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95",
     ),
     (
         "rce_validator",
-        "fe951ccda3ada53ccb65e29fa4577d41030fa2b76cce7f24c5f114743bbcd66a"
+        "d9476d96e0f5d41eca88bbc5e8c819ac38592a33285a4828a58d17873f278b3c",
     ),
     (
         "omni_lock",
-        "635f78eba450cb2f73f113022ff62e4bbfb5a39b7368c375c6a731ba4c85c59e"
-    )
+        "86ea7ee58a0ecacfb1f7f2675a06d96223e0597dfe06a2474f9c06a72a7ccabc",
+    ),
 ];
 
 fn main() {

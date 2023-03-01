@@ -125,13 +125,13 @@ fmt:
 mol:
 	rm -f c/xudt_rce_mol.h
 	rm -f c/xudt_rce_mol2.h
-	rm -f xudt/src/xudt_rce_mol.rs
+	rm -f tests/xudt_rce_rust/src/xudt_rce_mol.rs
 	make c/xudt_rce_mol.h
 	make c/xudt_rce_mol2.h
-	make xudt/src/xudt_rce_mol.rs
+	make tests/xudt_rce_rust/src/xudt_rce_mol.rs
 	make omni_lock_mol
 
-xudt/src/xudt_rce_mol.rs: c/xudt_rce.mol
+tests/xudt_rce_rust/src/xudt_rce_mol.rs: c/xudt_rce.mol
 	${MOLC} --language rust --schema-file $< | rustfmt > $@
 
 c/xudt_rce_mol.h: c/xudt_rce.mol

@@ -2,14 +2,6 @@
 #ifndef _BLOCKCHAIN_MOL2_API2_H_
 #define _BLOCKCHAIN_MOL2_API2_H_
 
-#ifndef MOLECULEC_VERSION
-#define MOLECULEC_VERSION 6001
-#endif
-#ifndef MOLECULE_API_VERSION_MIN
-#define MOLECULE_API_VERSION_MIN 5000
-#endif
-
-#define MOLECULEC2_VERSION 6001
 #define MOLECULE2_API_VERSION_MIN 5000
 
 #include "molecule2_reader.h"
@@ -36,6 +28,10 @@ struct XudtWitnessInputType;
 struct XudtWitnessInputVTable;
 struct XudtWitnessInputVTable *GetXudtWitnessInputVTable(void);
 struct XudtWitnessInputType make_XudtWitnessInput(mol2_cursor_t *cur);
+struct ScriptOptType XudtWitnessInput_get_owner_script_impl(
+    struct XudtWitnessInputType *);
+struct BytesOptType XudtWitnessInput_get_owner_signature_impl(
+    struct XudtWitnessInputType *);
 struct ScriptVecOptType XudtWitnessInput_get_raw_extension_data_impl(
     struct XudtWitnessInputType *);
 struct BytesVecType XudtWitnessInput_get_extension_data_impl(
@@ -126,6 +122,8 @@ typedef struct ScriptVecOptType {
 } ScriptVecOptType;
 
 typedef struct XudtWitnessInputVTable {
+  struct ScriptOptType (*owner_script)(struct XudtWitnessInputType *);
+  struct BytesOptType (*owner_signature)(struct XudtWitnessInputType *);
   struct ScriptVecOptType (*raw_extension_data)(struct XudtWitnessInputType *);
   struct BytesVecType (*extension_data)(struct XudtWitnessInputType *);
 } XudtWitnessInputVTable;
@@ -299,14 +297,32 @@ struct XudtWitnessInputVTable *GetXudtWitnessInputVTable(void) {
   static XudtWitnessInputVTable s_vtable;
   static int inited = 0;
   if (inited) return &s_vtable;
+  s_vtable.owner_script = XudtWitnessInput_get_owner_script_impl;
+  s_vtable.owner_signature = XudtWitnessInput_get_owner_signature_impl;
   s_vtable.raw_extension_data = XudtWitnessInput_get_raw_extension_data_impl;
   s_vtable.extension_data = XudtWitnessInput_get_extension_data_impl;
   return &s_vtable;
 }
+ScriptOptType XudtWitnessInput_get_owner_script_impl(
+    XudtWitnessInputType *this) {
+  ScriptOptType ret;
+  mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 0);
+  ret.cur = cur;
+  ret.t = GetScriptOptVTable();
+  return ret;
+}
+BytesOptType XudtWitnessInput_get_owner_signature_impl(
+    XudtWitnessInputType *this) {
+  BytesOptType ret;
+  mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 1);
+  ret.cur = cur;
+  ret.t = GetBytesOptVTable();
+  return ret;
+}
 ScriptVecOptType XudtWitnessInput_get_raw_extension_data_impl(
     XudtWitnessInputType *this) {
   ScriptVecOptType ret;
-  mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 0);
+  mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 2);
   ret.cur = cur;
   ret.t = GetScriptVecOptVTable();
   return ret;
@@ -314,7 +330,7 @@ ScriptVecOptType XudtWitnessInput_get_raw_extension_data_impl(
 BytesVecType XudtWitnessInput_get_extension_data_impl(
     XudtWitnessInputType *this) {
   BytesVecType ret;
-  mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 1);
+  mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 3);
   ret.cur = cur;
   ret.t = GetBytesVecVTable();
   return ret;
