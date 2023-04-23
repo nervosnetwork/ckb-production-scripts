@@ -1,15 +1,11 @@
-use ckb_chain_spec::consensus::{Consensus, ConsensusBuilder};
 use ckb_crypto::secp::{Generator, Privkey};
 use ckb_error::Error;
-use ckb_script::TxVerifyEnv;
 use ckb_traits::{CellDataProvider, HeaderProvider};
 use ckb_types::{
     bytes::{BufMut, Bytes, BytesMut},
     core::{
         cell::{CellMeta, CellMetaBuilder, ResolvedTransaction},
-        hardfork::HardForkSwitch,
-        Capacity, DepType, EpochNumberWithFraction, HeaderView, ScriptHashType, TransactionBuilder,
-        TransactionView,
+        Capacity, DepType, HeaderView, ScriptHashType, TransactionBuilder, TransactionView,
     },
     packed::{
         self, Byte32, CellDep, CellInput, CellOutput, OutPoint, Script, WitnessArgs,
@@ -66,7 +62,7 @@ pub fn calculate_sha256(buf: &[u8]) -> [u8; 32] {
     c.finish()
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct DummyDataLoader {
     pub cells: HashMap<OutPoint, (CellOutput, ckb_types::bytes::Bytes)>,
 }
@@ -481,25 +477,6 @@ pub fn build_resolved_tx(
         resolved_inputs,
         resolved_dep_groups: vec![],
     }
-}
-
-pub fn gen_consensus() -> Consensus {
-    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
-        .as_builder()
-        .rfc_0232(200)
-        .build()
-        .unwrap();
-    ConsensusBuilder::default()
-        .hardfork_switch(hardfork_switch)
-        .build()
-}
-
-pub fn gen_tx_env() -> TxVerifyEnv {
-    let epoch = EpochNumberWithFraction::new(300, 0, 1);
-    let header = HeaderView::new_advanced_builder()
-        .epoch(epoch.pack())
-        .build();
-    TxVerifyEnv::new_commit(&header)
 }
 
 pub fn debug_printer(_script: &Byte32, msg: &str) {

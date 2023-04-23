@@ -2,7 +2,6 @@
 #![allow(dead_code)]
 
 use ckb_crypto::secp::{Generator, Privkey, Pubkey};
-use ckb_error::prelude::thiserror::private::AsDynError;
 use ckb_script::TransactionScriptsVerifier;
 use ckb_types::{
     bytes::{BufMut, Bytes, BytesMut},
@@ -12,12 +11,13 @@ use log::{Level, LevelFilter, Metadata, Record};
 use openssl::{sha::Sha256, ssl::ErrorCode};
 use rand::{thread_rng, Rng};
 use sha3::{digest::generic_array::typenum::private::IsEqualPrivate, Digest, Keccak256};
+use std::sync::Arc;
 
 use misc::{
-    assert_script_error, auth_builder, build_resolved_tx, debug_printer, gen_args, gen_consensus,
-    gen_tx, gen_tx_env, gen_tx_with_grouped_args, sign_tx, AlgorithmType, Auth, AuthErrorCodeType,
-    BitcoinAuth, CKbAuth, CkbMultisigAuth, DogecoinAuth, DummyDataLoader, EntryCategoryType,
-    EosAuth, EthereumAuth, SchnorrAuth, TestConfig, TronAuth, MAX_CYCLES,
+    assert_script_error, auth_builder, build_resolved_tx, debug_printer, gen_args, gen_tx,
+    gen_tx_with_grouped_args, sign_tx, AlgorithmType, Auth, AuthErrorCodeType, BitcoinAuth,
+    CKbAuth, CkbMultisigAuth, DogecoinAuth, DummyDataLoader, EntryCategoryType, EosAuth,
+    EthereumAuth, SchnorrAuth, TestConfig, TronAuth, MAX_CYCLES,
 };
 mod misc;
 
@@ -27,11 +27,7 @@ fn verify_unit(config: &TestConfig) -> Result<u64, ckb_error::Error> {
     let tx = sign_tx(tx, &config);
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let consensus = gen_consensus();
-    let tx_env = gen_tx_env();
-
-    let mut verifier =
-        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+    let mut verifier = TransactionScriptsVerifier::new(Arc::new(resolved_tx), data_loader.clone());
     verifier.set_debug_printer(debug_printer);
     verifier.verify(MAX_CYCLES)
 }
@@ -95,11 +91,7 @@ fn unit_test_multiple_group(auth: &Box<dyn Auth>, run_type: EntryCategoryType) {
     let tx = sign_tx(tx, &config);
     let resolved_tx = build_resolved_tx(&data_loader, &tx);
 
-    let consensus = gen_consensus();
-    let tx_env = gen_tx_env();
-
-    let mut verifier =
-        TransactionScriptsVerifier::new(&resolved_tx, &consensus, &data_loader, &tx_env);
+    let mut verifier = TransactionScriptsVerifier::new(Arc::new(resolved_tx), data_loader.clone());
     verifier.set_debug_printer(debug_printer);
 
     assert_result_ok(verify_unit(&config), "multiple group");
