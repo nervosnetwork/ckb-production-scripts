@@ -14,6 +14,7 @@ typedef struct CkbAuthType {
 enum EntryCategoryType {
   EntryCategoryExec = 0,
   EntryCategoryDynamicLinking = 1,
+  EntryCategorySpawn = 2,
 };
 
 typedef struct CkbEntryType {
@@ -84,6 +85,35 @@ int ckb_auth(CkbEntryType *entry, CkbAuthType *id, const uint8_t *signature,
 
     const char *argv[2] = {hex.buff, 0};
     return ckb_exec_cell(entry->code_hash, entry->hash_type, 0, 0, 1, argv);
+  } else if (entry->entry_category == EntryCategorySpawn) {
+    CkbBinaryArgsType bin = {0};
+    ckb_exec_reset(&bin);
+    err = ckb_exec_append(&bin, entry->code_hash, 32);
+    if (err != 0) return err;
+    err = ckb_exec_append(&bin, &entry->hash_type, 1);
+    if (err != 0) return err;
+    err = ckb_exec_append(&bin, &id->algorithm_id, 1);
+    if (err != 0) return err;
+    err = ckb_exec_append(&bin, (uint8_t *)signature, signature_size);
+    if (err != 0) return err;
+    err = ckb_exec_append(&bin, (uint8_t *)message32, 32);
+    if (err != 0) return err;
+    err = ckb_exec_append(&bin, id->content, 20);
+    if (err != 0) return err;
+
+    CkbHexArgsType hex = {.used_buff = 0};
+    err = ckb_exec_encode_params(&bin, &hex);
+    if (err != 0) return err;
+    const char *argv[2] = {hex.buff, 0};
+
+    // uint8_t context[1] = {0};
+    // uint64_t content_length = sizeof(context);
+    int8_t exit_code = 0;
+
+    err = ckb_spawn_cell(8, entry->code_hash, entry->hash_type, 0, 0, 1, argv,
+                         &exit_code, NULL, NULL);
+    if (err != 0) return err;
+    return exit_code;
   } else {
     return CKB_INVALID_DATA;
   }
