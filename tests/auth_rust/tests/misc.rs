@@ -18,18 +18,19 @@ use dyn_clone::{clone_trait_object, DynClone};
 use hex;
 use lazy_static::lazy_static;
 use log::{Metadata, Record};
-use openssl::{
-    hash::{hash, MessageDigest},
-    pkey::{PKey, Private},
-    rsa::Rsa,
-    sha::Sha256,
-    sign::Signer,
-};
+use mbedtls::hash::{Md, Type};
 use rand::{distributions::Standard, thread_rng, Rng};
 use secp256k1;
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 use std::{collections::HashMap, mem::size_of, result, vec};
+
+use openssl::{
+    hash::MessageDigest,
+    pkey::{PKey, Private},
+    rsa::Rsa,
+    sign::Signer,
+};
 
 pub const MAX_CYCLES: u64 = std::u64::MAX;
 pub const SIGNATURE_SIZE: usize = 65;
@@ -57,9 +58,11 @@ fn _dbg_print_mem(data: &Vec<u8>, name: &str) {
 }
 
 pub fn calculate_sha256(buf: &[u8]) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+
     let mut c = Sha256::new();
     c.update(buf);
-    c.finish()
+    c.finalize().into()
 }
 
 #[derive(Default, Clone)]
@@ -786,11 +789,9 @@ impl BitcoinAuth {
 
         let pub_hash = calculate_sha256(&pub_key_vec);
 
-        let msg = hash(MessageDigest::ripemd160(), &pub_hash)
-            .unwrap()
-            .as_ref()
-            .to_vec();
-        msg
+        let mut msg = [0u8; 20];
+        Md::hash(Type::Ripemd, &pub_hash, &mut msg).expect("hash ripemd");
+        msg.to_vec()
     }
     pub fn btc_convert_message(message: &[u8; 32]) -> H256 {
         let message_magic = b"\x18Bitcoin Signed Message:\n\x40";
@@ -1007,7 +1008,7 @@ impl RSAAuth {
         let bits = 1024;
         let rsa = Rsa::generate(bits).unwrap();
         let privkey = PKey::from_rsa(rsa).unwrap();
-        Box::new(RSAAuth { privkey: privkey })
+        Box::new(RSAAuth { privkey })
     }
     fn rsa_sign(msg: &H256, privkey: &PKey<Private>) -> Bytes {
         let pem: Vec<u8> = privkey.public_key_to_pem().unwrap();
