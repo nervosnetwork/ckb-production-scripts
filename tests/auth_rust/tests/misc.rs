@@ -18,19 +18,11 @@ use dyn_clone::{clone_trait_object, DynClone};
 use hex;
 use lazy_static::lazy_static;
 use log::{Metadata, Record};
-use mbedtls::hash::{Md, Type};
 use rand::{distributions::Standard, thread_rng, Rng};
 use secp256k1;
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 use std::{collections::HashMap, mem::size_of, result, vec};
-
-use openssl::{
-    hash::MessageDigest,
-    pkey::{PKey, Private},
-    rsa::Rsa,
-    sign::Signer,
-};
 
 pub const MAX_CYCLES: u64 = std::u64::MAX;
 pub const SIGNATURE_SIZE: usize = 65;
@@ -776,6 +768,8 @@ impl BitcoinAuth {
         })
     }
     pub fn get_btc_pub_key_hash(privkey: &Privkey, compress: bool) -> Vec<u8> {
+        use mbedtls::hash::{Md, Type};
+
         let pub_key = privkey.pubkey().expect("pubkey");
         let pub_key_vec: Vec<u8>;
         if compress {
@@ -1001,29 +995,69 @@ impl Auth for SchnorrAuth {
 
 #[derive(Clone)]
 struct RSAAuth {
-    pub privkey: PKey<Private>,
+    pub pri_key: Vec<u8>,
+    pub pub_key: Vec<u8>,
 }
 impl RSAAuth {
     fn new() -> Box<dyn Auth> {
         let bits = 1024;
-        let rsa = Rsa::generate(bits).unwrap();
-        let privkey = PKey::from_rsa(rsa).unwrap();
-        Box::new(RSAAuth { privkey })
-    }
-    fn rsa_sign(msg: &H256, privkey: &PKey<Private>) -> Bytes {
-        let pem: Vec<u8> = privkey.public_key_to_pem().unwrap();
-        let pubkey = PKey::public_key_from_pem(&pem).unwrap();
+        let exponent = 65537;
 
+        use mbedtls::pk::Pk;
+        use mbedtls::rng::ctr_drbg::CtrDrbg;
+        use std::sync::Arc;
+
+        let mut rng =
+            CtrDrbg::new(Arc::new(mbedtls::rng::OsEntropy::new()), None).expect("new ctrdrbg rng");
+        let mut rsa_key = Pk::generate_rsa(&mut rng, bits, exponent).expect("generate rsa");
+
+        let pri_key = {
+            let mut buf = [0u8; 1024 * 4];
+            let r = rsa_key
+                .write_private_der(&mut buf)
+                .expect("export private key")
+                .unwrap();
+            r.to_vec()
+        };
+
+        let pub_key = {
+            let mut buf = [0u8; 1024 * 4];
+            let r = rsa_key
+                .write_public_der(&mut buf)
+                .expect("export public key")
+                .unwrap();
+            r.to_vec()
+        };
+
+        Box::new(RSAAuth { pri_key, pub_key })
+    }
+    fn rsa_sign(msg: &H256, privkey: &[u8], pubkey: &[u8]) -> Bytes {
         let mut sig = Vec::<u8>::new();
         sig.push(1); // algorithm id
         sig.push(1); // key size, 1024
         sig.push(0); // padding, PKCS# 1.5
         sig.push(6); // hash type SHA256
 
-        let pubkey2 = pubkey.rsa().unwrap();
-        let mut e = pubkey2.e().to_vec();
-        let mut n = pubkey2.n().to_vec();
-        e.reverse();
+        let (e, n) = Self::get_e_n(pubkey);
+        sig.extend_from_slice(&e); // 4 bytes E
+        sig.extend_from_slice(&n); // N
+        sig.extend_from_slice(&Self::rsa_sign_msg(msg, privkey));
+
+        Bytes::from(sig.clone())
+    }
+    fn get_e_n(pub_key: &[u8]) -> (Vec<u8>, Vec<u8>) {
+        use mbedtls::pk::Pk;
+        let pub_key = Pk::from_public_key(pub_key).expect("");
+        let mut e = pub_key
+            .rsa_public_exponent()
+            .expect("rsa exponent")
+            .to_le_bytes()
+            .to_vec();
+        let mut n = pub_key
+            .rsa_public_modulus()
+            .expect("rsa modulus")
+            .to_binary()
+            .unwrap();
         n.reverse();
 
         while e.len() < 4 {
@@ -1032,14 +1066,33 @@ impl RSAAuth {
         while n.len() < 128 {
             n.push(0);
         }
-        sig.append(&mut e); // 4 bytes E
-        sig.append(&mut n); // N
 
-        let mut signer = Signer::new(MessageDigest::sha256(), privkey).unwrap();
-        signer.update(msg.as_bytes()).unwrap();
-        sig.extend(signer.sign_to_vec().unwrap()); // sig
+        (e, n)
+    }
+    fn rsa_sign_msg(msg: &H256, privkey: &[u8]) -> Vec<u8> {
+        use mbedtls::hash::Type::Sha256;
+        use mbedtls::pk::{Options, Pk, RsaPadding};
+        use mbedtls::rng::ctr_drbg::CtrDrbg;
+        use std::sync::Arc;
 
-        Bytes::from(sig.clone())
+        let mut priv_key = Pk::from_private_key(privkey, None).expect("import rsa private key");
+        priv_key.set_options(Options::Rsa {
+            padding: RsaPadding::Pkcs1V15,
+        });
+        let mut rng = CtrDrbg::new(Arc::new(mbedtls::rng::OsEntropy::new()), None)
+            .expect("generate ctr drbg");
+        let mut signature = [0u8; 1024];
+
+        let mut md_hash = mbedtls::hash::Md::new(Sha256).expect("new sha256");
+        md_hash.update(msg.as_bytes()).expect("update sha256");
+        let mut sign_hash = [0u8; 32];
+        md_hash.finish(&mut sign_hash).expect("sha256 finish");
+
+        let size = priv_key
+            .sign(Sha256, &sign_hash, &mut signature, &mut rng)
+            .expect("rsa sign");
+        let signature = signature[..size].to_vec();
+        signature
     }
 }
 impl Auth for RSAAuth {
@@ -1047,8 +1100,7 @@ impl Auth for RSAAuth {
         264
     }
     fn get_pub_key_hash(&self) -> Vec<u8> {
-        let public_key_pem: Vec<u8> = self.privkey.public_key_to_pem().unwrap();
-        let rsa_pubkey = PKey::public_key_from_pem(&public_key_pem).unwrap();
+        let (e, n) = Self::get_e_n(&self.pub_key);
 
         let mut sig = Vec::<u8>::new();
         sig.push(1); // algorithm id
@@ -1056,20 +1108,8 @@ impl Auth for RSAAuth {
         sig.push(0); // padding, PKCS# 1.5
         sig.push(6); // hash type SHA256
 
-        let pubkey2 = rsa_pubkey.rsa().unwrap();
-        let mut e = pubkey2.e().to_vec();
-        let mut n = pubkey2.n().to_vec();
-        e.reverse();
-        n.reverse();
-
-        while e.len() < 4 {
-            e.push(0);
-        }
-        while n.len() < 128 {
-            n.push(0);
-        }
-        sig.append(&mut e); // 4 bytes E
-        sig.append(&mut n); // N
+        sig.extend_from_slice(&e);
+        sig.extend_from_slice(&n);
 
         let hash = ckb_hash::blake2b_256(sig.as_slice());
 
@@ -1079,7 +1119,7 @@ impl Auth for RSAAuth {
         AlgorithmType::RSA as u8
     }
     fn sign(&self, msg: &H256) -> Bytes {
-        RSAAuth::rsa_sign(msg, &self.privkey)
+        RSAAuth::rsa_sign(msg, &self.pri_key, &self.pub_key)
     }
 }
 

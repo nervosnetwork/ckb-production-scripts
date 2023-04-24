@@ -8,7 +8,6 @@ use ckb_types::{
     H256,
 };
 use log::{Level, LevelFilter, Metadata, Record};
-use openssl::{sha::Sha256, ssl::ErrorCode};
 use rand::{thread_rng, Rng};
 use sha3::{digest::generic_array::typenum::private::IsEqualPrivate, Digest, Keccak256};
 use std::sync::Arc;
@@ -323,10 +322,13 @@ fn convert_eos_error() {
             AlgorithmType::Eos as u8
         }
         fn convert_message(&self, message: &[u8; 32]) -> H256 {
-            let mut md = Sha256::new();
-            md.update(message);
-            md.update(&[1, 2, 3]);
-            let msg = md.finish();
+            use mbedtls::hash::{Md, Type::Sha256};
+            let mut md = Md::new(Sha256).unwrap();
+            md.update(message).expect("sha256 update data");
+            md.update(&[1, 2, 3]).expect("sha256 update data");
+
+            let mut msg = [0u8; 32];
+            md.finish(&mut msg).expect("sha256 finish");
             H256::from(msg)
         }
         fn sign(&self, msg: &H256) -> Bytes {
