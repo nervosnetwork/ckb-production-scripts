@@ -12,7 +12,8 @@ XUDT_RCE_CFLAGS=$(subst ckb-c-std-lib,ckb-c-stdlib-20210713,$(CFLAGS)) -I deps/s
 OMNI_LOCK_CFLAGS :=$(subst ckb-c-std-lib,ckb-c-stdlib-20210801,$(CFLAGS)) -I deps/sparse-merkle-tree/c
 OMNI_LOCK_CFLAGS := $(subst secp256k1,secp256k1-20210801,$(OMNI_LOCK_CFLAGS))
 
-AUTH_CFLAGS=$(OMNI_LOCK_CFLAGS) -I deps/mbedtls/include
+AUTH_CFLAGS :=$(subst ckb-c-std-lib,ckb-c-stdlib-2023,$(CFLAGS)) -I deps/sparse-merkle-tree/c -I deps/mbedtls/include
+AUTH_CFLAGS := $(subst secp256k1,secp256k1-20210801,$(AUTH_CFLAGS))
 
 PROTOCOL_HEADER := c/blockchain.h
 PROTOCOL_SCHEMA := c/blockchain.mol
