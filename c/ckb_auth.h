@@ -110,8 +110,10 @@ int ckb_auth(CkbEntryType *entry, CkbAuthType *id, const uint8_t *signature,
     // uint64_t content_length = sizeof(context);
     int8_t exit_code = 0;
 
-    err = ckb_spawn_cell(8, entry->code_hash, entry->hash_type, 0, 0, 1, argv,
-                         &exit_code, NULL, NULL);
+    spawn_args_t spawn_args = {0};
+    spawn_args.memory_limit = 8;
+    spawn_args.exit_code = &exit_code;
+    err = ckb_spawn_cell(entry->code_hash, entry->hash_type, 0, 0, 1, argv, &spawn_args);
     if (err != 0) return err;
     return exit_code;
   } else {
