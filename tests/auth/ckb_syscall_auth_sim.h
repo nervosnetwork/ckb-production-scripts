@@ -130,10 +130,15 @@ int ckb_exec_cell(const uint8_t* code_hash, uint8_t hash_type, uint32_t offset,
   return simulator_main(argc, (char**)argv);
 }
 
-int ckb_spawn_cell(uint64_t memory_limit, const uint8_t* code_hash,
-                   uint8_t hash_type, uint32_t offset, uint32_t length,
-                   int argc, const char* argv[], int8_t* exit_code,
-                   uint8_t* content, uint64_t* content_length) {
+typedef struct spawn_args_t {
+  uint64_t memory_limit;
+  int8_t* exit_code;
+  uint8_t* content;
+  uint64_t* content_length;
+} spawn_args_t;
+int ckb_spawn_cell(const uint8_t* code_hash, uint8_t hash_type, uint32_t offset,
+                   uint32_t length, int argc, const char* argv[],
+                   spawn_args_t* spgs) {
   return simulator_main(argc, (char**)argv);
 }
 
