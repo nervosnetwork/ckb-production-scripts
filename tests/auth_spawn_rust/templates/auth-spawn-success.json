@@ -1,0 +1,76 @@
+{
+    "mock_info": {
+      "inputs": [
+        {
+          "output": {
+            "capacity": "0x10000000",
+            "lock": {
+              "args": "0x00AE9DF3447C404A645BC48BEA4B7643B95AC5C3AE",
+              "code_hash": "0x{{ ref_type auth-script-test }}",
+              "hash_type": "type"
+            },
+            "type": null
+          },
+          "data": "0x"
+        }
+      ],
+      "cell_deps": [
+        {
+          "output": {
+            "capacity": "0x10000000",            
+            "lock": {
+                "args": "0x00AE9DF3447C404A645BC48BEA4B7643B95AC5C3AE",
+                "code_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                "hash_type": "data1"
+            },
+            "type": "{{ def_type auth-script-test }}"
+          },
+          "data": "0x{{ data ../../../build/auth_demo }}"
+        },
+        {
+          "output": {
+            "capacity": "0x10000000",            
+            "lock": {
+                "args": "0x00AE9DF3447C404A645BC48BEA4B7643B95AC5C3AE",
+                "code_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                "hash_type": "data1"
+            },
+            "type": "{{ def_type auth }}"
+          },
+          "data": "0x{{ data ../../../build/auth }}"
+        },
+        {
+          "output": {
+            "capacity": "0x10000000",            
+            "lock": {
+                "args": "0x00AE9DF3447C404A645BC48BEA4B7643B95AC5C3AE",
+                "code_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                "hash_type": "data1"
+            },
+            "type": "{{ def_type secp256k1_data }}"
+          },
+          "data": "0x{{ data ../../../build/secp256k1_data }}"
+        }
+      ],
+      "header_deps": []
+    },
+    "tx": {
+      "outputs": [
+        {
+          "capacity": "0x0",
+          "lock": {
+            "args": "0x00AE9DF3447C404A645BC48BEA4B7643B95AC5C3AE",
+            "code_hash": "0x{{ ref_type auth-script-test }}",
+            "hash_type": "type"
+          }
+        }
+      ],
+      "witnesses": [
+        "0x55000000100000005500000055000000410000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      ],
+      "outputs_data": [
+        "0x"
+      ]
+    }
+  }
+  

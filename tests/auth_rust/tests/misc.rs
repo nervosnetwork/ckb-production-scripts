@@ -1,15 +1,11 @@
-use ckb_chain_spec::consensus::{Consensus, ConsensusBuilder};
 use ckb_crypto::secp::{Generator, Privkey};
 use ckb_error::Error;
-use ckb_script::TxVerifyEnv;
 use ckb_traits::{CellDataProvider, HeaderProvider};
 use ckb_types::{
     bytes::{BufMut, Bytes, BytesMut},
     core::{
         cell::{CellMeta, CellMetaBuilder, ResolvedTransaction},
-        hardfork::HardForkSwitch,
-        Capacity, DepType, EpochNumberWithFraction, HeaderView, ScriptHashType, TransactionBuilder,
-        TransactionView,
+        Capacity, DepType, HeaderView, ScriptHashType, TransactionBuilder, TransactionView,
     },
     packed::{
         self, Byte32, CellDep, CellInput, CellOutput, OutPoint, Script, WitnessArgs,
@@ -22,13 +18,6 @@ use dyn_clone::{clone_trait_object, DynClone};
 use hex;
 use lazy_static::lazy_static;
 use log::{Metadata, Record};
-use openssl::{
-    hash::{hash, MessageDigest},
-    pkey::{PKey, Private},
-    rsa::Rsa,
-    sha::Sha256,
-    sign::Signer,
-};
 use rand::{distributions::Standard, thread_rng, Rng};
 use secp256k1;
 use serde::{Deserialize, Serialize};
@@ -61,12 +50,14 @@ fn _dbg_print_mem(data: &Vec<u8>, name: &str) {
 }
 
 pub fn calculate_sha256(buf: &[u8]) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+
     let mut c = Sha256::new();
     c.update(buf);
-    c.finish()
+    c.finalize().into()
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct DummyDataLoader {
     pub cells: HashMap<OutPoint, (CellOutput, ckb_types::bytes::Bytes)>,
 }
@@ -483,25 +474,6 @@ pub fn build_resolved_tx(
     }
 }
 
-pub fn gen_consensus() -> Consensus {
-    let hardfork_switch = HardForkSwitch::new_without_any_enabled()
-        .as_builder()
-        .rfc_0232(200)
-        .build()
-        .unwrap();
-    ConsensusBuilder::default()
-        .hardfork_switch(hardfork_switch)
-        .build()
-}
-
-pub fn gen_tx_env() -> TxVerifyEnv {
-    let epoch = EpochNumberWithFraction::new(300, 0, 1);
-    let header = HeaderView::new_advanced_builder()
-        .epoch(epoch.pack())
-        .build();
-    TxVerifyEnv::new_commit(&header)
-}
-
 pub fn debug_printer(_script: &Byte32, msg: &str) {
     /*
     let slice = _script.as_slice();
@@ -796,6 +768,8 @@ impl BitcoinAuth {
         })
     }
     pub fn get_btc_pub_key_hash(privkey: &Privkey, compress: bool) -> Vec<u8> {
+        use mbedtls::hash::{Md, Type};
+
         let pub_key = privkey.pubkey().expect("pubkey");
         let pub_key_vec: Vec<u8>;
         if compress {
@@ -809,11 +783,9 @@ impl BitcoinAuth {
 
         let pub_hash = calculate_sha256(&pub_key_vec);
 
-        let msg = hash(MessageDigest::ripemd160(), &pub_hash)
-            .unwrap()
-            .as_ref()
-            .to_vec();
-        msg
+        let mut msg = [0u8; 20];
+        Md::hash(Type::Ripemd, &pub_hash, &mut msg).expect("hash ripemd");
+        msg.to_vec()
     }
     pub fn btc_convert_message(message: &[u8; 32]) -> H256 {
         let message_magic = b"\x18Bitcoin Signed Message:\n\x40";
@@ -1023,29 +995,69 @@ impl Auth for SchnorrAuth {
 
 #[derive(Clone)]
 struct RSAAuth {
-    pub privkey: PKey<Private>,
+    pub pri_key: Vec<u8>,
+    pub pub_key: Vec<u8>,
 }
 impl RSAAuth {
     fn new() -> Box<dyn Auth> {
         let bits = 1024;
-        let rsa = Rsa::generate(bits).unwrap();
-        let privkey = PKey::from_rsa(rsa).unwrap();
-        Box::new(RSAAuth { privkey: privkey })
-    }
-    fn rsa_sign(msg: &H256, privkey: &PKey<Private>) -> Bytes {
-        let pem: Vec<u8> = privkey.public_key_to_pem().unwrap();
-        let pubkey = PKey::public_key_from_pem(&pem).unwrap();
+        let exponent = 65537;
 
+        use mbedtls::pk::Pk;
+        use mbedtls::rng::ctr_drbg::CtrDrbg;
+        use std::sync::Arc;
+
+        let mut rng =
+            CtrDrbg::new(Arc::new(mbedtls::rng::OsEntropy::new()), None).expect("new ctrdrbg rng");
+        let mut rsa_key = Pk::generate_rsa(&mut rng, bits, exponent).expect("generate rsa");
+
+        let pri_key = {
+            let mut buf = [0u8; 1024 * 4];
+            let r = rsa_key
+                .write_private_der(&mut buf)
+                .expect("export private key")
+                .unwrap();
+            r.to_vec()
+        };
+
+        let pub_key = {
+            let mut buf = [0u8; 1024 * 4];
+            let r = rsa_key
+                .write_public_der(&mut buf)
+                .expect("export public key")
+                .unwrap();
+            r.to_vec()
+        };
+
+        Box::new(RSAAuth { pri_key, pub_key })
+    }
+    fn rsa_sign(msg: &H256, privkey: &[u8], pubkey: &[u8]) -> Bytes {
         let mut sig = Vec::<u8>::new();
         sig.push(1); // algorithm id
         sig.push(1); // key size, 1024
         sig.push(0); // padding, PKCS# 1.5
         sig.push(6); // hash type SHA256
 
-        let pubkey2 = pubkey.rsa().unwrap();
-        let mut e = pubkey2.e().to_vec();
-        let mut n = pubkey2.n().to_vec();
-        e.reverse();
+        let (e, n) = Self::get_e_n(pubkey);
+        sig.extend_from_slice(&e); // 4 bytes E
+        sig.extend_from_slice(&n); // N
+        sig.extend_from_slice(&Self::rsa_sign_msg(msg, privkey));
+
+        Bytes::from(sig.clone())
+    }
+    fn get_e_n(pub_key: &[u8]) -> (Vec<u8>, Vec<u8>) {
+        use mbedtls::pk::Pk;
+        let pub_key = Pk::from_public_key(pub_key).expect("");
+        let mut e = pub_key
+            .rsa_public_exponent()
+            .expect("rsa exponent")
+            .to_le_bytes()
+            .to_vec();
+        let mut n = pub_key
+            .rsa_public_modulus()
+            .expect("rsa modulus")
+            .to_binary()
+            .unwrap();
         n.reverse();
 
         while e.len() < 4 {
@@ -1054,14 +1066,33 @@ impl RSAAuth {
         while n.len() < 128 {
             n.push(0);
         }
-        sig.append(&mut e); // 4 bytes E
-        sig.append(&mut n); // N
 
-        let mut signer = Signer::new(MessageDigest::sha256(), privkey).unwrap();
-        signer.update(msg.as_bytes()).unwrap();
-        sig.extend(signer.sign_to_vec().unwrap()); // sig
+        (e, n)
+    }
+    fn rsa_sign_msg(msg: &H256, privkey: &[u8]) -> Vec<u8> {
+        use mbedtls::hash::Type::Sha256;
+        use mbedtls::pk::{Options, Pk, RsaPadding};
+        use mbedtls::rng::ctr_drbg::CtrDrbg;
+        use std::sync::Arc;
 
-        Bytes::from(sig.clone())
+        let mut priv_key = Pk::from_private_key(privkey, None).expect("import rsa private key");
+        priv_key.set_options(Options::Rsa {
+            padding: RsaPadding::Pkcs1V15,
+        });
+        let mut rng = CtrDrbg::new(Arc::new(mbedtls::rng::OsEntropy::new()), None)
+            .expect("generate ctr drbg");
+        let mut signature = [0u8; 1024];
+
+        let mut md_hash = mbedtls::hash::Md::new(Sha256).expect("new sha256");
+        md_hash.update(msg.as_bytes()).expect("update sha256");
+        let mut sign_hash = [0u8; 32];
+        md_hash.finish(&mut sign_hash).expect("sha256 finish");
+
+        let size = priv_key
+            .sign(Sha256, &sign_hash, &mut signature, &mut rng)
+            .expect("rsa sign");
+        let signature = signature[..size].to_vec();
+        signature
     }
 }
 impl Auth for RSAAuth {
@@ -1069,8 +1100,7 @@ impl Auth for RSAAuth {
         264
     }
     fn get_pub_key_hash(&self) -> Vec<u8> {
-        let public_key_pem: Vec<u8> = self.privkey.public_key_to_pem().unwrap();
-        let rsa_pubkey = PKey::public_key_from_pem(&public_key_pem).unwrap();
+        let (e, n) = Self::get_e_n(&self.pub_key);
 
         let mut sig = Vec::<u8>::new();
         sig.push(1); // algorithm id
@@ -1078,20 +1108,8 @@ impl Auth for RSAAuth {
         sig.push(0); // padding, PKCS# 1.5
         sig.push(6); // hash type SHA256
 
-        let pubkey2 = rsa_pubkey.rsa().unwrap();
-        let mut e = pubkey2.e().to_vec();
-        let mut n = pubkey2.n().to_vec();
-        e.reverse();
-        n.reverse();
-
-        while e.len() < 4 {
-            e.push(0);
-        }
-        while n.len() < 128 {
-            n.push(0);
-        }
-        sig.append(&mut e); // 4 bytes E
-        sig.append(&mut n); // N
+        sig.extend_from_slice(&e);
+        sig.extend_from_slice(&n);
 
         let hash = ckb_hash::blake2b_256(sig.as_slice());
 
@@ -1101,7 +1119,7 @@ impl Auth for RSAAuth {
         AlgorithmType::RSA as u8
     }
     fn sign(&self, msg: &H256) -> Bytes {
-        RSAAuth::rsa_sign(msg, &self.privkey)
+        RSAAuth::rsa_sign(msg, &self.pri_key, &self.pub_key)
     }
 }
 

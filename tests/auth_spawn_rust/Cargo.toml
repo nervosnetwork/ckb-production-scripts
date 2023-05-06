@@ -1,0 +1,22 @@
+[package]
+name = "auth_spawn_rust"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ckb-debugger-api = { git = "https://github.com/nervosnetwork/ckb-standalone-debugger.git", rev="1a66c03" }
+ckb-mock-tx-types =  { git = "https://github.com/nervosnetwork/ckb-standalone-debugger.git", rev="1a66c03" }
+molecule = { version = "0.7.3", default-features = false }
+ckb-hash = "=0.108.1"
+ckb-jsonrpc-types = "=0.108.1"
+ckb-types = "=0.108.1"
+ckb-crypto = "=0.108.1"
+env_logger = "0.4.3"
+anyhow = "1.0.70"
+lazy_static = "1.4.0"
+log = "0.4.0"
+serde_json = "1.0"
+serde_plain = "1.0"
+sparse-merkle-tree = {version = "0.6.1"}

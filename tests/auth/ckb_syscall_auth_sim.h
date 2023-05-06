@@ -130,6 +130,18 @@ int ckb_exec_cell(const uint8_t* code_hash, uint8_t hash_type, uint32_t offset,
   return simulator_main(argc, (char**)argv);
 }
 
+typedef struct spawn_args_t {
+  uint64_t memory_limit;
+  int8_t* exit_code;
+  uint8_t* content;
+  uint64_t* content_length;
+} spawn_args_t;
+int ckb_spawn_cell(const uint8_t* code_hash, uint8_t hash_type, uint32_t offset,
+                   uint32_t length, int argc, const char* argv[],
+                   spawn_args_t* spgs) {
+  return simulator_main(argc, (char**)argv);
+}
+
 int ckb_dlopen2(const uint8_t* dep_cell_hash, uint8_t hash_type,
                 uint8_t* aligned_addr, size_t aligned_size, void** handle,
                 size_t* consumed_size) {
