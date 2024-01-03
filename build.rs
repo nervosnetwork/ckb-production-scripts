@@ -39,7 +39,7 @@ const BINARIES: &[(&str, &str)] = &[
     ),
     (
         "omni_lock",
-        "86ea7ee58a0ecacfb1f7f2675a06d96223e0597dfe06a2474f9c06a72a7ccabc",
+        "2010378214cc62a9c0c48426b553f73bff80e063b015c9079e93008f3da3e971",
     ),
 ];
 

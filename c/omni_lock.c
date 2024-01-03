@@ -137,8 +137,8 @@ bool is_memory_enough(mol_seg_t seg, const uint8_t *cur, uint32_t len) {
 
 // memory layout of args:
 // <identity, 21 bytes> <omni_lock args>
-// <omni_lock flags, 1 byte>  <OMNI cell type id, 32 bytes, optional> <ckb/udt min,
-// 2 bytes, optional> <since, 8 bytes, optional>
+// <omni_lock flags, 1 byte>  <OMNI cell type id, 32 bytes, optional> <ckb/udt
+// min, 2 bytes, optional> <since, 8 bytes, optional>
 int parse_args(ArgsType *args) {
   int err = 0;
   uint8_t script[SCRIPT_SIZE];

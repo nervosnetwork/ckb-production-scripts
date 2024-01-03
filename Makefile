@@ -113,14 +113,12 @@ ${PROTOCOL_SCHEMA}:
 	curl -L -o $@ ${PROTOCOL_URL}
 
 ALL_C_SOURCE := $(wildcard c/omni_lock.c c/omni_lock_acp.h c/omni_lock_time_lock.h \
-	tests/omni_lock/omni_lock_sim.c tests/omni_lock/ckb_syscall_omni_lock_sim.h tests/omni_lock/omni_lock_supply.h\
 	c/rce_validator.c /always_success.c c/rce.h c/xudt_rce.c \
-	c/rce_validator.c tests/xudt_rce/*.c tests/xudt_rce/*.h\
-	c/validate_signature_rsa.h c/validate_signature_rsa.c)
+	c/rce_validator.c c/validate_signature_rsa.h c/validate_signature_rsa.c \
+	c/ripemd160.h c/conversion.h c/sha256.h c/ckb_identity.h)
 
 fmt:
-	docker run --rm -v `pwd`:/code ${CLANG_FORMAT_DOCKER} bash -c "cd code && clang-format -i -style=Google $(ALL_C_SOURCE)"
-	git diff --exit-code $(ALL_C_SOURCE)
+	docker run -u `id -u`:`id -g` --rm -v `pwd`:/code ${CLANG_FORMAT_DOCKER} bash -c "cd code && clang-format -i -style=Google $(ALL_C_SOURCE)"
 
 mol:
 	rm -f c/xudt_rce_mol.h

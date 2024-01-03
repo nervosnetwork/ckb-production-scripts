@@ -6,12 +6,17 @@
 
 #include "ckb_consts.h"
 #include "ckb_keccak256.h"
+#include "ripemd160.h"
+#include "sha256.h"
 
 #define CKB_IDENTITY_LEN 21
+#define AUTH160_SIZE 20
+#define SHA256_SIZE 32
 #define RECID_INDEX 64
 #define ONE_BATCH_SIZE 32768
 #define PUBKEY_SIZE 33
-#define UNCOMPRESSED_PUBKEY_SIZE 65
+#define SECP256K1_PUBKEY_SIZE 33
+#define UNCOMPRESSED_SECP256K1_PUBKEY_SIZE 65
 
 #define MAX_WITNESS_SIZE 32768
 #define BLAKE2B_BLOCK_SIZE 32
@@ -19,6 +24,7 @@
 #define SECP256K1_SIGNATURE_SIZE 65
 #define SECP256K1_MESSAGE_SIZE 32
 #define MAX_PREIMAGE_SIZE 1024
+#define MESSAGE_HEX_LEN 64
 
 enum CkbIdentityErrorCode {
   ERROR_IDENTITY_ARGUMENTS_LEN = -1,
@@ -34,6 +40,9 @@ enum CkbIdentityErrorCode {
   ERROR_IDENTITY_LOCK_SCRIPT_HASH_NOT_FOUND = 70,
   ERROR_IDENTITY_WRONG_ARGS,
   ERROR_INVALID_PREIMAGE,
+  ERROR_MISMATCHED,
+  ERROR_INVALID_ARG,
+  ERROR_WRONG_STATE
 };
 
 typedef struct CkbIdentityType {
@@ -108,6 +117,19 @@ int load_and_hash_witness(blake2b_state *ctx, size_t start, size_t index,
   return CKB_SUCCESS;
 }
 
+void bitcoin_hash160(const uint8_t *data, size_t size, uint8_t *output) {
+  unsigned char temp[SHA256_SIZE];
+  SHA256_CTX sha256_ctx;
+  sha256_init(&sha256_ctx);
+  sha256_update(&sha256_ctx, data, size);
+  sha256_final(&sha256_ctx, temp);
+
+  ripemd160_state ripe160_ctx;
+  ripemd160_init(&ripe160_ctx);
+  ripemd160_update(&ripe160_ctx, temp, SHA256_SIZE);
+  ripemd160_finalize(&ripe160_ctx, output);
+}
+
 static int _ckb_recover_secp256k1_pubkey(const uint8_t *sig, size_t sig_len,
                                          const uint8_t *msg, size_t msg_len,
                                          uint8_t *out_pubkey,
@@ -144,10 +166,10 @@ static int _ckb_recover_secp256k1_pubkey(const uint8_t *sig, size_t sig_len,
 
   unsigned int flag = SECP256K1_EC_COMPRESSED;
   if (compressed) {
-    *out_pubkey_size = PUBKEY_SIZE;
+    *out_pubkey_size = SECP256K1_PUBKEY_SIZE;
     flag = SECP256K1_EC_COMPRESSED;
   } else {
-    *out_pubkey_size = UNCOMPRESSED_PUBKEY_SIZE;
+    *out_pubkey_size = UNCOMPRESSED_SECP256K1_PUBKEY_SIZE;
     flag = SECP256K1_EC_UNCOMPRESSED;
   }
   if (secp256k1_ec_pubkey_serialize(&context, out_pubkey, out_pubkey_size,
@@ -165,8 +187,8 @@ int validate_signature_secp256k1(void *prefilled_data, const uint8_t *sig,
   if (*output_len < BLAKE160_SIZE) {
     return ERROR_IDENTITY_ARGUMENTS_LEN;
   }
-  uint8_t out_pubkey[PUBKEY_SIZE];
-  size_t out_pubkey_size = PUBKEY_SIZE;
+  uint8_t out_pubkey[SECP256K1_PUBKEY_SIZE];
+  size_t out_pubkey_size = SECP256K1_PUBKEY_SIZE;
   ret = _ckb_recover_secp256k1_pubkey(sig, sig_len, msg, msg_len, out_pubkey,
                                       &out_pubkey_size, true);
   if (ret != 0) return ret;
@@ -182,16 +204,15 @@ int validate_signature_secp256k1(void *prefilled_data, const uint8_t *sig,
   return ret;
 }
 
-int validate_signature_secp256k1_pw(void *prefilled_data, const uint8_t *sig,
-                                    size_t sig_len, const uint8_t *msg,
-                                    size_t msg_len, uint8_t *output,
-                                    size_t *output_len) {
+int validate_signature_eth(void *prefilled_data, const uint8_t *sig,
+                           size_t sig_len, const uint8_t *msg, size_t msg_len,
+                           uint8_t *output, size_t *output_len) {
   int ret = 0;
   if (*output_len < BLAKE160_SIZE) {
     return ERROR_IDENTITY_ARGUMENTS_LEN;
   }
-  uint8_t out_pubkey[UNCOMPRESSED_PUBKEY_SIZE];
-  size_t out_pubkey_size = UNCOMPRESSED_PUBKEY_SIZE;
+  uint8_t out_pubkey[UNCOMPRESSED_SECP256K1_PUBKEY_SIZE];
+  size_t out_pubkey_size = UNCOMPRESSED_SECP256K1_PUBKEY_SIZE;
   ret = _ckb_recover_secp256k1_pubkey(sig, sig_len, msg, msg_len, out_pubkey,
                                       &out_pubkey_size, false);
   if (ret != 0) return ret;
@@ -206,6 +227,134 @@ int validate_signature_secp256k1_pw(void *prefilled_data, const uint8_t *sig,
   *output_len = BLAKE160_SIZE;
 
   return ret;
+}
+
+// Refer to: https://en.bitcoin.it/wiki/BIP_0137
+int get_btc_recid(uint8_t d, bool *compressed, bool *p2sh_hash) {
+  *compressed = true;
+  *p2sh_hash = false;
+  if (d >= 27 && d <= 30) {  // P2PKH uncompressed
+    *compressed = false;
+    return d - 27;
+  } else if (d >= 31 && d <= 34) {  // P2PKH compressed
+    return d - 31;
+  } else if (d >= 35 && d <= 38) {  // Segwit P2SH
+    *p2sh_hash = true;
+    return d - 35;
+  } else if (d >= 39 && d <= 42) {  // Segwit Bech32
+    return d - 39;
+  } else {
+    return -1;
+  }
+}
+
+static int _recover_secp256k1_pubkey_btc(const uint8_t *sig, size_t sig_len,
+                                         const uint8_t *msg, size_t msg_len,
+                                         uint8_t *out_pubkey,
+                                         size_t *out_pubkey_size) {
+  int ret = 0;
+
+  if (sig_len != SECP256K1_SIGNATURE_SIZE) {
+    return ERROR_INVALID_ARG;
+  }
+  if (msg_len != SECP256K1_MESSAGE_SIZE) {
+    return ERROR_INVALID_ARG;
+  }
+  bool compressed = true;
+  bool p2sh_hash = false;
+  int recid = get_btc_recid(sig[0], &compressed, &p2sh_hash);
+  if (recid == -1) {
+    return ERROR_INVALID_ARG;
+  }
+
+  secp256k1_context context;
+  uint8_t secp_data[CKB_SECP256K1_DATA_SIZE];
+  ret = ckb_secp256k1_custom_verify_only_initialize(&context, secp_data);
+  if (ret != 0) {
+    return ret;
+  }
+
+  secp256k1_ecdsa_recoverable_signature signature;
+
+  if (secp256k1_ecdsa_recoverable_signature_parse_compact(
+          &context, &signature, sig + 1, recid) == 0) {
+    return ERROR_WRONG_STATE;
+  }
+
+  /* Recover pubkey */
+  secp256k1_pubkey pubkey;
+  if (secp256k1_ecdsa_recover(&context, &pubkey, &signature, msg) != 1) {
+    return ERROR_WRONG_STATE;
+  }
+
+  unsigned int flag = SECP256K1_EC_COMPRESSED;
+  if (compressed) {
+    *out_pubkey_size = SECP256K1_PUBKEY_SIZE;
+    flag = SECP256K1_EC_COMPRESSED;
+    if (secp256k1_ec_pubkey_serialize(&context, out_pubkey, out_pubkey_size,
+                                      &pubkey, flag) != 1) {
+      return ERROR_WRONG_STATE;
+    }
+
+    if (p2sh_hash) {
+      bitcoin_hash160(out_pubkey, *out_pubkey_size, out_pubkey + 2);
+
+      out_pubkey[0] = 0;
+      out_pubkey[1] = 20;  // RIPEMD160 size
+      *out_pubkey_size = 22;
+    }
+  } else {
+    *out_pubkey_size = UNCOMPRESSED_SECP256K1_PUBKEY_SIZE;
+    flag = SECP256K1_EC_UNCOMPRESSED;
+    if (secp256k1_ec_pubkey_serialize(&context, out_pubkey, out_pubkey_size,
+                                      &pubkey, flag) != 1) {
+      return ERROR_WRONG_STATE;
+    }
+  }
+  return ret;
+}
+
+int validate_signature_btc(void *prefilled_data, const uint8_t *sig,
+                           size_t sig_len, const uint8_t *msg, size_t msg_len,
+                           uint8_t *output, size_t *output_len) {
+  int err = 0;
+  if (*output_len < AUTH160_SIZE) {
+    return ERROR_INVALID_ARG;
+  }
+  uint8_t out_pubkey[UNCOMPRESSED_SECP256K1_PUBKEY_SIZE];
+  size_t out_pubkey_size = UNCOMPRESSED_SECP256K1_PUBKEY_SIZE;
+  err = _recover_secp256k1_pubkey_btc(sig, sig_len, msg, msg_len, out_pubkey,
+                                      &out_pubkey_size);
+  if (err) return err;
+  unsigned char temp[AUTH160_SIZE];
+  bitcoin_hash160(out_pubkey, out_pubkey_size, temp);
+  memcpy(output, temp, AUTH160_SIZE);
+  *output_len = AUTH160_SIZE;
+
+  return 0;
+}
+
+int validate_signature_eos(void *prefilled_data, const uint8_t *sig,
+                           size_t sig_len, const uint8_t *msg, size_t msg_len,
+                           uint8_t *output, size_t *output_len) {
+  int err = 0;
+  if (*output_len < AUTH160_SIZE) {
+    return ERROR_INVALID_ARG;
+  }
+  uint8_t out_pubkey[UNCOMPRESSED_SECP256K1_PUBKEY_SIZE];
+  size_t out_pubkey_size = UNCOMPRESSED_SECP256K1_PUBKEY_SIZE;
+  err = _recover_secp256k1_pubkey_btc(sig, sig_len, msg, msg_len, out_pubkey,
+                                      &out_pubkey_size);
+  if (err) return err;
+
+  blake2b_state ctx;
+  blake2b_init(&ctx, BLAKE2B_BLOCK_SIZE);
+  blake2b_update(&ctx, out_pubkey, out_pubkey_size);
+  blake2b_final(&ctx, out_pubkey, BLAKE2B_BLOCK_SIZE);
+
+  memcpy(output, out_pubkey, AUTH160_SIZE);
+  *output_len = AUTH160_SIZE;
+  return err;
 }
 
 int generate_sighash_all(uint8_t *msg, size_t msg_len) {
@@ -308,8 +457,8 @@ static int _ckb_convert_copy(const uint8_t *msg, size_t msg_len,
   return 0;
 }
 
-static int _ckb_convert_keccak256_hash(const uint8_t *msg, size_t msg_len,
-                                       uint8_t *new_msg, size_t new_msg_len) {
+static int convert_eth_message(const uint8_t *msg, size_t msg_len,
+                               uint8_t *new_msg, size_t new_msg_len) {
   if (msg_len != new_msg_len || msg_len != BLAKE2B_BLOCK_SIZE)
     return ERROR_IDENTITY_ARGUMENTS_LEN;
 
@@ -349,6 +498,93 @@ int verify_sighash_all(uint8_t *pubkey_hash, uint8_t *sig, uint32_t sig_len,
     return ERROR_IDENTITY_PUBKEY_BLAKE160_HASH;
   }
 
+  return 0;
+}
+
+static void bin_to_hex(const uint8_t *source, uint8_t *dest, size_t len) {
+  const static uint8_t HEX_TABLE[] = {'0', '1', '2', '3', '4', '5', '6', '7',
+                                      '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+  for (int i = 0; i < len; i++) {
+    dest[i * 2] = HEX_TABLE[source[i] >> 4];
+    dest[i * 2 + 1] = HEX_TABLE[source[i] & 0x0F];
+  }
+}
+
+int convert_btc_message_variant(const uint8_t *msg, size_t msg_len,
+                                uint8_t *new_msg, size_t new_msg_len,
+                                const char *magic, const uint8_t magic_len) {
+  if (msg_len != new_msg_len || msg_len != SHA256_SIZE)
+    return ERROR_INVALID_ARG;
+
+  uint8_t temp[MESSAGE_HEX_LEN];
+  bin_to_hex(msg, temp, 32);
+
+  // len of magic + magic string + len of message, size is 26 Byte
+  uint8_t new_magic[magic_len + 2];
+  new_magic[0] = magic_len;  // MESSAGE_MAGIC length
+  memcpy(&new_magic[1], magic, magic_len);
+  new_magic[magic_len + 1] = MESSAGE_HEX_LEN;  // message length
+
+  /* Calculate signature message */
+  uint8_t temp2[magic_len + 2 + MESSAGE_HEX_LEN];
+  uint32_t temp2_size = magic_len + 2 + MESSAGE_HEX_LEN;
+  memcpy(temp2, new_magic, magic_len + 2);
+  memcpy(temp2 + magic_len + 2, temp, MESSAGE_HEX_LEN);
+
+  SHA256_CTX sha256_ctx;
+  sha256_init(&sha256_ctx);
+  sha256_update(&sha256_ctx, temp2, temp2_size);
+  sha256_final(&sha256_ctx, new_msg);
+
+  SHA256_CTX sha256_ctx2;
+  sha256_init(&sha256_ctx2);
+  sha256_update(&sha256_ctx2, new_msg, SHA256_SIZE);
+  sha256_final(&sha256_ctx, new_msg);
+  return 0;
+}
+
+int convert_copy(const uint8_t *msg, size_t msg_len, uint8_t *new_msg,
+                 size_t new_msg_len) {
+  if (msg_len != new_msg_len || msg_len != BLAKE2B_BLOCK_SIZE)
+    return ERROR_INVALID_ARG;
+  memcpy(new_msg, msg, msg_len);
+  return 0;
+}
+
+const char BTC_MESSAGE_MAGIC[25] = "Bitcoin Signed Message:\n";
+const int8_t BTC_MAGIC_LEN = 24;
+
+int convert_btc_message(const uint8_t *msg, size_t msg_len, uint8_t *new_msg,
+                        size_t new_msg_len) {
+  return convert_btc_message_variant(msg, msg_len, new_msg, new_msg_len,
+                                     BTC_MESSAGE_MAGIC, BTC_MAGIC_LEN);
+}
+
+const char DOGE_MESSAGE_MAGIC[26] = "Dogecoin Signed Message:\n";
+const int8_t DOGE_MAGIC_LEN = 25;
+
+int convert_doge_message(const uint8_t *msg, size_t msg_len, uint8_t *new_msg,
+                         size_t new_msg_len) {
+  return convert_btc_message_variant(msg, msg_len, new_msg, new_msg_len,
+                                     DOGE_MESSAGE_MAGIC, DOGE_MAGIC_LEN);
+}
+
+int convert_tron_message(const uint8_t *msg, size_t msg_len, uint8_t *new_msg,
+                         size_t new_msg_len) {
+  if (msg_len != new_msg_len || msg_len != BLAKE2B_BLOCK_SIZE)
+    return ERROR_INVALID_ARG;
+
+  SHA3_CTX sha3_ctx;
+  keccak_init(&sha3_ctx);
+  /* ASCII code for tron prefix \x19TRON Signed Message:\n32, refer
+   * https://github.com/tronprotocol/tips/issues/104 */
+  unsigned char tron_prefix[24];
+  tron_prefix[0] = 0x19;
+  memcpy(tron_prefix + 1, "TRON Signed Message:\n32", 23);
+
+  keccak_update(&sha3_ctx, tron_prefix, 24);
+  keccak_update(&sha3_ctx, (unsigned char *)msg, 32);
+  keccak_final(&sha3_ctx, new_msg);
   return 0;
 }
 
@@ -518,8 +754,8 @@ int verify_multisig(const uint8_t *lock_bytes, size_t lock_bytes_len,
     return ERROR_WITNESS_SIZE;
   }
 
-  // Perform hash check of the `multisig_script` part, notice the signature part
-  // is not included here.
+  // Perform hash check of the `multisig_script` part, notice the signature
+  // part is not included here.
   blake2b_state blake2b_ctx;
   blake2b_init(&blake2b_ctx, BLAKE2B_BLOCK_SIZE);
   blake2b_update(&blake2b_ctx, lock_bytes, multisig_script_len);
@@ -531,7 +767,8 @@ int verify_multisig(const uint8_t *lock_bytes, size_t lock_bytes_len,
 
   // Verify threshold signatures, threshold is a uint8_t, at most it is
   // 255, meaning this array will definitely have a reasonable upper bound.
-  // Also this code uses C99's new feature to allocate a variable length array.
+  // Also this code uses C99's new feature to allocate a variable length
+  // array.
   uint8_t used_signatures[pubkeys_cnt];
   memset(used_signatures, 0, pubkeys_cnt);
 
@@ -552,8 +789,8 @@ int verify_multisig(const uint8_t *lock_bytes, size_t lock_bytes_len,
     secp256k1_ecdsa_recoverable_signature signature;
     size_t signature_offset = multisig_script_len + i * SIGNATURE_SIZE;
     if (secp256k1_ecdsa_recoverable_signature_parse_compact(
-        &context, &signature, &lock_bytes[signature_offset],
-        lock_bytes[signature_offset + RECID_INDEX]) == 0) {
+            &context, &signature, &lock_bytes[signature_offset],
+            lock_bytes[signature_offset + RECID_INDEX]) == 0) {
       return ERROR_SECP_PARSE_SIGNATURE;
     }
 
@@ -591,19 +828,19 @@ int verify_multisig(const uint8_t *lock_bytes, size_t lock_bytes_len,
       break;
     }
 
-    // If the signature doesn't match any of the provided public key, the script
-    // will exit with an error.
+    // If the signature doesn't match any of the provided public key, the
+    // script will exit with an error.
     if (matched != 1) {
       return ERROR_VERIFICATION;
     }
   }
 
-  // The above scheme just ensures that a *threshold* number of signatures have
-  // successfully been verified, and they all come from the provided public
-  // keys. However, the multisig script might also require some numbers of
-  // public keys to always be signed for the script to pass verification. This
-  // is indicated via the *required_first_n* flag. Here we also checks to see
-  // that this rule is also satisfied.
+  // The above scheme just ensures that a *threshold* number of signatures
+  // have successfully been verified, and they all come from the provided
+  // public keys. However, the multisig script might also require some numbers
+  // of public keys to always be signed for the script to pass verification.
+  // This is indicated via the *required_first_n* flag. Here we also checks to
+  // see that this rule is also satisfied.
   for (size_t i = 0; i < require_first_n; i++) {
     if (used_signatures[i] != 1) {
       return ERROR_VERIFICATION;
@@ -612,7 +849,6 @@ int verify_multisig(const uint8_t *lock_bytes, size_t lock_bytes_len,
 
   return 0;
 }
-
 
 static uint8_t *g_identity_code_buffer = NULL;
 static uint32_t g_identity_code_size = 0;
@@ -629,14 +865,37 @@ int ckb_verify_identity(CkbIdentityType *id, uint8_t *sig, uint32_t sig_size,
     if (sig == NULL || sig_size != SECP256K1_SIGNATURE_SIZE) {
       return ERROR_IDENTITY_WRONG_ARGS;
     }
-    return verify_sighash_all(id->id, sig, sig_size,
-                              validate_signature_secp256k1_pw,
-                              _ckb_convert_keccak256_hash);
+    return verify_sighash_all(id->id, sig, sig_size, validate_signature_eth,
+                              convert_eth_message);
+
+  } else if (id->flags == IdentityFlagsEos) {
+    if (sig == NULL || sig_size != SECP256K1_SIGNATURE_SIZE) {
+      return ERROR_IDENTITY_WRONG_ARGS;
+    }
+    return verify_sighash_all(id->id, sig, sig_size, validate_signature_eos,
+                              convert_copy);
+  } else if (id->flags == IdentityFlagsTron) {
+    if (sig == NULL || sig_size != SECP256K1_SIGNATURE_SIZE) {
+      return ERROR_IDENTITY_WRONG_ARGS;
+    }
+    return verify_sighash_all(id->id, sig, sig_size, validate_signature_eth,
+                              convert_tron_message);
+  } else if (id->flags == IdentityFlagsBitcoin) {
+    if (sig == NULL || sig_size != SECP256K1_SIGNATURE_SIZE) {
+      return ERROR_IDENTITY_WRONG_ARGS;
+    }
+    return verify_sighash_all(id->id, sig, sig_size, validate_signature_btc,
+                              convert_btc_message);
+  } else if (id->flags == IdentityFlagsDogecoin) {
+    if (sig == NULL || sig_size != SECP256K1_SIGNATURE_SIZE) {
+      return ERROR_IDENTITY_WRONG_ARGS;
+    }
+    return verify_sighash_all(id->id, sig, sig_size, validate_signature_btc,
+                              convert_doge_message);
   } else if (id->flags == IdentityCkbMultisig) {
     uint8_t msg[BLAKE2B_BLOCK_SIZE];
     int ret = generate_sighash_all(msg, sizeof(msg));
-    if (ret != 0)
-      return ret;
+    if (ret != 0) return ret;
     return verify_multisig(sig, sig_size, msg, id->id);
   } else if (id->flags == IdentityFlagsOwnerLock) {
     if (is_lock_script_hash_present(id->id)) {

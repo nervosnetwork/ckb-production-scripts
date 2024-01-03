@@ -44,8 +44,8 @@ int ckb_exit(signed char);
 #define OWNER_MODE_INPUT_TYPE_MASK 0x80000000
 #define OWNER_MODE_OUTPUT_TYPE_MASK 0x40000000
 #define OWNER_MODE_INPUT_LOCK_NOT_MASK 0x20000000
-#define OWNER_MODE_MASK                                                        \
-  (OWNER_MODE_INPUT_TYPE_MASK | OWNER_MODE_OUTPUT_TYPE_MASK |                  \
+#define OWNER_MODE_MASK                                       \
+  (OWNER_MODE_INPUT_TYPE_MASK | OWNER_MODE_OUTPUT_TYPE_MASK | \
    OWNER_MODE_INPUT_LOCK_NOT_MASK)
 
 #include "rce.h"
@@ -81,8 +81,8 @@ typedef enum XUDTFlags {
 } XUDTFlags;
 
 typedef enum XUDTValidateFuncCategory {
-  CateNormal = 0, // normal extension script
-  CateRce = 1,    // Regulation Compliance Extension
+  CateNormal = 0,  // normal extension script
+  CateRce = 1,     // Regulation Compliance Extension
 } XUDTValidateFuncCategory;
 
 uint8_t RCE_HASH[32] = {1};
@@ -506,8 +506,7 @@ exit:
 
 // copied from simple_udt.c
 int simple_udt(int owner_mode) {
-  if (owner_mode)
-    return CKB_SUCCESS;
+  if (owner_mode) return CKB_SUCCESS;
 
   int ret = 0;
   // When the owner mode is not enabled, however, we will then need to ensure
