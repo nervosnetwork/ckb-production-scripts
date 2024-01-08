@@ -90,6 +90,10 @@ pub const SECP256K1_TAG_PUBKEY_UNCOMPRESSED: u8 = 0x04;
 pub const SECP256K1_TAG_PUBKEY_HYBRID_EVEN: u8 = 0x06;
 pub const SECP256K1_TAG_PUBKEY_HYBRID_ODD: u8 = 0x07;
 
+// Refer to https://en.bitcoin.it/wiki/BIP_0137
+// These values are used to denote the signature types of Bitcoin.
+// Each type corresponds to a distinct public key hash and a unique signature 
+//      data header.
 pub const BITCOIN_V_TYPE_P2PKHUNCOMPRESSED: u8 = 27;
 pub const BITCOIN_V_TYPE_P2PKHCOMPRESSED: u8 = 31;
 pub const BITCOIN_V_TYPE_SEGWITP2SH: u8 = 35;
