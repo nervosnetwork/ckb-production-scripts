@@ -539,7 +539,7 @@ int convert_btc_message_variant(const uint8_t *msg, size_t msg_len,
   SHA256_CTX sha256_ctx2;
   sha256_init(&sha256_ctx2);
   sha256_update(&sha256_ctx2, new_msg, SHA256_SIZE);
-  sha256_final(&sha256_ctx, new_msg);
+  sha256_final(&sha256_ctx2, new_msg);
   return 0;
 }
 
