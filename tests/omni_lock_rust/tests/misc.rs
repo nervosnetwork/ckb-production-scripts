@@ -83,6 +83,18 @@ pub const ERROR_SUPPLY_AMOUNT: i8 = 91;
 pub const ERROR_BURN: i8 = 92;
 pub const ERROR_NO_INFO_CELL: i8 = 93;
 
+// https://github.com/bitcoin-core/secp256k1/blob/d373bf6d08c82ac5496bf8103698c9f54d8d99d2/include/secp256k1.h#L219
+pub const SECP256K1_TAG_PUBKEY_EVEN: u8 = 0x02;
+pub const SECP256K1_TAG_PUBKEY_ODD: u8 = 0x03;
+pub const SECP256K1_TAG_PUBKEY_UNCOMPRESSED: u8 = 0x04;
+pub const SECP256K1_TAG_PUBKEY_HYBRID_EVEN: u8 = 0x06;
+pub const SECP256K1_TAG_PUBKEY_HYBRID_ODD: u8 = 0x07;
+
+pub const BITCOIN_V_TYPE_P2PKHUNCOMPRESSED: u8 = 27;
+pub const BITCOIN_V_TYPE_P2PKHCOMPRESSED: u8 = 31;
+pub const BITCOIN_V_TYPE_SEGWITP2SH: u8 = 35;
+pub const BITCOIN_V_TYPE_SEGWITBECH32: u8 = 39;
+
 lazy_static! {
     pub static ref OMNI_LOCK: Bytes = Bytes::from(&include_bytes!("../../../build/omni_lock")[..]);
     pub static ref SIMPLE_UDT: Bytes =
@@ -1146,11 +1158,6 @@ impl Default for MultisigTestConfig {
     }
 }
 
-pub const BITCOIN_V_TYPE_P2PKHUNCOMPRESSED: u8 = 27;
-pub const BITCOIN_V_TYPE_P2PKHCOMPRESSED: u8 = 31;
-pub const BITCOIN_V_TYPE_SEGWITP2SH: u8 = 35;
-pub const BITCOIN_V_TYPE_SEGWITBECH32: u8 = 39;
-
 pub struct BitcoinConfig {
     pub sign_vtype: u8,
     pub pubkey_err: bool,
@@ -1176,7 +1183,7 @@ impl BitcoinConfig {
             BITCOIN_V_TYPE_P2PKHUNCOMPRESSED => {
                 let mut pk_data = Vec::<u8>::new();
                 pk_data.resize(65, 0);
-                pk_data[0] = 4;
+                pk_data[0] = SECP256K1_TAG_PUBKEY_UNCOMPRESSED;
                 pk_data[1..].copy_from_slice(pubkey.as_bytes());
 
                 bitcoin_hash160(&pk_data)
@@ -1272,7 +1279,7 @@ impl EOSConfig {
         let buf = match self.0.sign_vtype {
             BITCOIN_V_TYPE_P2PKHUNCOMPRESSED => {
                 let mut temp: BytesMut = BytesMut::with_capacity(65);
-                temp.put_u8(4);
+                temp.put_u8(SECP256K1_TAG_PUBKEY_UNCOMPRESSED);
                 temp.put(Bytes::from(pubkey.as_bytes().to_vec()));
                 temp.freeze().to_vec()
             }
