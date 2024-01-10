@@ -11,9 +11,9 @@ use rand::{thread_rng, Rng};
 
 use misc::{
     assert_script_error, build_always_success_script, build_resolved_tx, debug_printer, gen_tx,
-    sign_tx, DummyDataLoader, TestConfig, ALWAYS_SUCCESS, CKB_INVALID_DATA, ERROR_BURN,
-    ERROR_EXCEED_SUPPLY, ERROR_NO_INFO_CELL, ERROR_SUPPLY_AMOUNT, IDENTITY_FLAGS_ETHEREUM,
-    MAX_CYCLES, SIMPLE_UDT,
+    sign_tx, DummyDataLoader, EthereumConfig, TestConfig, ALWAYS_SUCCESS, CKB_INVALID_DATA,
+    ERROR_BURN, ERROR_EXCEED_SUPPLY, ERROR_NO_INFO_CELL, ERROR_SUPPLY_AMOUNT,
+    IDENTITY_FLAGS_ETHEREUM, MAX_CYCLES, SIMPLE_UDT,
 };
 
 mod misc;
@@ -176,6 +176,7 @@ where
 {
     let mut data_loader = DummyDataLoader::new();
     let mut config = TestConfig::new(IDENTITY_FLAGS_ETHEREUM, false);
+    config.set_chain_config(Box::new(EthereumConfig::default()));
 
     let tx = gen_tx_fn(&mut data_loader, &mut config);
     let tx = sign_tx(&mut data_loader, tx, &mut config);

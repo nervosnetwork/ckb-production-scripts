@@ -1,6 +1,5 @@
 #ifndef CKB_C_STDLIB_CKB_IDENTITY_H_
 #define CKB_C_STDLIB_CKB_IDENTITY_H_
-
 #include <blake2b.h>
 #include <ckb_exec.h>
 
@@ -25,6 +24,14 @@
 #define SECP256K1_MESSAGE_SIZE 32
 #define MAX_PREIMAGE_SIZE 1024
 #define MESSAGE_HEX_LEN 64
+
+const char BTC_PREFIX[] = "CKB (Bitcoin Layer-2) transaction: ";
+// BTC_PREFIX_LEN = 35
+const size_t BTC_PREFIX_LEN = sizeof(BTC_PREFIX) - 1;
+
+const char COMMON_PREFIX[] = "CKB transaction: ";
+// COMMON_PREFIX_LEN = 17
+const size_t COMMON_PREFIX_LEN = sizeof(COMMON_PREFIX) - 1;
 
 enum CkbIdentityErrorCode {
   ERROR_IDENTITY_ARGUMENTS_LEN = -1,
@@ -62,6 +69,7 @@ enum IdentityFlagsType {
   IdentityFlagsDogecoin = 5,
   IdentityCkbMultisig = 6,
 
+  IdentityFlagsEthereumDisplaying = 18,
   IdentityFlagsOwnerLock = 0xFC,
   IdentityFlagsExec = 0xFD,
   IdentityFlagsDl = 0xFE,
@@ -74,6 +82,15 @@ typedef int (*validate_signature_t)(void *prefilled_data, const uint8_t *sig,
 
 typedef int (*convert_msg_t)(const uint8_t *msg, size_t msg_len,
                              uint8_t *new_msg, size_t new_msg_len);
+
+static void bin_to_hex(const uint8_t *source, uint8_t *dest, size_t len) {
+  const static uint8_t HEX_TABLE[] = {'0', '1', '2', '3', '4', '5', '6', '7',
+                                      '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+  for (int i = 0; i < len; i++) {
+    dest[i * 2] = HEX_TABLE[source[i] >> 4];
+    dest[i * 2 + 1] = HEX_TABLE[source[i] & 0x0F];
+  }
+}
 
 static int extract_witness_lock(uint8_t *witness, uint64_t len,
                                 mol_seg_t *lock_bytes_seg) {
@@ -475,6 +492,35 @@ static int convert_eth_message(const uint8_t *msg, size_t msg_len,
   return 0;
 }
 
+static int convert_eth_message_displaying(const uint8_t *msg, size_t msg_len,
+                                          uint8_t *new_msg,
+                                          size_t new_msg_len) {
+  if (msg_len != new_msg_len || msg_len != BLAKE2B_BLOCK_SIZE)
+    return ERROR_IDENTITY_ARGUMENTS_LEN;
+
+  uint8_t hex_msg[MESSAGE_HEX_LEN] = {0};
+  bin_to_hex(msg, hex_msg, 32);
+
+  SHA3_CTX sha3_ctx;
+  keccak_init(&sha3_ctx);
+  /* personal_sign ethereum prefix  \u0019Ethereum Signed Message:\n */
+  unsigned char eth_prefix[28];
+  eth_prefix[0] = 0x19;
+  memcpy(eth_prefix + 1, "Ethereum Signed Message:\n", 0x19);
+  // COMMON_PREFIX_LEN + MESSAGE_HEX_LEN -> 17 + 64 = 81
+  memcpy(eth_prefix + 1 + 0x19, "81", 2);
+
+  keccak_update(&sha3_ctx, eth_prefix, 28);
+  //
+  // Displaying message on wallet like below:
+  // CKB transaction: {txhash}
+  //
+  keccak_update(&sha3_ctx, (unsigned char *)COMMON_PREFIX, COMMON_PREFIX_LEN);
+  keccak_update(&sha3_ctx, (unsigned char *)hex_msg, MESSAGE_HEX_LEN);
+  keccak_final(&sha3_ctx, new_msg);
+  return 0;
+}
+
 int verify_sighash_all(uint8_t *pubkey_hash, uint8_t *sig, uint32_t sig_len,
                        validate_signature_t func, convert_msg_t convert) {
   int ret = 0;
@@ -501,20 +547,58 @@ int verify_sighash_all(uint8_t *pubkey_hash, uint8_t *sig, uint32_t sig_len,
   return 0;
 }
 
-static void bin_to_hex(const uint8_t *source, uint8_t *dest, size_t len) {
-  const static uint8_t HEX_TABLE[] = {'0', '1', '2', '3', '4', '5', '6', '7',
-                                      '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
-  for (int i = 0; i < len; i++) {
-    dest[i * 2] = HEX_TABLE[source[i] >> 4];
-    dest[i * 2 + 1] = HEX_TABLE[source[i] & 0x0F];
-  }
-}
-
-int convert_btc_message_variant(const uint8_t *msg, size_t msg_len,
-                                uint8_t *new_msg, size_t new_msg_len,
-                                const char *magic, const uint8_t magic_len) {
+int convert_btc_message(const uint8_t *msg, size_t msg_len, uint8_t *new_msg,
+                        size_t new_msg_len) {
   if (msg_len != new_msg_len || msg_len != SHA256_SIZE)
     return ERROR_INVALID_ARG;
+  const char magic[25] = "Bitcoin Signed Message:\n";
+  const int8_t magic_len = 24;
+  const char *prefix = BTC_PREFIX;
+  size_t prefix_len = BTC_PREFIX_LEN;
+  //
+  // Displaying message on wallet like below:
+  // Bitcoin layer (CKB) transaction: {txhash}
+  //
+  uint8_t hex_msg[MESSAGE_HEX_LEN];
+  bin_to_hex(msg, hex_msg, 32);
+
+  // Signature message:
+  //   magic_len   magic     prefix_len+MESSAGE_HEX_LEN    prefix    message_hex
+  //      1       magic_len           1                  prefix_len   64
+  uint8_t data[magic_len + 2 + MESSAGE_HEX_LEN + prefix_len];
+  data[0] = magic_len;
+  memcpy(data + 1, magic, magic_len);
+
+  data[magic_len + 1] = MESSAGE_HEX_LEN + prefix_len;
+  memcpy(data + magic_len + 2, prefix, prefix_len);
+  memcpy(data + magic_len + 2 + prefix_len, hex_msg, MESSAGE_HEX_LEN);
+
+  SHA256_CTX sha256_ctx;
+  sha256_init(&sha256_ctx);
+  sha256_update(&sha256_ctx, data, sizeof(data));
+  sha256_final(&sha256_ctx, new_msg);
+
+  SHA256_CTX sha256_ctx2;
+  sha256_init(&sha256_ctx2);
+  sha256_update(&sha256_ctx2, new_msg, SHA256_SIZE);
+  sha256_final(&sha256_ctx2, new_msg);
+  return 0;
+}
+
+int convert_copy(const uint8_t *msg, size_t msg_len, uint8_t *new_msg,
+                 size_t new_msg_len) {
+  if (msg_len != new_msg_len || msg_len != BLAKE2B_BLOCK_SIZE)
+    return ERROR_INVALID_ARG;
+  memcpy(new_msg, msg, msg_len);
+  return 0;
+}
+
+int convert_doge_message(const uint8_t *msg, size_t msg_len, uint8_t *new_msg,
+                         size_t new_msg_len) {
+  if (msg_len != new_msg_len || msg_len != SHA256_SIZE)
+    return ERROR_INVALID_ARG;
+  const char magic[26] = "Dogecoin Signed Message:\n";
+  const int8_t magic_len = 25;
 
   uint8_t temp[MESSAGE_HEX_LEN];
   bin_to_hex(msg, temp, 32);
@@ -541,32 +625,6 @@ int convert_btc_message_variant(const uint8_t *msg, size_t msg_len,
   sha256_update(&sha256_ctx2, new_msg, SHA256_SIZE);
   sha256_final(&sha256_ctx2, new_msg);
   return 0;
-}
-
-int convert_copy(const uint8_t *msg, size_t msg_len, uint8_t *new_msg,
-                 size_t new_msg_len) {
-  if (msg_len != new_msg_len || msg_len != BLAKE2B_BLOCK_SIZE)
-    return ERROR_INVALID_ARG;
-  memcpy(new_msg, msg, msg_len);
-  return 0;
-}
-
-const char BTC_MESSAGE_MAGIC[25] = "Bitcoin Signed Message:\n";
-const int8_t BTC_MAGIC_LEN = 24;
-
-int convert_btc_message(const uint8_t *msg, size_t msg_len, uint8_t *new_msg,
-                        size_t new_msg_len) {
-  return convert_btc_message_variant(msg, msg_len, new_msg, new_msg_len,
-                                     BTC_MESSAGE_MAGIC, BTC_MAGIC_LEN);
-}
-
-const char DOGE_MESSAGE_MAGIC[26] = "Dogecoin Signed Message:\n";
-const int8_t DOGE_MAGIC_LEN = 25;
-
-int convert_doge_message(const uint8_t *msg, size_t msg_len, uint8_t *new_msg,
-                         size_t new_msg_len) {
-  return convert_btc_message_variant(msg, msg_len, new_msg, new_msg_len,
-                                     DOGE_MESSAGE_MAGIC, DOGE_MAGIC_LEN);
 }
 
 int convert_tron_message(const uint8_t *msg, size_t msg_len, uint8_t *new_msg,
@@ -867,7 +925,12 @@ int ckb_verify_identity(CkbIdentityType *id, uint8_t *sig, uint32_t sig_size,
     }
     return verify_sighash_all(id->id, sig, sig_size, validate_signature_eth,
                               convert_eth_message);
-
+  } else if (id->flags == IdentityFlagsEthereumDisplaying) {
+    if (sig == NULL || sig_size != SECP256K1_SIGNATURE_SIZE) {
+      return ERROR_IDENTITY_WRONG_ARGS;
+    }
+    return verify_sighash_all(id->id, sig, sig_size, validate_signature_eth,
+                              convert_eth_message_displaying);
   } else if (id->flags == IdentityFlagsEos) {
     if (sig == NULL || sig_size != SECP256K1_SIGNATURE_SIZE) {
       return ERROR_IDENTITY_WRONG_ARGS;

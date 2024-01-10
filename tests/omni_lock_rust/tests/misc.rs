@@ -92,12 +92,15 @@ pub const SECP256K1_TAG_PUBKEY_HYBRID_ODD: u8 = 0x07;
 
 // Refer to https://en.bitcoin.it/wiki/BIP_0137
 // These values are used to denote the signature types of Bitcoin.
-// Each type corresponds to a distinct public key hash and a unique signature 
+// Each type corresponds to a distinct public key hash and a unique signature
 //      data header.
 pub const BITCOIN_V_TYPE_P2PKHUNCOMPRESSED: u8 = 27;
 pub const BITCOIN_V_TYPE_P2PKHCOMPRESSED: u8 = 31;
 pub const BITCOIN_V_TYPE_SEGWITP2SH: u8 = 35;
 pub const BITCOIN_V_TYPE_SEGWITBECH32: u8 = 39;
+
+pub const BTC_PREFIX: &str = "CKB (Bitcoin Layer-2) transaction: ";
+pub const COMMON_PREFIX: &str = "CKB transaction: ";
 
 lazy_static! {
     pub static ref OMNI_LOCK: Bytes = Bytes::from(&include_bytes!("../../../build/omni_lock")[..]);
@@ -642,23 +645,20 @@ pub fn sign_tx_by_input_group(
                 });
                 blake2b.finalize(&mut message);
 
-                let message = if config.id.flags == IDENTITY_FLAGS_ETHEREUM {
-                    convert_keccak256_hash(&message)
-                } else if config.id.flags == IDENTITY_FLAGS_EOS {
-                    assert!(config.eos.is_some());
-                    config.eos.as_ref().unwrap().convert_message(&message)
-                } else if config.id.flags == IDENTITY_FLAGS_TRON {
-                    assert!(config.tron.is_some());
-                    config.tron.as_ref().unwrap().convert_message(&message)
-                } else if config.id.flags == IDENTITY_FLAGS_BITCOIN {
-                    assert!(config.bitcoin.is_some());
-                    config.bitcoin.as_ref().unwrap().convert_message(&message)
-                } else if config.id.flags == IDENTITY_FLAGS_DOGECOIN {
-                    assert!(config.dogecoin.is_some());
-                    config.dogecoin.as_ref().unwrap().convert_message(&message)
+                println!("origin message: {:02x?}", message);
+
+                let message = if use_chain_confg(config.id.flags) {
+                    assert!(config.chain_config.is_some());
+                    config
+                        .chain_config
+                        .as_ref()
+                        .unwrap()
+                        .convert_message(&message)
                 } else {
                     CkbH256::from(message)
                 };
+
+                println!("sign message: {:02x?}", message.as_bytes().to_vec());
 
                 let witness_lock = if config.id.flags == IDENTITY_FLAGS_DL {
                     let (mut sig, pubkey) = if config.use_rsa {
@@ -699,40 +699,17 @@ pub fn sign_tx_by_input_group(
                         &identity,
                         None,
                     )
-                } else if config.id.flags == IDENTITY_FLAGS_EOS {
+                } else if use_chain_confg(config.id.flags) {
                     let sig_bytes = config
-                        .eos
+                        .chain_config
                         .as_ref()
                         .unwrap()
                         .sign(&config.private_key, message);
-                    gen_witness_lock(
-                        sig_bytes,
-                        config.use_rc,
-                        config.use_rc_identity,
-                        &proof_vec,
-                        &identity,
-                        None,
-                    )
-                } else if config.id.flags == IDENTITY_FLAGS_BITCOIN {
-                    let sig_bytes = config
-                        .bitcoin
-                        .as_ref()
-                        .unwrap()
-                        .sign(&config.private_key, message);
-                    gen_witness_lock(
-                        sig_bytes,
-                        config.use_rc,
-                        config.use_rc_identity,
-                        &proof_vec,
-                        &identity,
-                        None,
-                    )
-                } else if config.id.flags == IDENTITY_FLAGS_DOGECOIN {
-                    let sig_bytes = config
-                        .dogecoin
-                        .as_ref()
-                        .unwrap()
-                        .sign(&config.private_key, message);
+                    println!(
+                        "bitcoin sign(size: {}): {:02x?}",
+                        sig_bytes.len(),
+                        sig_bytes.to_vec()
+                    );
                     gen_witness_lock(
                         sig_bytes,
                         config.use_rc,
@@ -753,6 +730,12 @@ pub fn sign_tx_by_input_group(
                         None,
                     )
                 };
+
+                println!(
+                    "omni lock witness(size: {}): {:02x?}",
+                    witness_lock.len(),
+                    witness_lock.to_vec()
+                );
 
                 witness
                     .as_builder()
@@ -782,6 +765,11 @@ pub fn sign_tx_by_input_group(
 
 pub fn gen_tx(dummy: &mut DummyDataLoader, config: &mut TestConfig) -> TransactionView {
     let lock_args = config.gen_args();
+    println!(
+        "omni lock args(size: {}): {:02x?}",
+        lock_args.len(),
+        lock_args.to_vec()
+    );
     gen_tx_with_grouped_args(dummy, vec![(lock_args, 1)], config)
 }
 
@@ -1048,6 +1036,7 @@ pub const IDENTITY_FLAGS_TRON: u8 = 3;
 pub const IDENTITY_FLAGS_BITCOIN: u8 = 4;
 pub const IDENTITY_FLAGS_DOGECOIN: u8 = 5;
 pub const IDENTITY_FLAGS_MULTISIG: u8 = 6;
+pub const IDENTITY_FLAGS_ETHEREUM_DISPLAYING: u8 = 18;
 
 pub const IDENTITY_FLAGS_OWNER_LOCK: u8 = 0xFC;
 pub const IDENTITY_FLAGS_EXEC: u8 = 0xFD;
@@ -1162,6 +1151,72 @@ impl Default for MultisigTestConfig {
     }
 }
 
+pub trait ChainConfig {
+    fn get_pubkey_hash(&self, pubkey: &Pubkey) -> [u8; 20];
+    fn convert_message(&self, message: &[u8; 32]) -> CkbH256;
+    fn sign(&self, privkey: &Privkey, message: CkbH256) -> Bytes;
+}
+
+pub fn use_chain_confg(flags: u8) -> bool {
+    flags == IDENTITY_FLAGS_ETHEREUM
+        || flags == IDENTITY_FLAGS_EOS
+        || flags == IDENTITY_FLAGS_TRON
+        || flags == IDENTITY_FLAGS_BITCOIN
+        || flags == IDENTITY_FLAGS_DOGECOIN
+        || flags == IDENTITY_FLAGS_ETHEREUM_DISPLAYING
+}
+
+#[derive(Default)]
+pub struct EthereumConfig {
+    pub pubkey_err: bool,
+}
+
+impl ChainConfig for EthereumConfig {
+    fn get_pubkey_hash(&self, pubkey: &Pubkey) -> [u8; 20] {
+        keccak160(&pubkey.as_ref()[..]).to_vec().try_into().unwrap()
+    }
+
+    fn convert_message(&self, message: &[u8; 32]) -> CkbH256 {
+        convert_keccak256_hash(message)
+    }
+
+    fn sign(&self, privkey: &Privkey, message: CkbH256) -> Bytes {
+        let sig = privkey.sign_recoverable(&message).expect("sign");
+        Bytes::from(sig.serialize())
+    }
+}
+
+#[derive(Default)]
+pub struct EthereumDisplayConfig {
+    pub pubkey_err: bool,
+}
+
+impl ChainConfig for EthereumDisplayConfig {
+    fn get_pubkey_hash(&self, pubkey: &Pubkey) -> [u8; 20] {
+        keccak160(&pubkey.as_ref()[..]).to_vec().try_into().unwrap()
+    }
+
+    fn convert_message(&self, message: &[u8; 32]) -> CkbH256 {
+        let eth_prefix = b"\x19Ethereum Signed Message:\n";
+
+        let mut hasher = Keccak256::new();
+        hasher.update(eth_prefix);
+        hasher.update(Bytes::from(format!(
+            "{}",
+            COMMON_PREFIX.len() + message.len() * 2
+        )));
+        hasher.update(Bytes::from(COMMON_PREFIX));
+        hasher.update(hex::encode(message));
+        let r = hasher.finalize();
+        CkbH256::from_slice(r.as_slice()).expect("convert_keccak256_hash")
+    }
+
+    fn sign(&self, privkey: &Privkey, message: CkbH256) -> Bytes {
+        let sig = privkey.sign_recoverable(&message).expect("sign");
+        Bytes::from(sig.serialize())
+    }
+}
+
 pub struct BitcoinConfig {
     pub sign_vtype: u8,
     pub pubkey_err: bool,
@@ -1176,8 +1231,8 @@ impl Default for BitcoinConfig {
     }
 }
 
-impl BitcoinConfig {
-    pub fn get_pubkey_hash(&self, pubkey: &Pubkey) -> [u8; 20] {
+impl ChainConfig for BitcoinConfig {
+    fn get_pubkey_hash(&self, pubkey: &Pubkey) -> [u8; 20] {
         if self.pubkey_err {
             let mut r = [0u8; 20];
             thread_rng().fill_bytes(&mut r);
@@ -1190,7 +1245,10 @@ impl BitcoinConfig {
                 pk_data[0] = SECP256K1_TAG_PUBKEY_UNCOMPRESSED;
                 pk_data[1..].copy_from_slice(pubkey.as_bytes());
 
-                bitcoin_hash160(&pk_data)
+                let r = bitcoin_hash160(&pk_data);
+                println!("public key hash: {:02x?}", r);
+
+                r
             }
             BITCOIN_V_TYPE_P2PKHCOMPRESSED => bitcoin_hash160(&pubkey.serialize()),
             BITCOIN_V_TYPE_SEGWITP2SH => {
@@ -1210,14 +1268,23 @@ impl BitcoinConfig {
         }
     }
 
-    pub fn convert_message(&self, message: &[u8; 32]) -> CkbH256 {
-        let message_magic = b"\x18Bitcoin Signed Message:\n\x40";
+    fn convert_message(&self, message: &[u8; 32]) -> CkbH256 {
+        let message_magic = b"Bitcoin Signed Message:\n";
         let msg_hex = hex::encode(message);
         assert_eq!(msg_hex.len(), 64);
 
-        let mut temp2: BytesMut = BytesMut::with_capacity(message_magic.len() + msg_hex.len());
+        let mut temp2: BytesMut =
+            BytesMut::with_capacity(1 + message_magic.len() + 1 + BTC_PREFIX.len() + msg_hex.len());
+        temp2.put_u8(message_magic.len() as u8);
         temp2.put(Bytes::from(message_magic.to_vec()));
-        temp2.put(Bytes::from(hex::encode(message)));
+
+        temp2.put_u8(0x40 + BTC_PREFIX.len() as u8);
+
+        temp2.put(Bytes::from(format!(
+            "{}{}",
+            BTC_PREFIX,
+            hex::encode(message)
+        )));
 
         let msg = calculate_sha256(&temp2.to_vec());
         let msg = calculate_sha256(&msg);
@@ -1225,7 +1292,7 @@ impl BitcoinConfig {
         CkbH256::from(msg)
     }
 
-    pub fn sign(&self, privkey: &Privkey, message: CkbH256) -> Bytes {
+    fn sign(&self, privkey: &Privkey, message: CkbH256) -> Bytes {
         let sign = privkey
             .sign_recoverable(&message)
             .expect("sign secp256k1")
@@ -1244,12 +1311,12 @@ impl BitcoinConfig {
 #[derive(Default)]
 pub struct DogecoinConfig(pub BitcoinConfig);
 
-impl DogecoinConfig {
-    pub fn get_pubkey_hash(&self, pubkey: &Pubkey) -> [u8; 20] {
+impl ChainConfig for DogecoinConfig {
+    fn get_pubkey_hash(&self, pubkey: &Pubkey) -> [u8; 20] {
         self.0.get_pubkey_hash(pubkey)
     }
 
-    pub fn convert_message(&self, message: &[u8; 32]) -> CkbH256 {
+    fn convert_message(&self, message: &[u8; 32]) -> CkbH256 {
         let message_magic = b"\x19Dogecoin Signed Message:\n\x40";
         let msg_hex = hex::encode(message);
         assert_eq!(msg_hex.len(), 64);
@@ -1260,11 +1327,10 @@ impl DogecoinConfig {
 
         let msg = calculate_sha256(&temp2.to_vec());
         let msg = calculate_sha256(&msg);
-
         CkbH256::from(msg)
     }
 
-    pub fn sign(&self, privkey: &Privkey, message: CkbH256) -> Bytes {
+    fn sign(&self, privkey: &Privkey, message: CkbH256) -> Bytes {
         self.0.sign(privkey, message)
     }
 }
@@ -1272,8 +1338,8 @@ impl DogecoinConfig {
 #[derive(Default)]
 pub struct EOSConfig(pub BitcoinConfig);
 
-impl EOSConfig {
-    pub fn get_pubkey_hash(&self, pubkey: &Pubkey) -> [u8; 20] {
+impl ChainConfig for EOSConfig {
+    fn get_pubkey_hash(&self, pubkey: &Pubkey) -> [u8; 20] {
         if self.0.pubkey_err {
             let mut r = [0u8; 20];
             thread_rng().fill_bytes(&mut r);
@@ -1296,11 +1362,11 @@ impl EOSConfig {
         ckb_hash::blake2b_256(buf)[..20].try_into().unwrap()
     }
 
-    pub fn convert_message(&self, message: &[u8; 32]) -> CkbH256 {
+    fn convert_message(&self, message: &[u8; 32]) -> CkbH256 {
         CkbH256::from_slice(message).unwrap()
     }
 
-    pub fn sign(&self, privkey: &Privkey, message: CkbH256) -> Bytes {
+    fn sign(&self, privkey: &Privkey, message: CkbH256) -> Bytes {
         self.0.sign(privkey, message)
     }
 }
@@ -1310,8 +1376,8 @@ pub struct TronConfig {
     pub pubkey_err: bool,
 }
 
-impl TronConfig {
-    pub fn get_pubkey_hash(&self, pubkey: &Pubkey) -> [u8; 20] {
+impl ChainConfig for TronConfig {
+    fn get_pubkey_hash(&self, pubkey: &Pubkey) -> [u8; 20] {
         if self.pubkey_err {
             let mut r = [0u8; 20];
             thread_rng().fill_bytes(&mut r);
@@ -1327,7 +1393,7 @@ impl TronConfig {
         r[12..].try_into().unwrap()
     }
 
-    pub fn convert_message(&self, message: &[u8; 32]) -> CkbH256 {
+    fn convert_message(&self, message: &[u8; 32]) -> CkbH256 {
         let eth_prefix: &[u8; 24] = b"\x19TRON Signed Message:\n32";
         let mut hasher = Keccak256::new();
         hasher.update(eth_prefix);
@@ -1335,6 +1401,11 @@ impl TronConfig {
         let r = hasher.finalize();
         let rr = CkbH256::from_slice(r.as_slice()).expect("convert_keccak256_hash");
         rr
+    }
+
+    fn sign(&self, privkey: &Privkey, message: CkbH256) -> Bytes {
+        let sig = privkey.sign_recoverable(&message).expect("sign");
+        Bytes::from(sig.serialize())
     }
 }
 
@@ -1378,11 +1449,7 @@ pub struct TestConfig {
     pub running_script: Script,
     pub leading_witness_count: usize,
 
-    // Bitcoin
-    pub eos: Option<EOSConfig>,
-    pub tron: Option<TronConfig>,
-    pub bitcoin: Option<BitcoinConfig>,
-    pub dogecoin: Option<DogecoinConfig>,
+    pub chain_config: Option<Box<dyn ChainConfig>>,
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -1425,8 +1492,6 @@ impl TestConfig {
 
         let blake160 = if flags == IDENTITY_FLAGS_PUBKEY_HASH {
             pubkey_hash
-        } else if flags == IDENTITY_FLAGS_ETHEREUM {
-            keccak160(&pubkey.as_ref()[..])
         } else {
             Bytes::from(&[0; 20][..])
         };
@@ -1482,10 +1547,7 @@ impl TestConfig {
             running_script: Default::default(),
             leading_witness_count: 0,
 
-            eos: None,
-            tron: None,
-            bitcoin: None,
-            dogecoin: None,
+            chain_config: None,
         }
     }
 
@@ -1527,27 +1589,9 @@ impl TestConfig {
         self.use_rc_identity = used;
     }
 
-    pub fn set_eos(&mut self, eos: EOSConfig) {
-        let pkhash = eos.get_pubkey_hash(&self.pubkey);
-        self.eos = Some(eos);
-        self.id.blake160 = Bytes::from(pkhash.to_vec());
-    }
-
-    pub fn set_tron(&mut self, tron: TronConfig) {
-        let pkhash = tron.get_pubkey_hash(&self.pubkey);
-        self.tron = Some(tron);
-        self.id.blake160 = Bytes::from(pkhash.to_vec());
-    }
-
-    pub fn set_bitcoin(&mut self, btc: BitcoinConfig) {
-        let pkhash = btc.get_pubkey_hash(&self.pubkey);
-        self.bitcoin = Some(btc);
-        self.id.blake160 = Bytes::from(pkhash.to_vec());
-    }
-
-    pub fn set_dogecoin(&mut self, dogecoin: DogecoinConfig) {
-        let pkhash = dogecoin.get_pubkey_hash(&self.pubkey);
-        self.dogecoin = Some(dogecoin);
+    pub fn set_chain_config(&mut self, config: Box<dyn ChainConfig>) {
+        let pkhash = config.get_pubkey_hash(&self.pubkey);
+        self.chain_config = Some(config);
         self.id.blake160 = Bytes::from(pkhash.to_vec());
     }
 
