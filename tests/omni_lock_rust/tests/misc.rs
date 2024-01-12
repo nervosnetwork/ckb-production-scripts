@@ -99,8 +99,8 @@ pub const BITCOIN_V_TYPE_P2PKHCOMPRESSED: u8 = 31;
 pub const BITCOIN_V_TYPE_SEGWITP2SH: u8 = 35;
 pub const BITCOIN_V_TYPE_SEGWITBECH32: u8 = 39;
 
-pub const BTC_PREFIX: &str = "CKB (Bitcoin Layer-2) transaction: ";
-pub const COMMON_PREFIX: &str = "CKB transaction: ";
+pub const BTC_PREFIX: &str = "CKB (Bitcoin Layer-2) transaction: 0x";
+pub const COMMON_PREFIX: &str = "CKB transaction: 0x";
 
 lazy_static! {
     pub static ref OMNI_LOCK: Bytes = Bytes::from(&include_bytes!("../../../build/omni_lock")[..]);

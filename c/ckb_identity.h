@@ -25,11 +25,11 @@
 #define MAX_PREIMAGE_SIZE 1024
 #define MESSAGE_HEX_LEN 64
 
-const char BTC_PREFIX[] = "CKB (Bitcoin Layer-2) transaction: ";
+const char BTC_PREFIX[] = "CKB (Bitcoin Layer-2) transaction: 0x";
 // BTC_PREFIX_LEN = 35
 const size_t BTC_PREFIX_LEN = sizeof(BTC_PREFIX) - 1;
 
-const char COMMON_PREFIX[] = "CKB transaction: ";
+const char COMMON_PREFIX[] = "CKB transaction: 0x";
 // COMMON_PREFIX_LEN = 17
 const size_t COMMON_PREFIX_LEN = sizeof(COMMON_PREFIX) - 1;
 
@@ -507,8 +507,8 @@ static int convert_eth_message_displaying(const uint8_t *msg, size_t msg_len,
   unsigned char eth_prefix[28];
   eth_prefix[0] = 0x19;
   memcpy(eth_prefix + 1, "Ethereum Signed Message:\n", 0x19);
-  // COMMON_PREFIX_LEN + MESSAGE_HEX_LEN -> 17 + 64 = 81
-  memcpy(eth_prefix + 1 + 0x19, "81", 2);
+  // COMMON_PREFIX_LEN + MESSAGE_HEX_LEN -> 19 + 64 = 83
+  memcpy(eth_prefix + 1 + 0x19, "83", 2);
 
   keccak_update(&sha3_ctx, eth_prefix, 28);
   //
