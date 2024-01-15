@@ -15,3 +15,5 @@ make all-via-docker
 * [Anyone Can Pay](https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0026-anyone-can-pay/0026-anyone-can-pay.md)
 * [xUDT](https://github.com/nervosnetwork/rfcs/pull/428)
 
+### Omnilock
+It is moved to a [new repo](https://github.com/cryptape/omnilock).
