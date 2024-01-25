@@ -25,18 +25,13 @@ PASSED_MBEDTLS_CFLAGS := -O3 -fPIC -nostdinc -nostdlib -DCKB_DECLARATION_ONLY -I
 BUILDER_DOCKER := nervos/ckb-riscv-gnu-toolchain@sha256:aae8a3f79705f67d505d1f1d5ddc694a4fd537ed1c7e9622420a470d59ba2ec3
 CLANG_FORMAT_DOCKER := kason223/clang-format@sha256:3cce35b0400a7d420ec8504558a02bdfc12fd2d10e40206f140c4545059cd95d
 
-all: build/simple_udt build/anyone_can_pay build/always_success build/validate_signature_rsa build/xudt_rce build/rce_validator \
-	 $(SECP256K1_SRC_20210801) build/secp256k1_data_info_20210801.h
+all: build/simple_udt build/always_success build/validate_signature_rsa build/xudt_rce build/rce_validator \
+	 $(SECP256K1_SRC_20210801) build/secp256k1_data_info.h build/secp256k1_data_info_20210801.h
 
 all-via-docker: ${PROTOCOL_HEADER}
 	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make"
 
 build/simple_udt: c/simple_udt.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
-	$(OBJCOPY) --only-keep-debug $@ $@.debug
-	$(OBJCOPY) --strip-debug --strip-all $@
-
-build/anyone_can_pay: c/anyone_can_pay.c ${PROTOCOL_HEADER} c/secp256k1_lock.h build/secp256k1_data_info.h $(SECP256K1_SRC)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 	$(OBJCOPY) --only-keep-debug $@ $@.debug
 	$(OBJCOPY) --strip-debug --strip-all $@
@@ -168,7 +163,6 @@ package-clean:
 
 clean:
 	rm -rf build/simple_udt
-	rm -rf build/anyone_can_pay
 	rm -rf build/secp256k1_data_info.h build/dump_secp256k1_data
 	rm -rf build/secp256k1_data_info_20210801.h build/dump_secp256k1_data_20210801
 	rm -rf build/secp256k1_data
