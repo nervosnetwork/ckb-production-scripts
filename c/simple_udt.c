@@ -99,7 +99,7 @@ int main() {
   }
 
   // When owner mode is triggered, we won't perform any checks here, the owner
-  // is free to make any changes here, including token issurance, minting, etc.
+  // is free to make any changes here, including token issuance, minting, etc.
   if (owner_mode) {
     return CKB_SUCCESS;
   }
