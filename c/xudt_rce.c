@@ -209,8 +209,8 @@ int get_extension_data(uint32_t index, uint8_t *buff, uint32_t buff_len,
   CHECK2(!input.t->is_none(&input), ERROR_INVALID_MOL_FORMAT);
 
   mol2_cursor_t bytes = input.t->unwrap(&input);
-  // convert Bytes to XudtWitnessInputType
-  XudtWitnessInputType witness_input = make_XudtWitnessInput(&bytes);
+  // convert Bytes to XudtWitnessType
+  XudtWitnessType witness_input = make_XudtWitness(&bytes);
   BytesVecType extension_data_vec =
       witness_input.t->extension_data(&witness_input);
 
@@ -239,8 +239,8 @@ int get_owner_script(uint8_t *buff, uint32_t buff_len, uint32_t *out_len) {
   CHECK2(!input.t->is_none(&input), ERROR_INVALID_MOL_FORMAT);
 
   mol2_cursor_t bytes = input.t->unwrap(&input);
-  // convert Bytes to XudtWitnessInputType
-  XudtWitnessInputType witness_input = make_XudtWitnessInput(&bytes);
+  // convert Bytes to XudtWitnessType
+  XudtWitnessType witness_input = make_XudtWitness(&bytes);
   ScriptOptType owner_script = witness_input.t->owner_script(&witness_input);
   CHECK2(!owner_script.t->is_none(&owner_script), ERROR_INVALID_MOL_FORMAT);
   ScriptType owner_script2 = owner_script.t->unwrap(&owner_script);
@@ -269,8 +269,8 @@ int load_raw_extension_data(uint8_t **var_data, uint32_t *var_len) {
   CHECK2(!input.t->is_none(&input), ERROR_INVALID_MOL_FORMAT);
 
   struct mol2_cursor_t bytes = input.t->unwrap(&input);
-  // convert Bytes to XudtWitnessInputType
-  XudtWitnessInputType witness_input = make_XudtWitnessInput(&bytes);
+  // convert Bytes to XudtWitnessType
+  XudtWitnessType witness_input = make_XudtWitness(&bytes);
   ScriptVecOptType script_vec =
       witness_input.t->raw_extension_data(&witness_input);
 

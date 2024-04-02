@@ -76,13 +76,13 @@ int get_owner_signature(uint8_t signature[SIGNATURE_SIZE]) {
   mol_seg_t witness_input_seg =
       MolReader_Bytes_raw_bytes(&witness_input_type_seg);
 
-  if (MolReader_XudtWitnessInput_verify(&witness_input_seg, false) != MOL_OK) {
-    printf("Error while verifying XudtWitnessInput\n");
+  if (MolReader_XudtWitness_verify(&witness_input_seg, false) != MOL_OK) {
+    printf("Error while verifying XudtWitness\n");
     return ERROR_ENCODING;
   }
 
   mol_seg_t signature_bytes_seg =
-      MolReader_XudtWitnessInput_get_owner_signature(&witness_input_seg);
+      MolReader_XudtWitness_get_owner_signature(&witness_input_seg);
 
   if (MolReader_BytesOpt_is_none(&signature_bytes_seg)) {
     printf("Error owner_signature in witness is empty\n");

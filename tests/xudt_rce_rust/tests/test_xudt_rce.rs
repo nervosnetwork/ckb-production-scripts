@@ -26,7 +26,7 @@ use misc::*;
 use xudt_test::xudt_rce_mol::{
     RCCellVecBuilder, RCDataBuilder, RCDataUnion, RCRuleBuilder, ScriptVec, ScriptVecBuilder,
     ScriptVecOptBuilder, SmtProofBuilder, SmtProofEntryBuilder, SmtProofEntryVec,
-    SmtProofEntryVecBuilder, XudtWitnessInput, XudtWitnessInputBuilder,
+    SmtProofEntryVecBuilder, XudtWitness, XudtWitnessBuilder,
 };
 
 mod misc;
@@ -350,7 +350,7 @@ fn build_extension_data(
             bytes_vec_builder = bytes_vec_builder.push(ckb_types::packed::Bytes::default());
         }
     }
-    let mut wi_builder = XudtWitnessInputBuilder::default();
+    let mut wi_builder = XudtWitnessBuilder::default();
     let b = ScriptVecOptBuilder::default()
         .set(Some(extension_script_vec))
         .build();
@@ -709,7 +709,7 @@ pub fn create_owner_signature_by_group(
                     if witness.output_type().is_none() {
                         return tx.witnesses().get(i).unwrap();
                     }
-                    let witnessoutput = XudtWitnessInput::new_unchecked(
+                    let witnessoutput = XudtWitness::new_unchecked(
                         witness.output_type().to_opt().unwrap().unpack(),
                     );
                     if witnessoutput.owner_script().is_none() {
@@ -747,7 +747,7 @@ pub fn create_owner_signature_by_group(
                     if witness.input_type().is_none() {
                         return tx.witnesses().get(i).unwrap();
                     }
-                    let witnessinput = XudtWitnessInput::new_unchecked(
+                    let witnessinput = XudtWitness::new_unchecked(
                         witness.input_type().to_opt().unwrap().unpack(),
                     );
                     if witnessinput.owner_script().is_none() {

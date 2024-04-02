@@ -3,7 +3,7 @@ import blockchain;
 vector ScriptVec <Script>;
 option ScriptVecOpt (ScriptVec);
 
-table XudtWitnessInput {
+table XudtWitness {
     owner_script: ScriptOpt,
 		owner_signature: BytesOpt,
     raw_extension_data: ScriptVecOpt,
@@ -25,7 +25,7 @@ union RCData {
 /* To support multiple RCRules, need to store multiple proofs in every item
 in "Bytes structure" in witness.
 
-Which means, one item in "structure" XudtWitnessInput might be SmtProofVec
+Which means, one item in "structure" XudtWitness might be SmtProofVec
 */
 vector SmtProof <byte>;
 
