@@ -6,7 +6,7 @@ option ScriptVecOpt (ScriptVec);
 table XudtWitness {
     owner_script: ScriptOpt,
 		owner_signature: BytesOpt,
-    raw_extension_data: ScriptVecOpt,
+    extension_scripts: ScriptVecOpt,
     extension_data: BytesVec,
 }
 

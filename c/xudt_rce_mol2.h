@@ -32,7 +32,7 @@ struct ScriptOptType XudtWitness_get_owner_script_impl(
     struct XudtWitnessType *);
 struct BytesOptType XudtWitness_get_owner_signature_impl(
     struct XudtWitnessType *);
-struct ScriptVecOptType XudtWitness_get_raw_extension_data_impl(
+struct ScriptVecOptType XudtWitness_get_extension_scripts_impl(
     struct XudtWitnessType *);
 struct BytesVecType XudtWitness_get_extension_data_impl(
     struct XudtWitnessType *);
@@ -124,7 +124,7 @@ typedef struct ScriptVecOptType {
 typedef struct XudtWitnessVTable {
   struct ScriptOptType (*owner_script)(struct XudtWitnessType *);
   struct BytesOptType (*owner_signature)(struct XudtWitnessType *);
-  struct ScriptVecOptType (*raw_extension_data)(struct XudtWitnessType *);
+  struct ScriptVecOptType (*extension_scripts)(struct XudtWitnessType *);
   struct BytesVecType (*extension_data)(struct XudtWitnessType *);
 } XudtWitnessVTable;
 typedef struct XudtWitnessType {
@@ -299,7 +299,7 @@ struct XudtWitnessVTable *GetXudtWitnessVTable(void) {
   if (inited) return &s_vtable;
   s_vtable.owner_script = XudtWitness_get_owner_script_impl;
   s_vtable.owner_signature = XudtWitness_get_owner_signature_impl;
-  s_vtable.raw_extension_data = XudtWitness_get_raw_extension_data_impl;
+  s_vtable.extension_scripts = XudtWitness_get_extension_scripts_impl;
   s_vtable.extension_data = XudtWitness_get_extension_data_impl;
   return &s_vtable;
 }
@@ -319,7 +319,7 @@ BytesOptType XudtWitness_get_owner_signature_impl(
   ret.t = GetBytesOptVTable();
   return ret;
 }
-ScriptVecOptType XudtWitness_get_raw_extension_data_impl(
+ScriptVecOptType XudtWitness_get_extension_scripts_impl(
     XudtWitnessType *this) {
   ScriptVecOptType ret;
   mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 2);

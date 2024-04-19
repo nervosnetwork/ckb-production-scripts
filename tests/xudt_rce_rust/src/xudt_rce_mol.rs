@@ -528,8 +528,8 @@ impl ::core::fmt::Display for XudtWitness {
         write!(
             f,
             ", {}: {}",
-            "raw_extension_data",
-            self.raw_extension_data()
+            "extension_scripts",
+            self.extension_scripts()
         )?;
         write!(f, ", {}: {}", "extension_data", self.extension_data())?;
         let extra_count = self.count_extra_fields();
@@ -577,7 +577,7 @@ impl XudtWitness {
         let end = molecule::unpack_number(&slice[12..]) as usize;
         BytesOpt::new_unchecked(self.0.slice(start..end))
     }
-    pub fn raw_extension_data(&self) -> ScriptVecOpt {
+    pub fn extension_scripts(&self) -> ScriptVecOpt {
         let slice = self.as_slice();
         let start = molecule::unpack_number(&slice[12..]) as usize;
         let end = molecule::unpack_number(&slice[16..]) as usize;
@@ -622,7 +622,7 @@ impl molecule::prelude::Entity for XudtWitness {
         Self::new_builder()
             .owner_script(self.owner_script())
             .owner_signature(self.owner_signature())
-            .raw_extension_data(self.raw_extension_data())
+            .extension_scripts(self.extension_scripts())
             .extension_data(self.extension_data())
     }
 }
@@ -650,8 +650,8 @@ impl<'r> ::core::fmt::Display for XudtWitnessReader<'r> {
         write!(
             f,
             ", {}: {}",
-            "raw_extension_data",
-            self.raw_extension_data()
+            "extension_scripts",
+            self.extension_scripts()
         )?;
         write!(f, ", {}: {}", "extension_data", self.extension_data())?;
         let extra_count = self.count_extra_fields();
@@ -691,7 +691,7 @@ impl<'r> XudtWitnessReader<'r> {
         let end = molecule::unpack_number(&slice[12..]) as usize;
         BytesOptReader::new_unchecked(&self.as_slice()[start..end])
     }
-    pub fn raw_extension_data(&self) -> ScriptVecOptReader<'r> {
+    pub fn extension_scripts(&self) -> ScriptVecOptReader<'r> {
         let slice = self.as_slice();
         let start = molecule::unpack_number(&slice[12..]) as usize;
         let end = molecule::unpack_number(&slice[16..]) as usize;
@@ -768,7 +768,7 @@ impl<'r> molecule::prelude::Reader<'r> for XudtWitnessReader<'r> {
 pub struct XudtWitnessBuilder {
     pub(crate) owner_script: ScriptOpt,
     pub(crate) owner_signature: BytesOpt,
-    pub(crate) raw_extension_data: ScriptVecOpt,
+    pub(crate) extension_scripts: ScriptVecOpt,
     pub(crate) extension_data: BytesVec,
 }
 impl XudtWitnessBuilder {
@@ -781,8 +781,8 @@ impl XudtWitnessBuilder {
         self.owner_signature = v;
         self
     }
-    pub fn raw_extension_data(mut self, v: ScriptVecOpt) -> Self {
-        self.raw_extension_data = v;
+    pub fn extension_scripts(mut self, v: ScriptVecOpt) -> Self {
+        self.extension_scripts = v;
         self
     }
     pub fn extension_data(mut self, v: BytesVec) -> Self {
@@ -797,7 +797,7 @@ impl molecule::prelude::Builder for XudtWitnessBuilder {
         molecule::NUMBER_SIZE * (Self::FIELD_COUNT + 1)
             + self.owner_script.as_slice().len()
             + self.owner_signature.as_slice().len()
-            + self.raw_extension_data.as_slice().len()
+            + self.extension_scripts.as_slice().len()
             + self.extension_data.as_slice().len()
     }
     fn write<W: molecule::io::Write>(&self, writer: &mut W) -> molecule::io::Result<()> {
@@ -808,7 +808,7 @@ impl molecule::prelude::Builder for XudtWitnessBuilder {
         offsets.push(total_size);
         total_size += self.owner_signature.as_slice().len();
         offsets.push(total_size);
-        total_size += self.raw_extension_data.as_slice().len();
+        total_size += self.extension_scripts.as_slice().len();
         offsets.push(total_size);
         total_size += self.extension_data.as_slice().len();
         writer.write_all(&molecule::pack_number(total_size as molecule::Number))?;
@@ -817,7 +817,7 @@ impl molecule::prelude::Builder for XudtWitnessBuilder {
         }
         writer.write_all(self.owner_script.as_slice())?;
         writer.write_all(self.owner_signature.as_slice())?;
-        writer.write_all(self.raw_extension_data.as_slice())?;
+        writer.write_all(self.extension_scripts.as_slice())?;
         writer.write_all(self.extension_data.as_slice())?;
         Ok(())
     }

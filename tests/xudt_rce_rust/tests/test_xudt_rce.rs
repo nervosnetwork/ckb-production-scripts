@@ -354,7 +354,7 @@ fn build_extension_data(
     let b = ScriptVecOptBuilder::default()
         .set(Some(extension_script_vec))
         .build();
-    wi_builder = wi_builder.raw_extension_data(b);
+    wi_builder = wi_builder.extension_scripts(b);
     wi_builder = wi_builder.extension_data(bytes_vec_builder.build());
     if owner_script.is_some() {
         wi_builder = wi_builder.owner_script(owner_script.pack());

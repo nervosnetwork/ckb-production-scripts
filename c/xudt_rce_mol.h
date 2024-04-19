@@ -34,7 +34,7 @@ MOLECULE_API_DECORATOR  mol_errno       MolReader_XudtWitness_verify            
 #define                                 MolReader_XudtWitness_has_extra_fields(s)  mol_table_has_extra_fields(s, 4)
 #define                                 MolReader_XudtWitness_get_owner_script(s)  mol_table_slice_by_index(s, 0)
 #define                                 MolReader_XudtWitness_get_owner_signature(s) mol_table_slice_by_index(s, 1)
-#define                                 MolReader_XudtWitness_get_raw_extension_data(s) mol_table_slice_by_index(s, 2)
+#define                                 MolReader_XudtWitness_get_extension_scripts(s) mol_table_slice_by_index(s, 2)
 #define                                 MolReader_XudtWitness_get_extension_data(s) mol_table_slice_by_index(s, 3)
 #define                                 MolReader_RCRule_verify(s, c)                   mol_verify_fixed_size(s, 33)
 #define                                 MolReader_RCRule_get_smt_root(s)                mol_slice_by_offset(s, 0, 32)
@@ -88,7 +88,7 @@ MOLECULE_API_DECORATOR  mol_errno       MolReader_XudtData_verify               
 #define                                 MolBuilder_XudtWitness_init(b)             mol_table_builder_initialize(b, 128, 4)
 #define                                 MolBuilder_XudtWitness_set_owner_script(b, p, l) mol_table_builder_add(b, 0, p, l)
 #define                                 MolBuilder_XudtWitness_set_owner_signature(b, p, l) mol_table_builder_add(b, 1, p, l)
-#define                                 MolBuilder_XudtWitness_set_raw_extension_data(b, p, l) mol_table_builder_add(b, 2, p, l)
+#define                                 MolBuilder_XudtWitness_set_extension_scripts(b, p, l) mol_table_builder_add(b, 2, p, l)
 #define                                 MolBuilder_XudtWitness_set_extension_data(b, p, l) mol_table_builder_add(b, 3, p, l)
 MOLECULE_API_DECORATOR  mol_seg_res_t   MolBuilder_XudtWitness_build               (mol_builder_t);
 #define                                 MolBuilder_XudtWitness_clear(b)            mol_builder_discard(b)

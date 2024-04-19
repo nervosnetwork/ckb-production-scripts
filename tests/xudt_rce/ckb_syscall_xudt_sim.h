@@ -232,7 +232,7 @@ int ckb_load_witness(void* addr, uint64_t* len, size_t offset, size_t index,
   mol_builder_t xwi_builder;
   MolBuilder_XudtWitness_init(&xwi_builder);
   if (g_flags == 2) {
-    MolBuilder_XudtWitness_set_raw_extension_data(
+    MolBuilder_XudtWitness_set_extension_scripts(
         &xwi_builder, g_extension_script_hash.ptr,
         g_extension_script_hash.size);
   }
