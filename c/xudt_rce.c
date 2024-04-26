@@ -586,7 +586,7 @@ int simple_udt(int owner_mode) {
     if (len < 16) {
       return ERROR_ENCODING;
     }
-    // restricting sudt cells with zero amount
+    // disallow sudt cells with zero amount
     if (current_amount == 0) {
       return ERROR_EMPTY_XUDT;
     }
