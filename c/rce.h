@@ -14,6 +14,7 @@ enum ErrorCode {
   ERROR_SCRIPT_TOO_LONG = -21,
   ERROR_OVERFLOWING = -51,
   ERROR_AMOUNT = -52,
+  ERROR_EMPTY_XUDT = -53,
 
   // error code is starting from 40, to avoid conflict with
   // common error code in other scripts.

@@ -34,6 +34,7 @@
 #define ERROR_SCRIPT_TOO_LONG -21
 #define ERROR_OVERFLOWING -51
 #define ERROR_AMOUNT -52
+#define ERROR_EMPTY_SUDT -53
 
 // We will leverage gcc's 128-bit integer extension here for number crunching.
 typedef unsigned __int128 uint128_t;
@@ -178,6 +179,10 @@ int main() {
     }
     if (len < 16) {
       return ERROR_ENCODING;
+    }
+    // disallow sudt cells with zero amount
+    if (current_amount == 0) {
+      return ERROR_EMPTY_SUDT;
     }
     output_amount += current_amount;
     // Like any serious smart contract out there, we will need to check for

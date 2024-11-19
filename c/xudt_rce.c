@@ -586,6 +586,10 @@ int simple_udt(int owner_mode) {
     if (len < 16) {
       return ERROR_ENCODING;
     }
+    // disallow sudt cells with zero amount
+    if (current_amount == 0) {
+      return ERROR_EMPTY_XUDT;
+    }
     output_amount += current_amount;
     // Like any serious smart contract out there, we will need to check for
     // overflows.
