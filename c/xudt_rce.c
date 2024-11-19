@@ -634,12 +634,12 @@ int main() {
   int err = 0;
   int owner_mode = 0;
   uint8_t *extension_scripts = NULL;
-  uint32_t raw_extension_len = 0;
+  uint32_t extension_scripts_len = 0;
   XUDTFlags flags = XUDTFlagsPlain;
   uint8_t
       input_lock_script_hashes[MAX_LOCK_SCRIPT_HASH_COUNT * BLAKE2B_BLOCK_SIZE];
   uint32_t input_lock_script_hash_count = 0;
-  err = parse_args(&owner_mode, &flags, &extension_scripts, &raw_extension_len,
+  err = parse_args(&owner_mode, &flags, &extension_scripts, &extension_scripts_len,
                    input_lock_script_hashes, &input_lock_script_hash_count);
   CHECK(err);
   CHECK2(owner_mode == 1 || owner_mode == 0, ERROR_INVALID_ARGS_FORMAT);
@@ -652,7 +652,7 @@ int main() {
 
   if (flags != XUDTFlagsPlain) {
     CHECK2(extension_scripts != NULL, ERROR_INVALID_ARGS_FORMAT);
-    CHECK2(raw_extension_len > 0, ERROR_INVALID_ARGS_FORMAT);
+    CHECK2(extension_scripts_len > 0, ERROR_INVALID_ARGS_FORMAT);
   }
   err = simple_udt(owner_mode);
   if (err != 0) {
@@ -666,7 +666,7 @@ int main() {
 
   mol_seg_t raw_extension_seg = {0};
   raw_extension_seg.ptr = extension_scripts;
-  raw_extension_seg.size = raw_extension_len;
+  raw_extension_seg.size = extension_scripts_len;
   CHECK2(MolReader_ScriptVec_verify(&raw_extension_seg, true) == MOL_OK,
          ERROR_INVALID_ARGS_FORMAT);
   uint32_t size = MolReader_ScriptVec_length(&raw_extension_seg);
