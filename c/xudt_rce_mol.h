@@ -29,13 +29,13 @@ MOLECULE_API_DECORATOR  mol_errno       MolReader_ScriptVec_verify              
 #define                                 MolReader_ScriptVec_get(s, i)                   mol_dynvec_slice_by_index(s, i)
 MOLECULE_API_DECORATOR  mol_errno       MolReader_ScriptVecOpt_verify                   (const mol_seg_t*, bool);
 #define                                 MolReader_ScriptVecOpt_is_none(s)               mol_option_is_none(s)
-MOLECULE_API_DECORATOR  mol_errno       MolReader_XudtWitnessInput_verify               (const mol_seg_t*, bool);
-#define                                 MolReader_XudtWitnessInput_actual_field_count(s) mol_table_actual_field_count(s)
-#define                                 MolReader_XudtWitnessInput_has_extra_fields(s)  mol_table_has_extra_fields(s, 4)
-#define                                 MolReader_XudtWitnessInput_get_owner_script(s)  mol_table_slice_by_index(s, 0)
-#define                                 MolReader_XudtWitnessInput_get_owner_signature(s) mol_table_slice_by_index(s, 1)
-#define                                 MolReader_XudtWitnessInput_get_raw_extension_data(s) mol_table_slice_by_index(s, 2)
-#define                                 MolReader_XudtWitnessInput_get_extension_data(s) mol_table_slice_by_index(s, 3)
+MOLECULE_API_DECORATOR  mol_errno       MolReader_XudtWitness_verify               (const mol_seg_t*, bool);
+#define                                 MolReader_XudtWitness_actual_field_count(s) mol_table_actual_field_count(s)
+#define                                 MolReader_XudtWitness_has_extra_fields(s)  mol_table_has_extra_fields(s, 4)
+#define                                 MolReader_XudtWitness_get_owner_script(s)  mol_table_slice_by_index(s, 0)
+#define                                 MolReader_XudtWitness_get_owner_signature(s) mol_table_slice_by_index(s, 1)
+#define                                 MolReader_XudtWitness_get_extension_scripts(s) mol_table_slice_by_index(s, 2)
+#define                                 MolReader_XudtWitness_get_extension_data(s) mol_table_slice_by_index(s, 3)
 #define                                 MolReader_RCRule_verify(s, c)                   mol_verify_fixed_size(s, 33)
 #define                                 MolReader_RCRule_get_smt_root(s)                mol_slice_by_offset(s, 0, 32)
 #define                                 MolReader_RCRule_get_flags(s)                   mol_slice_by_offset(s, 32, 1)
@@ -85,13 +85,13 @@ MOLECULE_API_DECORATOR  mol_errno       MolReader_XudtData_verify               
 #define                                 MolBuilder_ScriptVecOpt_set(b, p, l)            mol_option_builder_set(b, p, l)
 #define                                 MolBuilder_ScriptVecOpt_build(b)                mol_builder_finalize_simple(b)
 #define                                 MolBuilder_ScriptVecOpt_clear(b)                mol_builder_discard(b)
-#define                                 MolBuilder_XudtWitnessInput_init(b)             mol_table_builder_initialize(b, 128, 4)
-#define                                 MolBuilder_XudtWitnessInput_set_owner_script(b, p, l) mol_table_builder_add(b, 0, p, l)
-#define                                 MolBuilder_XudtWitnessInput_set_owner_signature(b, p, l) mol_table_builder_add(b, 1, p, l)
-#define                                 MolBuilder_XudtWitnessInput_set_raw_extension_data(b, p, l) mol_table_builder_add(b, 2, p, l)
-#define                                 MolBuilder_XudtWitnessInput_set_extension_data(b, p, l) mol_table_builder_add(b, 3, p, l)
-MOLECULE_API_DECORATOR  mol_seg_res_t   MolBuilder_XudtWitnessInput_build               (mol_builder_t);
-#define                                 MolBuilder_XudtWitnessInput_clear(b)            mol_builder_discard(b)
+#define                                 MolBuilder_XudtWitness_init(b)             mol_table_builder_initialize(b, 128, 4)
+#define                                 MolBuilder_XudtWitness_set_owner_script(b, p, l) mol_table_builder_add(b, 0, p, l)
+#define                                 MolBuilder_XudtWitness_set_owner_signature(b, p, l) mol_table_builder_add(b, 1, p, l)
+#define                                 MolBuilder_XudtWitness_set_extension_scripts(b, p, l) mol_table_builder_add(b, 2, p, l)
+#define                                 MolBuilder_XudtWitness_set_extension_data(b, p, l) mol_table_builder_add(b, 3, p, l)
+MOLECULE_API_DECORATOR  mol_seg_res_t   MolBuilder_XudtWitness_build               (mol_builder_t);
+#define                                 MolBuilder_XudtWitness_clear(b)            mol_builder_discard(b)
 #define                                 MolBuilder_RCRule_init(b)                       mol_builder_initialize_fixed_size(b, 33)
 #define                                 MolBuilder_RCRule_set_smt_root(b, p)            mol_builder_set_by_offset(b, 0, p, 32)
 #define                                 MolBuilder_RCRule_set_flags(b, p)               mol_builder_set_byte_by_offset(b, 32, p)
@@ -147,7 +147,7 @@ MOLECULE_API_DECORATOR  mol_seg_res_t   MolBuilder_XudtData_build               
 
 MOLECULE_API_DECORATOR const uint8_t MolDefault_ScriptVec[4]     =  {0x04, ____, ____, ____};
 MOLECULE_API_DECORATOR const uint8_t MolDefault_ScriptVecOpt[0]  =  {};
-MOLECULE_API_DECORATOR const uint8_t MolDefault_XudtWitnessInput[24] =  {
+MOLECULE_API_DECORATOR const uint8_t MolDefault_XudtWitness[24] =  {
     0x18, ____, ____, ____, 0x14, ____, ____, ____, 0x14, ____, ____, ____,
     0x14, ____, ____, ____, 0x14, ____, ____, ____, 0x04, ____, ____, ____,
 };
@@ -245,7 +245,7 @@ MOLECULE_API_DECORATOR mol_errno MolReader_ScriptVecOpt_verify (const mol_seg_t 
         return MOL_OK;
     }
 }
-MOLECULE_API_DECORATOR mol_errno MolReader_XudtWitnessInput_verify (const mol_seg_t *input, bool compatible) {
+MOLECULE_API_DECORATOR mol_errno MolReader_XudtWitness_verify (const mol_seg_t *input, bool compatible) {
     if (input->size < MOL_NUM_T_SIZE) {
         return MOL_ERR_HEADER;
     }
@@ -544,7 +544,7 @@ MOLECULE_API_DECORATOR mol_errno MolReader_XudtData_verify (const mol_seg_t *inp
  * Builder Functions
  */
 
-MOLECULE_API_DECORATOR mol_seg_res_t MolBuilder_XudtWitnessInput_build (mol_builder_t builder) {
+MOLECULE_API_DECORATOR mol_seg_res_t MolBuilder_XudtWitness_build (mol_builder_t builder) {
     mol_seg_res_t res;
     res.errno = MOL_OK;
     mol_num_t offset = 20;

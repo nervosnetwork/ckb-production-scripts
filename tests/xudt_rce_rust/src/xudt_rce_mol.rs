@@ -505,8 +505,8 @@ impl molecule::prelude::Builder for ScriptVecOptBuilder {
     }
 }
 #[derive(Clone)]
-pub struct XudtWitnessInput(molecule::bytes::Bytes);
-impl ::core::fmt::LowerHex for XudtWitnessInput {
+pub struct XudtWitness(molecule::bytes::Bytes);
+impl ::core::fmt::LowerHex for XudtWitness {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         use molecule::hex_string;
         if f.alternate() {
@@ -515,12 +515,12 @@ impl ::core::fmt::LowerHex for XudtWitnessInput {
         write!(f, "{}", hex_string(self.as_slice()))
     }
 }
-impl ::core::fmt::Debug for XudtWitnessInput {
+impl ::core::fmt::Debug for XudtWitness {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{}({:#x})", Self::NAME, self)
     }
 }
-impl ::core::fmt::Display for XudtWitnessInput {
+impl ::core::fmt::Display for XudtWitness {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{} {{ ", Self::NAME)?;
         write!(f, "{}: {}", "owner_script", self.owner_script())?;
@@ -528,8 +528,8 @@ impl ::core::fmt::Display for XudtWitnessInput {
         write!(
             f,
             ", {}: {}",
-            "raw_extension_data",
-            self.raw_extension_data()
+            "extension_scripts",
+            self.extension_scripts()
         )?;
         write!(f, ", {}: {}", "extension_data", self.extension_data())?;
         let extra_count = self.count_extra_fields();
@@ -539,15 +539,15 @@ impl ::core::fmt::Display for XudtWitnessInput {
         write!(f, " }}")
     }
 }
-impl ::core::default::Default for XudtWitnessInput {
+impl ::core::default::Default for XudtWitness {
     fn default() -> Self {
         let v: Vec<u8> = vec![
             24, 0, 0, 0, 20, 0, 0, 0, 20, 0, 0, 0, 20, 0, 0, 0, 20, 0, 0, 0, 4, 0, 0, 0,
         ];
-        XudtWitnessInput::new_unchecked(v.into())
+        XudtWitness::new_unchecked(v.into())
     }
 }
-impl XudtWitnessInput {
+impl XudtWitness {
     pub const FIELD_COUNT: usize = 4;
     pub fn total_size(&self) -> usize {
         molecule::unpack_number(self.as_slice()) as usize
@@ -577,7 +577,7 @@ impl XudtWitnessInput {
         let end = molecule::unpack_number(&slice[12..]) as usize;
         BytesOpt::new_unchecked(self.0.slice(start..end))
     }
-    pub fn raw_extension_data(&self) -> ScriptVecOpt {
+    pub fn extension_scripts(&self) -> ScriptVecOpt {
         let slice = self.as_slice();
         let start = molecule::unpack_number(&slice[12..]) as usize;
         let end = molecule::unpack_number(&slice[16..]) as usize;
@@ -593,15 +593,15 @@ impl XudtWitnessInput {
             BytesVec::new_unchecked(self.0.slice(start..))
         }
     }
-    pub fn as_reader<'r>(&'r self) -> XudtWitnessInputReader<'r> {
-        XudtWitnessInputReader::new_unchecked(self.as_slice())
+    pub fn as_reader<'r>(&'r self) -> XudtWitnessReader<'r> {
+        XudtWitnessReader::new_unchecked(self.as_slice())
     }
 }
-impl molecule::prelude::Entity for XudtWitnessInput {
-    type Builder = XudtWitnessInputBuilder;
-    const NAME: &'static str = "XudtWitnessInput";
+impl molecule::prelude::Entity for XudtWitness {
+    type Builder = XudtWitnessBuilder;
+    const NAME: &'static str = "XudtWitness";
     fn new_unchecked(data: molecule::bytes::Bytes) -> Self {
-        XudtWitnessInput(data)
+        XudtWitness(data)
     }
     fn as_bytes(&self) -> molecule::bytes::Bytes {
         self.0.clone()
@@ -610,10 +610,10 @@ impl molecule::prelude::Entity for XudtWitnessInput {
         &self.0[..]
     }
     fn from_slice(slice: &[u8]) -> molecule::error::VerificationResult<Self> {
-        XudtWitnessInputReader::from_slice(slice).map(|reader| reader.to_entity())
+        XudtWitnessReader::from_slice(slice).map(|reader| reader.to_entity())
     }
     fn from_compatible_slice(slice: &[u8]) -> molecule::error::VerificationResult<Self> {
-        XudtWitnessInputReader::from_compatible_slice(slice).map(|reader| reader.to_entity())
+        XudtWitnessReader::from_compatible_slice(slice).map(|reader| reader.to_entity())
     }
     fn new_builder() -> Self::Builder {
         ::core::default::Default::default()
@@ -622,13 +622,13 @@ impl molecule::prelude::Entity for XudtWitnessInput {
         Self::new_builder()
             .owner_script(self.owner_script())
             .owner_signature(self.owner_signature())
-            .raw_extension_data(self.raw_extension_data())
+            .extension_scripts(self.extension_scripts())
             .extension_data(self.extension_data())
     }
 }
 #[derive(Clone, Copy)]
-pub struct XudtWitnessInputReader<'r>(&'r [u8]);
-impl<'r> ::core::fmt::LowerHex for XudtWitnessInputReader<'r> {
+pub struct XudtWitnessReader<'r>(&'r [u8]);
+impl<'r> ::core::fmt::LowerHex for XudtWitnessReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         use molecule::hex_string;
         if f.alternate() {
@@ -637,12 +637,12 @@ impl<'r> ::core::fmt::LowerHex for XudtWitnessInputReader<'r> {
         write!(f, "{}", hex_string(self.as_slice()))
     }
 }
-impl<'r> ::core::fmt::Debug for XudtWitnessInputReader<'r> {
+impl<'r> ::core::fmt::Debug for XudtWitnessReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{}({:#x})", Self::NAME, self)
     }
 }
-impl<'r> ::core::fmt::Display for XudtWitnessInputReader<'r> {
+impl<'r> ::core::fmt::Display for XudtWitnessReader<'r> {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         write!(f, "{} {{ ", Self::NAME)?;
         write!(f, "{}: {}", "owner_script", self.owner_script())?;
@@ -650,8 +650,8 @@ impl<'r> ::core::fmt::Display for XudtWitnessInputReader<'r> {
         write!(
             f,
             ", {}: {}",
-            "raw_extension_data",
-            self.raw_extension_data()
+            "extension_scripts",
+            self.extension_scripts()
         )?;
         write!(f, ", {}: {}", "extension_data", self.extension_data())?;
         let extra_count = self.count_extra_fields();
@@ -661,7 +661,7 @@ impl<'r> ::core::fmt::Display for XudtWitnessInputReader<'r> {
         write!(f, " }}")
     }
 }
-impl<'r> XudtWitnessInputReader<'r> {
+impl<'r> XudtWitnessReader<'r> {
     pub const FIELD_COUNT: usize = 4;
     pub fn total_size(&self) -> usize {
         molecule::unpack_number(self.as_slice()) as usize
@@ -691,7 +691,7 @@ impl<'r> XudtWitnessInputReader<'r> {
         let end = molecule::unpack_number(&slice[12..]) as usize;
         BytesOptReader::new_unchecked(&self.as_slice()[start..end])
     }
-    pub fn raw_extension_data(&self) -> ScriptVecOptReader<'r> {
+    pub fn extension_scripts(&self) -> ScriptVecOptReader<'r> {
         let slice = self.as_slice();
         let start = molecule::unpack_number(&slice[12..]) as usize;
         let end = molecule::unpack_number(&slice[16..]) as usize;
@@ -708,14 +708,14 @@ impl<'r> XudtWitnessInputReader<'r> {
         }
     }
 }
-impl<'r> molecule::prelude::Reader<'r> for XudtWitnessInputReader<'r> {
-    type Entity = XudtWitnessInput;
-    const NAME: &'static str = "XudtWitnessInputReader";
+impl<'r> molecule::prelude::Reader<'r> for XudtWitnessReader<'r> {
+    type Entity = XudtWitness;
+    const NAME: &'static str = "XudtWitnessReader";
     fn to_entity(&self) -> Self::Entity {
         Self::Entity::new_unchecked(self.as_slice().to_owned().into())
     }
     fn new_unchecked(slice: &'r [u8]) -> Self {
-        XudtWitnessInputReader(slice)
+        XudtWitnessReader(slice)
     }
     fn as_slice(&self) -> &'r [u8] {
         self.0
@@ -765,13 +765,13 @@ impl<'r> molecule::prelude::Reader<'r> for XudtWitnessInputReader<'r> {
     }
 }
 #[derive(Debug, Default)]
-pub struct XudtWitnessInputBuilder {
+pub struct XudtWitnessBuilder {
     pub(crate) owner_script: ScriptOpt,
     pub(crate) owner_signature: BytesOpt,
-    pub(crate) raw_extension_data: ScriptVecOpt,
+    pub(crate) extension_scripts: ScriptVecOpt,
     pub(crate) extension_data: BytesVec,
 }
-impl XudtWitnessInputBuilder {
+impl XudtWitnessBuilder {
     pub const FIELD_COUNT: usize = 4;
     pub fn owner_script(mut self, v: ScriptOpt) -> Self {
         self.owner_script = v;
@@ -781,8 +781,8 @@ impl XudtWitnessInputBuilder {
         self.owner_signature = v;
         self
     }
-    pub fn raw_extension_data(mut self, v: ScriptVecOpt) -> Self {
-        self.raw_extension_data = v;
+    pub fn extension_scripts(mut self, v: ScriptVecOpt) -> Self {
+        self.extension_scripts = v;
         self
     }
     pub fn extension_data(mut self, v: BytesVec) -> Self {
@@ -790,14 +790,14 @@ impl XudtWitnessInputBuilder {
         self
     }
 }
-impl molecule::prelude::Builder for XudtWitnessInputBuilder {
-    type Entity = XudtWitnessInput;
-    const NAME: &'static str = "XudtWitnessInputBuilder";
+impl molecule::prelude::Builder for XudtWitnessBuilder {
+    type Entity = XudtWitness;
+    const NAME: &'static str = "XudtWitnessBuilder";
     fn expected_length(&self) -> usize {
         molecule::NUMBER_SIZE * (Self::FIELD_COUNT + 1)
             + self.owner_script.as_slice().len()
             + self.owner_signature.as_slice().len()
-            + self.raw_extension_data.as_slice().len()
+            + self.extension_scripts.as_slice().len()
             + self.extension_data.as_slice().len()
     }
     fn write<W: molecule::io::Write>(&self, writer: &mut W) -> molecule::io::Result<()> {
@@ -808,7 +808,7 @@ impl molecule::prelude::Builder for XudtWitnessInputBuilder {
         offsets.push(total_size);
         total_size += self.owner_signature.as_slice().len();
         offsets.push(total_size);
-        total_size += self.raw_extension_data.as_slice().len();
+        total_size += self.extension_scripts.as_slice().len();
         offsets.push(total_size);
         total_size += self.extension_data.as_slice().len();
         writer.write_all(&molecule::pack_number(total_size as molecule::Number))?;
@@ -817,7 +817,7 @@ impl molecule::prelude::Builder for XudtWitnessInputBuilder {
         }
         writer.write_all(self.owner_script.as_slice())?;
         writer.write_all(self.owner_signature.as_slice())?;
-        writer.write_all(self.raw_extension_data.as_slice())?;
+        writer.write_all(self.extension_scripts.as_slice())?;
         writer.write_all(self.extension_data.as_slice())?;
         Ok(())
     }
@@ -825,7 +825,7 @@ impl molecule::prelude::Builder for XudtWitnessInputBuilder {
         let mut inner = Vec::with_capacity(self.expected_length());
         self.write(&mut inner)
             .unwrap_or_else(|_| panic!("{} build should be ok", Self::NAME));
-        XudtWitnessInput::new_unchecked(inner.into())
+        XudtWitness::new_unchecked(inner.into())
     }
 }
 #[derive(Clone)]

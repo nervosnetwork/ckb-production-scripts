@@ -158,8 +158,8 @@ static int rce_get_proofs(uint32_t index, SmtProofEntryVecType* res) {
   CHECK2(!input.t->is_none(&input), ERROR_INVALID_MOL_FORMAT);
 
   mol2_cursor_t bytes = input.t->unwrap(&input);
-  // convert Bytes to XudtWitnessInputType
-  XudtWitnessInputType witness_input = make_XudtWitnessInput(&bytes);
+  // convert Bytes to XudtWitnessType
+  XudtWitnessType witness_input = make_XudtWitness(&bytes);
   BytesVecType extension_data_vec =
       witness_input.t->extension_data(&witness_input);
 

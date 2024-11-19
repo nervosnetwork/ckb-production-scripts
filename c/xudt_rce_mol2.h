@@ -24,18 +24,18 @@ struct ScriptVecOptType make_ScriptVecOpt(mol2_cursor_t *cur);
 bool ScriptVecOpt_is_none_impl(struct ScriptVecOptType *);
 bool ScriptVecOpt_is_some_impl(struct ScriptVecOptType *);
 struct ScriptVecType ScriptVecOpt_unwrap_impl(struct ScriptVecOptType *);
-struct XudtWitnessInputType;
-struct XudtWitnessInputVTable;
-struct XudtWitnessInputVTable *GetXudtWitnessInputVTable(void);
-struct XudtWitnessInputType make_XudtWitnessInput(mol2_cursor_t *cur);
-struct ScriptOptType XudtWitnessInput_get_owner_script_impl(
-    struct XudtWitnessInputType *);
-struct BytesOptType XudtWitnessInput_get_owner_signature_impl(
-    struct XudtWitnessInputType *);
-struct ScriptVecOptType XudtWitnessInput_get_raw_extension_data_impl(
-    struct XudtWitnessInputType *);
-struct BytesVecType XudtWitnessInput_get_extension_data_impl(
-    struct XudtWitnessInputType *);
+struct XudtWitnessType;
+struct XudtWitnessVTable;
+struct XudtWitnessVTable *GetXudtWitnessVTable(void);
+struct XudtWitnessType make_XudtWitness(mol2_cursor_t *cur);
+struct ScriptOptType XudtWitness_get_owner_script_impl(
+    struct XudtWitnessType *);
+struct BytesOptType XudtWitness_get_owner_signature_impl(
+    struct XudtWitnessType *);
+struct ScriptVecOptType XudtWitness_get_extension_scripts_impl(
+    struct XudtWitnessType *);
+struct BytesVecType XudtWitness_get_extension_data_impl(
+    struct XudtWitnessType *);
 struct RCRuleType;
 struct RCRuleVTable;
 struct RCRuleVTable *GetRCRuleVTable(void);
@@ -121,16 +121,16 @@ typedef struct ScriptVecOptType {
   ScriptVecOptVTable *t;
 } ScriptVecOptType;
 
-typedef struct XudtWitnessInputVTable {
-  struct ScriptOptType (*owner_script)(struct XudtWitnessInputType *);
-  struct BytesOptType (*owner_signature)(struct XudtWitnessInputType *);
-  struct ScriptVecOptType (*raw_extension_data)(struct XudtWitnessInputType *);
-  struct BytesVecType (*extension_data)(struct XudtWitnessInputType *);
-} XudtWitnessInputVTable;
-typedef struct XudtWitnessInputType {
+typedef struct XudtWitnessVTable {
+  struct ScriptOptType (*owner_script)(struct XudtWitnessType *);
+  struct BytesOptType (*owner_signature)(struct XudtWitnessType *);
+  struct ScriptVecOptType (*extension_scripts)(struct XudtWitnessType *);
+  struct BytesVecType (*extension_data)(struct XudtWitnessType *);
+} XudtWitnessVTable;
+typedef struct XudtWitnessType {
   mol2_cursor_t cur;
-  XudtWitnessInputVTable *t;
-} XudtWitnessInputType;
+  XudtWitnessVTable *t;
+} XudtWitnessType;
 
 typedef struct RCRuleVTable {
   mol2_cursor_t (*smt_root)(struct RCRuleType *);
@@ -287,48 +287,48 @@ ScriptVecType ScriptVecOpt_unwrap_impl(ScriptVecOptType *this) {
   ret.t = GetScriptVecVTable();
   return ret;
 }
-struct XudtWitnessInputType make_XudtWitnessInput(mol2_cursor_t *cur) {
-  XudtWitnessInputType ret;
+struct XudtWitnessType make_XudtWitness(mol2_cursor_t *cur) {
+  XudtWitnessType ret;
   ret.cur = *cur;
-  ret.t = GetXudtWitnessInputVTable();
+  ret.t = GetXudtWitnessVTable();
   return ret;
 }
-struct XudtWitnessInputVTable *GetXudtWitnessInputVTable(void) {
-  static XudtWitnessInputVTable s_vtable;
+struct XudtWitnessVTable *GetXudtWitnessVTable(void) {
+  static XudtWitnessVTable s_vtable;
   static int inited = 0;
   if (inited) return &s_vtable;
-  s_vtable.owner_script = XudtWitnessInput_get_owner_script_impl;
-  s_vtable.owner_signature = XudtWitnessInput_get_owner_signature_impl;
-  s_vtable.raw_extension_data = XudtWitnessInput_get_raw_extension_data_impl;
-  s_vtable.extension_data = XudtWitnessInput_get_extension_data_impl;
+  s_vtable.owner_script = XudtWitness_get_owner_script_impl;
+  s_vtable.owner_signature = XudtWitness_get_owner_signature_impl;
+  s_vtable.extension_scripts = XudtWitness_get_extension_scripts_impl;
+  s_vtable.extension_data = XudtWitness_get_extension_data_impl;
   return &s_vtable;
 }
-ScriptOptType XudtWitnessInput_get_owner_script_impl(
-    XudtWitnessInputType *this) {
+ScriptOptType XudtWitness_get_owner_script_impl(
+    XudtWitnessType *this) {
   ScriptOptType ret;
   mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 0);
   ret.cur = cur;
   ret.t = GetScriptOptVTable();
   return ret;
 }
-BytesOptType XudtWitnessInput_get_owner_signature_impl(
-    XudtWitnessInputType *this) {
+BytesOptType XudtWitness_get_owner_signature_impl(
+    XudtWitnessType *this) {
   BytesOptType ret;
   mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 1);
   ret.cur = cur;
   ret.t = GetBytesOptVTable();
   return ret;
 }
-ScriptVecOptType XudtWitnessInput_get_raw_extension_data_impl(
-    XudtWitnessInputType *this) {
+ScriptVecOptType XudtWitness_get_extension_scripts_impl(
+    XudtWitnessType *this) {
   ScriptVecOptType ret;
   mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 2);
   ret.cur = cur;
   ret.t = GetScriptVecOptVTable();
   return ret;
 }
-BytesVecType XudtWitnessInput_get_extension_data_impl(
-    XudtWitnessInputType *this) {
+BytesVecType XudtWitness_get_extension_data_impl(
+    XudtWitnessType *this) {
   BytesVecType ret;
   mol2_cursor_t cur = mol2_table_slice_by_index(&this->cur, 3);
   ret.cur = cur;

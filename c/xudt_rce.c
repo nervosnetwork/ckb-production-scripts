@@ -32,7 +32,7 @@ int ckb_exit(signed char);
 
 #define BLAKE160_SIZE 20
 #define SCRIPT_SIZE 32768
-#define RAW_EXTENSION_SIZE 65536
+#define EXTENSION_SCRIPTS_SIZE 65536
 #define EXPORTED_FUNC_NAME "validate"
 // here we reserve a lot of memory for dynamic libraries. The enhanced owner
 // mode may also checked via dynamic library. It might consume much memory, e.g.
@@ -56,7 +56,7 @@ int ckb_exit(signed char);
 typedef unsigned __int128 uint128_t;
 
 uint8_t g_script[SCRIPT_SIZE] = {0};
-uint8_t g_raw_extension_data[RAW_EXTENSION_SIZE] = {0};
+uint8_t g_extension_scripts[EXTENSION_SCRIPTS_SIZE] = {0};
 WitnessArgsType g_witness_args;
 
 uint8_t g_code_buff[MAX_CODE_SIZE] __attribute__((aligned(RISCV_PGSIZE)));
@@ -209,8 +209,8 @@ int get_extension_data(uint32_t index, uint8_t *buff, uint32_t buff_len,
   CHECK2(!input.t->is_none(&input), ERROR_INVALID_MOL_FORMAT);
 
   mol2_cursor_t bytes = input.t->unwrap(&input);
-  // convert Bytes to XudtWitnessInputType
-  XudtWitnessInputType witness_input = make_XudtWitnessInput(&bytes);
+  // convert Bytes to XudtWitnessType
+  XudtWitnessType witness_input = make_XudtWitness(&bytes);
   BytesVecType extension_data_vec =
       witness_input.t->extension_data(&witness_input);
 
@@ -239,8 +239,8 @@ int get_owner_script(uint8_t *buff, uint32_t buff_len, uint32_t *out_len) {
   CHECK2(!input.t->is_none(&input), ERROR_INVALID_MOL_FORMAT);
 
   mol2_cursor_t bytes = input.t->unwrap(&input);
-  // convert Bytes to XudtWitnessInputType
-  XudtWitnessInputType witness_input = make_XudtWitnessInput(&bytes);
+  // convert Bytes to XudtWitnessType
+  XudtWitnessType witness_input = make_XudtWitness(&bytes);
   ScriptOptType owner_script = witness_input.t->owner_script(&witness_input);
   CHECK2(!owner_script.t->is_none(&owner_script), ERROR_INVALID_MOL_FORMAT);
   ScriptType owner_script2 = owner_script.t->unwrap(&owner_script);
@@ -253,7 +253,7 @@ exit:
 }
 
 // the *var_len may be bigger than real length of raw extension data
-int load_raw_extension_data(uint8_t **var_data, uint32_t *var_len) {
+int load_extension_scripts(uint8_t **var_data, uint32_t *var_len) {
   int err = 0;
   bool use_input_type = true;
   err = make_cursor_from_witness(&g_witness_args, &use_input_type);
@@ -269,16 +269,16 @@ int load_raw_extension_data(uint8_t **var_data, uint32_t *var_len) {
   CHECK2(!input.t->is_none(&input), ERROR_INVALID_MOL_FORMAT);
 
   struct mol2_cursor_t bytes = input.t->unwrap(&input);
-  // convert Bytes to XudtWitnessInputType
-  XudtWitnessInputType witness_input = make_XudtWitnessInput(&bytes);
+  // convert Bytes to XudtWitnessType
+  XudtWitnessType witness_input = make_XudtWitness(&bytes);
   ScriptVecOptType script_vec =
-      witness_input.t->raw_extension_data(&witness_input);
+      witness_input.t->extension_scripts(&witness_input);
 
   uint32_t read_len =
-      mol2_read_at(&script_vec.cur, g_raw_extension_data, RAW_EXTENSION_SIZE);
+      mol2_read_at(&script_vec.cur, g_extension_scripts, EXTENSION_SCRIPTS_SIZE);
   CHECK2(read_len == script_vec.cur.size, ERROR_INVALID_MOL_FORMAT);
 
-  *var_data = g_raw_extension_data;
+  *var_data = g_extension_scripts;
   *var_len = read_len;
 
   err = 0;
@@ -379,7 +379,7 @@ exit:
 }
 
 // *var_data will point to "Raw Extension Data", which can be in args or witness
-// *var_data will refer to a memory location of g_script or g_raw_extension_data
+// *var_data will refer to a memory location of g_script or g_extension_scripts
 int parse_args(int *owner_mode, XUDTFlags *flags, uint8_t **var_data,
                uint32_t *var_len, uint8_t *hashes, uint32_t *hashes_count) {
   int err = 0;
@@ -484,7 +484,7 @@ int parse_args(int *owner_mode, XUDTFlags *flags, uint8_t **var_data,
           args_bytes_seg.size - BLAKE2B_BLOCK_SIZE - FLAGS_SIZE;
       CHECK2(hash_size == BLAKE160_SIZE, ERROR_INVALID_FLAG);
 
-      err = load_raw_extension_data(var_data, var_len);
+      err = load_extension_scripts(var_data, var_len);
       CHECK(err);
       CHECK2(var_len > 0, ERROR_INVALID_MOL_FORMAT);
       // verify the hash
@@ -633,13 +633,13 @@ int main() {
 #endif
   int err = 0;
   int owner_mode = 0;
-  uint8_t *raw_extension_data = NULL;
-  uint32_t raw_extension_len = 0;
+  uint8_t *extension_scripts = NULL;
+  uint32_t extension_scripts_len = 0;
   XUDTFlags flags = XUDTFlagsPlain;
   uint8_t
       input_lock_script_hashes[MAX_LOCK_SCRIPT_HASH_COUNT * BLAKE2B_BLOCK_SIZE];
   uint32_t input_lock_script_hash_count = 0;
-  err = parse_args(&owner_mode, &flags, &raw_extension_data, &raw_extension_len,
+  err = parse_args(&owner_mode, &flags, &extension_scripts, &extension_scripts_len,
                    input_lock_script_hashes, &input_lock_script_hash_count);
   CHECK(err);
   CHECK2(owner_mode == 1 || owner_mode == 0, ERROR_INVALID_ARGS_FORMAT);
@@ -651,8 +651,8 @@ int main() {
   }
 
   if (flags != XUDTFlagsPlain) {
-    CHECK2(raw_extension_data != NULL, ERROR_INVALID_ARGS_FORMAT);
-    CHECK2(raw_extension_len > 0, ERROR_INVALID_ARGS_FORMAT);
+    CHECK2(extension_scripts != NULL, ERROR_INVALID_ARGS_FORMAT);
+    CHECK2(extension_scripts_len > 0, ERROR_INVALID_ARGS_FORMAT);
   }
   err = simple_udt(owner_mode);
   if (err != 0) {
@@ -664,15 +664,15 @@ int main() {
     goto exit;
   }
 
-  mol_seg_t raw_extension_seg = {0};
-  raw_extension_seg.ptr = raw_extension_data;
-  raw_extension_seg.size = raw_extension_len;
-  CHECK2(MolReader_ScriptVec_verify(&raw_extension_seg, true) == MOL_OK,
+  mol_seg_t extension_scripts_seg = {0};
+  extension_scripts_seg.ptr = extension_scripts;
+  extension_scripts_seg.size = extension_scripts_len;
+  CHECK2(MolReader_ScriptVec_verify(&extension_scripts_seg, true) == MOL_OK,
          ERROR_INVALID_ARGS_FORMAT);
-  uint32_t size = MolReader_ScriptVec_length(&raw_extension_seg);
+  uint32_t size = MolReader_ScriptVec_length(&extension_scripts_seg);
   for (uint32_t i = 0; i < size; i++) {
     ValidateFuncType func;
-    mol_seg_res_t res = MolReader_ScriptVec_get(&raw_extension_seg, i);
+    mol_seg_res_t res = MolReader_ScriptVec_get(&extension_scripts_seg, i);
     CHECK2(res.errno == 0, ERROR_INVALID_MOL_FORMAT);
     CHECK2(MolReader_Script_verify(&res.seg, false) == MOL_OK,
            ERROR_INVALID_MOL_FORMAT);

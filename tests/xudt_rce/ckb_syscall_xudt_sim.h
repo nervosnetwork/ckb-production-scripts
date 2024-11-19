@@ -230,16 +230,16 @@ int ckb_load_witness(void* addr, uint64_t* len, size_t offset, size_t index,
   MolBuilder_WitnessArgs_init(&w);
 
   mol_builder_t xwi_builder;
-  MolBuilder_XudtWitnessInput_init(&xwi_builder);
+  MolBuilder_XudtWitness_init(&xwi_builder);
   if (g_flags == 2) {
-    MolBuilder_XudtWitnessInput_set_raw_extension_data(
+    MolBuilder_XudtWitness_set_extension_scripts(
         &xwi_builder, g_extension_script_hash.ptr,
         g_extension_script_hash.size);
   }
-  MolBuilder_XudtWitnessInput_set_extension_data(&xwi_builder, g_structure.ptr,
+  MolBuilder_XudtWitness_set_extension_data(&xwi_builder, g_structure.ptr,
                                                  g_structure.size);
 
-  mol_seg_res_t xwi_res = MolBuilder_XudtWitnessInput_build(xwi_builder);
+  mol_seg_res_t xwi_res = MolBuilder_XudtWitness_build(xwi_builder);
   ASSERT(xwi_res.errno == MOL_OK);
 
   // here we fill a "big" lock to generate a big "witness"
