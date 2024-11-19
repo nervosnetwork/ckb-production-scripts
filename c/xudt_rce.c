@@ -32,7 +32,7 @@ int ckb_exit(signed char);
 
 #define BLAKE160_SIZE 20
 #define SCRIPT_SIZE 32768
-#define RAW_EXTENSION_SIZE 65536
+#define EXTENSION_SCRIPTS_SIZE 65536
 #define EXPORTED_FUNC_NAME "validate"
 // here we reserve a lot of memory for dynamic libraries. The enhanced owner
 // mode may also checked via dynamic library. It might consume much memory, e.g.
@@ -56,7 +56,7 @@ int ckb_exit(signed char);
 typedef unsigned __int128 uint128_t;
 
 uint8_t g_script[SCRIPT_SIZE] = {0};
-uint8_t g_extension_scripts[RAW_EXTENSION_SIZE] = {0};
+uint8_t g_extension_scripts[EXTENSION_SCRIPTS_SIZE] = {0};
 WitnessArgsType g_witness_args;
 
 uint8_t g_code_buff[MAX_CODE_SIZE] __attribute__((aligned(RISCV_PGSIZE)));
@@ -275,7 +275,7 @@ int load_extension_scripts(uint8_t **var_data, uint32_t *var_len) {
       witness_input.t->extension_scripts(&witness_input);
 
   uint32_t read_len =
-      mol2_read_at(&script_vec.cur, g_extension_scripts, RAW_EXTENSION_SIZE);
+      mol2_read_at(&script_vec.cur, g_extension_scripts, EXTENSION_SCRIPTS_SIZE);
   CHECK2(read_len == script_vec.cur.size, ERROR_INVALID_MOL_FORMAT);
 
   *var_data = g_extension_scripts;
@@ -664,15 +664,15 @@ int main() {
     goto exit;
   }
 
-  mol_seg_t raw_extension_seg = {0};
-  raw_extension_seg.ptr = extension_scripts;
-  raw_extension_seg.size = extension_scripts_len;
-  CHECK2(MolReader_ScriptVec_verify(&raw_extension_seg, true) == MOL_OK,
+  mol_seg_t extension_scripts_seg = {0};
+  extension_scripts_seg.ptr = extension_scripts;
+  extension_scripts_seg.size = extension_scripts_len;
+  CHECK2(MolReader_ScriptVec_verify(&extension_scripts_seg, true) == MOL_OK,
          ERROR_INVALID_ARGS_FORMAT);
-  uint32_t size = MolReader_ScriptVec_length(&raw_extension_seg);
+  uint32_t size = MolReader_ScriptVec_length(&extension_scripts_seg);
   for (uint32_t i = 0; i < size; i++) {
     ValidateFuncType func;
-    mol_seg_res_t res = MolReader_ScriptVec_get(&raw_extension_seg, i);
+    mol_seg_res_t res = MolReader_ScriptVec_get(&extension_scripts_seg, i);
     CHECK2(res.errno == 0, ERROR_INVALID_MOL_FORMAT);
     CHECK2(MolReader_Script_verify(&res.seg, false) == MOL_OK,
            ERROR_INVALID_MOL_FORMAT);
